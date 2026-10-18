@@ -5,14 +5,16 @@
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
-    "dev:teacher": "electron-vite dev -- --profile teacher",
-    "dev:student": "cross-env EG_FAKE_AGENT=1 electron-vite dev -- --profile student",
+    "build:server": "pnpm --filter @examguard/server build",
+    "dev": "pnpm build:server && electron-vite dev",
+    "dev:teacher": "pnpm build:server && electron-vite dev -- --profile teacher",
+    "dev:student": "pnpm build:server && cross-env EG_FAKE_AGENT=1 electron-vite dev -- --profile student",
     "build": "electron-vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@examguard/server": "workspace:*",
     "@examguard/shared": "workspace:*",
     "@radix-ui/react-slot": "^1.5.0",
     "class-variance-authority": "^0.7.1",
