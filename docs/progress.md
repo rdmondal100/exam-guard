@@ -5,13 +5,14 @@ Read this first every session. Update it at the end of every session.
 ## Current status
 - **Stage:** 1
 - **Phase:** 1 — Foundation
-- **Current milestone:** M03 Exam server in a utilityProcess (not started)
-- **Next step:** start M03 (see `milestones.md`). First, do the M02 manual test below if not done yet.
+- **Current milestone:** M04 SQLite + migrations (not started)
+- **Next step:** do the M02 and M03 manual tests if not done yet, then start M04 (see `milestones.md`).
 
 ## Completed milestones
 Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
 - M01 Monorepo skeleton — 2026-10-18 — pnpm + Cargo workspaces; build/test/lint/typecheck/clippy all pass; `any` and `unwrap()` are rejected.
 - M02 Electron shell + mode selection — 2026-10-18 — secure window, per-profile mode.json, student install lock; manual check pending.
+- M03 Exam server in a utilityProcess — 2026-10-18 — Fastify loopback `/api/v1/health` with token check, supervised by main with backoff restart, status chip + restart banner; manual UI check pending.
 
 ## Decisions log
 Newest at the bottom. Format: `date — decision — why (doc that owns the detail)`.
@@ -64,12 +65,23 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - 2026-10-18 — pnpm `onlyBuiltDependencies` (electron, esbuild) added to pnpm-workspace.yaml so the Electron binary downloads on install.
 - 2026-10-18 — IPC payloads/results are validated with the Zod schemas in `packages/shared/src/app`. Channel names live in `apps/desktop/src/shared/ipc-channels.ts`.
 
+**M03**
+- 2026-10-18 — `apps/server` is built with `tsc` to `dist/` and forked by main via `import.meta.resolve('@examguard/server')` (workspace dep of desktop). It is not bundled into the Vite output, so native modules (better-sqlite3, M04) stay out of it. The dev scripts build the server first. Packaging belongs to M45. (architecture §1)
+- 2026-10-18 — The token is `randomBytes(32)` hex, created in main per server process (a restart issues a new one) and sent over the parent port. The renderer gets `{baseUrl, token}` via `getServerConnection()`. It is never logged or stored.
+- 2026-10-18 — The renderer CSP `connect-src` now allows `http://127.0.0.1:47821` and `ws://127.0.0.1:47821`, so later milestones can call the teacher API directly.
+- 2026-10-18 — Ports, header name and the main↔server message schemas live in `packages/shared/src/server/`. Status (`stopped|starting|running|restarting`, `restartCount`) is pushed main → renderer on `server:status`. Server logs go to `<userData>/logs/server.log`.
+- 2026-10-18 — Backoff: 1 s, 2 s, 5 s, then 10 s. It resets when the server stayed up 30 s or more.
+
 ## Known issues / open questions
 - Confirm with lab IT (before a real exam): admin install rights, antivirus/EDR tolerance of the agent and screen capture, reboot-restore software (e.g. Deep Freeze wipes the local queue on reboot), group policies, and whether students are on one subnet.
 - Check Gemini's current data-use terms and use a paid tier for real student data.
 - Teacher on Wi-Fi: the Windows network profile must be Private for mDNS and inbound rules. The README must cover this.
 - M02: the packaged-build checks (DevTools off, real HKLM key) need the installer from M45–M46 and are not testable yet. CSP and DevTools-off are implemented but only the dev path was run.
 - M02: only a headless smoke run was done (window starts, preload exposes `window.examguard`, no console errors). Clicking through the UI is the manual test.
+- M03: the "server restarted" banner comes from main's process status. The WS `notice` message from protocol §3 needs the teacher WS endpoint, which is a later milestone.
+- M03: `server.log` is append-only with no rotation yet.
+- M03: the server entry path comes from `import.meta.resolve`; check it again when packaging (M45, asar unpack).
+- M03: a headless smoke run (Electron, teacher profile) confirmed 127.0.0.1:47821 listens and that killing the process brings it back in about 1.2 s. The 401 and 200 cases are covered by `app.inject` tests only. The UI chip and banner have not been clicked through.
 
 ## Manual recovery checklist (filled in during M48)
 _Empty._
@@ -81,3 +93,4 @@ Format: `date — milestone — what was done — tests run — next`.
 - 2026-10-17 — M01 — pnpm workspace, strict tsconfig.base, ESLint/Prettier/Vitest, `packages/shared` (`PROTOCOL_VERSION`, `ProtocolVersionSchema`, `isProtocolCompatible` + tests), Cargo workspace with empty `eg-agent`/`eg-runner`, .gitignore, CLAUDE.md commands — `pnpm install/build/test/lint/typecheck/format:check` pass, a file with `any` fails lint; cargo not run (no toolchain) — install Rust, run `cargo build`, close M01.
 - 2026-10-18 — M01 — verified the Rust toolchain (rustc/cargo 1.99.1, stable-x86_64-pc-windows-msvc, VS 2026 C++ workload); closed M01 — `cargo build`, `cargo test` (2 pass), `cargo clippy --all-targets -D warnings`, `cargo fmt --check`, both binaries run, a test `unwrap()` fails clippy; JS install/build/test (4 pass)/lint/typecheck re-run green — start M02.
 - 2026-10-18 — M02 — `apps/desktop` (electron-vite, React, Tailwind v4, shadcn Button/Card), secure window + CSP, typed preload bridge, profile/install-type/mode-store modules, shared app schemas, root dev scripts — desktop (11) + shared (8) tests, lint, typecheck, build pass; dev app launched with no renderer errors — manual test, then M03.
+- 2026-10-18 — M03 — `apps/server` (Fastify teacher app with token hook, utilityProcess entry), shared server schemas, desktop `ServerHost` + backoff + IPC/preload + chip/banner, CSP for loopback — server (4), shared (13), desktop (13) tests, lint, format, typecheck, build pass; headless Electron run: server listens, kill → restart in ~1.2 s — manual test, then M04.

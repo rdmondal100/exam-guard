@@ -1,7 +1,9 @@
 import { join } from 'node:path';
 import { BrowserWindow, app, session, shell } from 'electron';
+import { TEACHER_API_HOST, TEACHER_API_PORT } from '@examguard/shared';
 
 const RENDERER_URL = process.env['ELECTRON_RENDERER_URL'];
+const TEACHER_API = `http://${TEACHER_API_HOST}:${TEACHER_API_PORT} ws://${TEACHER_API_HOST}:${TEACHER_API_PORT}`;
 
 /** Dev needs the Vite server, its websocket and inline styles for HMR. */
 function contentSecurityPolicy(): string {
@@ -12,7 +14,10 @@ function contentSecurityPolicy(): string {
     dev ? `script-src 'self' 'unsafe-inline'` : "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
-    dev ? `connect-src 'self' http://${origin} ws://${origin}` : "connect-src 'self'",
+    // The teacher renderer calls the loopback server directly (architecture §2).
+    dev
+      ? `connect-src 'self' http://${origin} ws://${origin} ${TEACHER_API}`
+      : `connect-src 'self' ${TEACHER_API}`,
     "object-src 'none'",
     "base-uri 'none'",
     "frame-ancestors 'none'",

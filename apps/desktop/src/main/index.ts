@@ -1,8 +1,11 @@
-import { app, type BrowserWindow } from 'electron';
+import { join } from 'node:path';
+import { app, BrowserWindow } from 'electron';
+import { IPC } from '../shared/ipc-channels.js';
 import { readInstallType } from './install-type.js';
 import { registerIpc, type AppState } from './ipc.js';
 import { loadStoredMode, resolveMode } from './mode-store.js';
 import { parseProfile, userDataPathFor } from './profile.js';
+import { ServerHost } from './server-host.js';
 import { createMainWindow, installCsp } from './window.js';
 
 // The profile must be applied before anything reads userData.
@@ -33,8 +36,15 @@ if (!app.requestSingleInstanceLock()) {
       installType,
       mode: resolveMode(installType, await loadStoredMode(userData)),
     };
-    registerIpc(state);
+    const server = new ServerHost(join(userData, 'logs'), (status) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send(IPC.serverStatus, status);
+      }
+    });
+    app.on('before-quit', () => server.stop());
+    registerIpc(state, server);
     installCsp();
     window = createMainWindow(`ExamGuard AI (${profile})`);
+    if (state.mode === 'teacher') server.start();
   });
 }

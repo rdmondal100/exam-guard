@@ -1,0 +1,17 @@
+{
+  "name": "@examguard/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@examguard/shared": "workspace:*",
+    "fastify": "^5.8.0",
+    "zod": "^4.6.7"
+  }
+}

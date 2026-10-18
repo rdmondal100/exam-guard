@@ -8,6 +8,7 @@ import {
 } from '@examguard/shared';
 import { IPC } from '../shared/ipc-channels.js';
 import { resolveMode, saveStoredMode } from './mode-store.js';
+import type { ServerHost } from './server-host.js';
 
 export interface AppState {
   profile: string;
@@ -25,8 +26,10 @@ function toInfo(state: AppState): AppInfo {
   };
 }
 
-export function registerIpc(state: AppState): void {
+export function registerIpc(state: AppState, server: ServerHost): void {
   ipcMain.handle(IPC.getInfo, () => toInfo(state));
+  ipcMain.handle(IPC.getServerConnection, () => server.getConnection());
+  ipcMain.handle(IPC.getServerStatus, () => server.getStatus());
 
   ipcMain.handle(IPC.setMode, async (_event, payload: unknown) => {
     const request = SetModeRequestSchema.parse(payload);
@@ -35,6 +38,7 @@ export function registerIpc(state: AppState): void {
     }
     await saveStoredMode(state.userData, request.mode);
     state.mode = resolveMode(state.installType, request.mode);
+    if (state.mode === 'teacher') server.start();
     return toInfo(state);
   });
 }
