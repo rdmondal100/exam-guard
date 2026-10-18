@@ -4,6 +4,6 @@ import { defineConfig } from 'vitest/config';
 // `test` script, so `pnpm --filter <pkg> test -- <file>` works.
 export default defineConfig({
   test: {
-    projects: ['packages/*'],
+    projects: ['packages/*', 'apps/*'],
   },
 });
