@@ -1,0 +1,22 @@
+import { useEffect, useState } from 'react';
+import type { AppInfo, AppMode } from '@examguard/shared';
+import { ModeHome } from './components/ModeHome';
+import { ModeSelect } from './components/ModeSelect';
+
+export function App() {
+  const [info, setInfo] = useState<AppInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    window.examguard.getInfo().then(setInfo, (e: unknown) => setError(String(e)));
+  }, []);
+
+  const choose = (mode: AppMode) => {
+    window.examguard.setMode(mode).then(setInfo, (e: unknown) => setError(String(e)));
+  };
+
+  if (error) return <p className="p-8 text-red-700">Something went wrong: {error}</p>;
+  if (!info) return null;
+  if (!info.mode) return <ModeSelect allowed={info.allowedModes} onChoose={choose} />;
+  return <ModeHome info={info} />;
+}

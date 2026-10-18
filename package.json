@@ -12,7 +12,9 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "pnpm -r --if-present typecheck"
+    "typecheck": "pnpm -r --if-present typecheck",
+    "dev:teacher": "pnpm --filter @examguard/desktop dev:teacher",
+    "dev:student": "pnpm --filter @examguard/desktop dev:student"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
