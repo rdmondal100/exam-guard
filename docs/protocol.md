@@ -23,7 +23,7 @@ Everything else for students goes over WS.
 ### Teacher API: `http://127.0.0.1:47821/api/v1` (loopback; header `X-Teacher-Token`)
 | Area | Endpoints |
 |---|---|
-| Auth | `POST /auth/setup {password}`, `POST /auth/login {password} → {ok}`, `POST /auth/change` |
+| Auth | `GET /auth/status → {setupRequired, loggedIn}`, `POST /auth/setup {password}` (min 8 chars; 409 `already_setup`; logs in), `POST /auth/login {password} → {ok}` (401 `bad_password`, 409 `setup_required`, 429 `rate_limited` with `details.retryAfterSec`), `POST /auth/logout`, `POST /auth/change` (not built yet). Every other route except `/health` answers 401 `login_required` until login. Login state lives in the server process |
 | Class lists | `GET /class-lists`, `POST /class-lists/import {name, csvText}` → `{list, rows, errors[]}` (preview with `dryRun`), `DELETE /class-lists/:id`, `GET /class-lists/:id/students` |
 | Exams | `GET /exams`, `POST /exams`, `GET/PATCH/DELETE /exams/:id`, `POST /exams/:id/duplicate`, `POST /exams/:id/ready` (validates) |
 | Questions | `POST /exams/:id/questions`, `PATCH/DELETE /questions/:qid`, `POST /exams/:id/questions/reorder {ids[]}` (criteria are embedded in question bodies) |

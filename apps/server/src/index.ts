@@ -13,7 +13,7 @@ const parentPort = (process as unknown as { parentPort?: ParentPort }).parentPor
 async function start(data: unknown, port: ParentPort): Promise<void> {
   const config = ServerConfigMessageSchema.parse(data);
   const db = initDatabase(config.dataDir);
-  const app = buildTeacherApp({ token: config.token });
+  const { app } = buildTeacherApp({ token: config.token, db });
   app.addHook('onClose', async () => {
     db.close();
   });

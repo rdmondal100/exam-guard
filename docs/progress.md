@@ -5,8 +5,8 @@ Read this first every session. Update it at the end of every session.
 ## Current status
 - **Stage:** 1
 - **Phase:** 1 — Foundation
-- **Current milestone:** M04 done (manual check pending); M05 Teacher password and login gate is next
-- **Next step:** do the M02–M04 manual tests (close old dev instances first), then start M05 (see `milestones.md`).
+- **Current milestone:** M05 done (manual check pending). This closes Phase 1; M06 Class list CSV import is next
+- **Next step:** do the M02–M05 manual tests (close old dev instances first), then start M06 (see `milestones.md`).
 
 ## Completed milestones
 Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
@@ -14,6 +14,7 @@ Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
 - M02 Electron shell + mode selection — 2026-10-18 — secure window, per-profile mode.json, student install lock; manual check pending.
 - M03 Exam server in a utilityProcess — 2026-10-18 — Fastify loopback `/api/v1/health` with token check, supervised by main with backoff restart, status chip + restart banner; manual UI check pending.
 - M04 SQLite + migrations — 2026-10-18 — better-sqlite3 13, migration runner on `user_version`, `0001_init` (settings, teacher), opened by the server at start; manual check pending.
+- M05 Teacher password and login gate — 2026-10-19 — scrypt password, `/auth/status|setup|login|logout` with lockout, setup/login/shell screens behind a gate; manual check pending.
 
 ## Decisions log
 Newest at the bottom. Format: `date — decision — why (doc that owns the detail)`.
@@ -78,6 +79,12 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - 2026-10-18 — The server gets the data folder in its config message (`dataDir` = profile userData) and creates `<dataDir>/db/examguard.sqlite` itself. Main passes `userData`. A DB or migration failure posts the `error` reply and exits, so main's backoff restarts it. (protocol/architecture unchanged)
 - 2026-10-18 — Each migration runs in its own transaction and a DB newer than the app is refused. Numbers must be contiguous from 0001. `.sql` files are copied to `dist/db/migrations` by `apps/server/scripts/copy-migrations.mjs` as part of `build`.
 
+**M05**
+- 2026-10-19 — Login state is an in-memory flag in the server process (`AuthState`). A server restart forgets it, so the renderer re-checks `GET /auth/status` on every server start and falls back to the login screen. Routes that need a teacher must use `requireLogin` (returned by `buildTeacherApp`) as `preHandler`; `/health` and `/auth/*` stay token-only. (protocol §2)
+- 2026-10-19 — Rate limit is global, not per IP (loopback, one teacher): 5 wrong passwords lock login for 30 s, doubling per lockout up to 5 min, reset on success. 429 `rate_limited` carries `details.retryAfterSec`. Lockout state is in memory (a server restart clears it).
+- 2026-10-19 — Password: min 8, max 200 chars; scrypt N=2^15, r=8, p=1, stored as `scrypt$N$r$p$salt$hash` (base64). `buildTeacherApp` now takes `db` and returns `{ app, requireLogin }`.
+- 2026-10-19 — Renderer uses a plain React hook (`useAuth`) and a small fetch client (`lib/teacherApi.ts`), not Zustand: no shared client state yet. Add Zustand/TanStack Query when M06 needs lists and caching.
+
 ## Known issues / open questions
 - Confirm with lab IT (before a real exam): admin install rights, antivirus/EDR tolerance of the agent and screen capture, reboot-restore software (e.g. Deep Freeze wipes the local queue on reboot), group policies, and whether students are on one subnet.
 - Check Gemini's current data-use terms and use a paid tier for real student data.
@@ -91,6 +98,10 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - M04: only an isolated Electron probe was run (server in a utilityProcess, temp data dir): DB, -wal and -shm created. The full `pnpm dev:teacher` run was blocked because older teacher/student dev instances were still running (single-instance lock, port 47821).
 - M04: asar-unpack of the better-sqlite3 `.node` file is for packaging (M45). Dropping the `tsc` + copy build for a bundler is also an M45 choice.
 - M04: the data folder is not movable yet (Settings, later). The `teacher` repo is left to M05.
+- M05: `POST /auth/change` (in protocol §2) is not built; no password recovery in Stage 1. Add change-password with Settings.
+- M05: no UI/component tests (vitest is node-only here); the screens were only type-checked and built. The gate logic is covered through server `app.inject` tests and the `teacherApi` client tests. The click-through is the manual test.
+- M05: after a server restart the teacher lands on the login screen and the "server restarted" banner is not shown there.
+- M05: the teacher nav (Class lists, Exams, Settings) is disabled placeholders; no router yet.
 
 ## Manual recovery checklist (filled in during M48)
 _Empty._
@@ -104,3 +115,4 @@ Format: `date — milestone — what was done — tests run — next`.
 - 2026-10-18 — M02 — `apps/desktop` (electron-vite, React, Tailwind v4, shadcn Button/Card), secure window + CSP, typed preload bridge, profile/install-type/mode-store modules, shared app schemas, root dev scripts — desktop (11) + shared (8) tests, lint, typecheck, build pass; dev app launched with no renderer errors — manual test, then M03.
 - 2026-10-18 — M03 — `apps/server` (Fastify teacher app with token hook, utilityProcess entry), shared server schemas, desktop `ServerHost` + backoff + IPC/preload + chip/banner, CSP for loopback — server (4), shared (13), desktop (13) tests, lint, format, typecheck, build pass; headless Electron run: server listens, kill → restart in ~1.2 s — manual test, then M04.
 - 2026-10-18 — M04 — `apps/server/src/db/` (connection, migrations loader, migrate, database, settings-repo, 0001_init.sql), `dataDir` in the server config message, copy-migrations build step — server (12), shared (14), desktop (13) tests, typecheck, lint, format pass; Electron probe confirms the DB is created in the utilityProcess — manual test, then M05.
+- 2026-10-19 — M05 — shared auth schemas, server `auth/` (scrypt, login limiter, auth state), `db/teacher-repo`, `/auth/*` routes, `http/errors`, renderer teacherApi/useAuth, Setup/Login/TeacherShell/TeacherGate — shared (17), server (27), desktop (17) tests, full `pnpm test` (61), lint, format, typecheck, build pass — manual test, then M06.
