@@ -70,4 +70,40 @@ describe('createExamApi', () => {
     expect(err).toBeInstanceOf(TeacherApiError);
     expect(err).toMatchObject({ status: 409, code: 'invalid_state' });
   });
+
+  describe('hosting', () => {
+    const INFO = { pin: '004217', addresses: ['192.168.1.7'], port: 47820, fpCode: '7ACN' };
+
+    it('hosts with POST and validates the reply', async () => {
+      const fetchFn = reply(200, INFO);
+      expect(await createExamApi(CONNECTION, fetchFn).host('e1')).toEqual(INFO);
+      const [url, init] = vi.mocked(fetchFn).mock.calls[0] ?? [];
+      expect(url).toBe('http://127.0.0.1:47821/api/v1/exams/e1/host');
+      expect(init?.method).toBe('POST');
+    });
+
+    it('stops hosting with POST', async () => {
+      const fetchFn = reply(200, { ok: true });
+      await createExamApi(CONNECTION, fetchFn).stopHosting('e1');
+      expect(vi.mocked(fetchFn).mock.calls[0]?.[0]).toBe(
+        'http://127.0.0.1:47821/api/v1/exams/e1/stop-hosting',
+      );
+    });
+
+    it('returns null when the exam is not hosted, and rethrows other errors', async () => {
+      const none = reply(404, { error: { code: 'not_hosting', message: 'Not hosting' } });
+      expect(await createExamApi(CONNECTION, none).hosting('e1')).toBeNull();
+      const bad = reply(500, { error: { code: 'boom', message: 'boom' } });
+      await expect(createExamApi(CONNECTION, bad).hosting('e1')).rejects.toBeInstanceOf(
+        TeacherApiError,
+      );
+    });
+
+    it('surfaces port_in_use', async () => {
+      const fetchFn = reply(409, { error: { code: 'port_in_use', message: 'busy' } });
+      await expect(createExamApi(CONNECTION, fetchFn).host('e1')).rejects.toMatchObject({
+        code: 'port_in_use',
+      });
+    });
+  });
 });

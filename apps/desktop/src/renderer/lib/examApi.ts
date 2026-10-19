@@ -2,12 +2,14 @@ import {
   AuthOkSchema,
   ExamsSchema,
   ExamSummarySchema,
+  HostingInfoSchema,
   type ExamCreateBody,
   type ExamSummary,
   type ExamUpdateBody,
+  type HostingInfo,
   type ServerConnection,
 } from '@examguard/shared';
-import { call, type FetchFn } from './teacherApi';
+import { call, TeacherApiError, type FetchFn } from './teacherApi';
 
 export interface ExamApi {
   list(): Promise<ExamSummary[]>;
@@ -18,6 +20,11 @@ export interface ExamApi {
   /** Rejects with a TeacherApiError `not_ready` whose details hold the problems. */
   markReady(id: string): Promise<ExamSummary>;
   backToDraft(id: string): Promise<ExamSummary>;
+  /** Opens the student listener. Rejects `not_ready`, `already_hosting` or `port_in_use`. */
+  host(id: string): Promise<HostingInfo>;
+  stopHosting(id: string): Promise<void>;
+  /** `null` when the exam is not being hosted. */
+  hosting(id: string): Promise<HostingInfo | null>;
 }
 
 export function createExamApi(connection: ServerConnection, fetchFn: FetchFn = fetch): ExamApi {
@@ -29,6 +36,18 @@ export function createExamApi(connection: ServerConnection, fetchFn: FetchFn = f
     duplicate: (id) => call(connection, fetchFn, `${path(id)}/duplicate`, ExamSummarySchema, {}),
     markReady: (id) => call(connection, fetchFn, `${path(id)}/ready`, ExamSummarySchema, {}),
     backToDraft: (id) => call(connection, fetchFn, `${path(id)}/unready`, ExamSummarySchema, {}),
+    host: (id) => call(connection, fetchFn, `${path(id)}/host`, HostingInfoSchema, {}),
+    stopHosting: async (id) => {
+      await call(connection, fetchFn, `${path(id)}/stop-hosting`, AuthOkSchema, {});
+    },
+    hosting: async (id) => {
+      try {
+        return await call(connection, fetchFn, `${path(id)}/hosting`, HostingInfoSchema);
+      } catch (e) {
+        if (e instanceof TeacherApiError && e.code === 'not_hosting') return null;
+        throw e;
+      }
+    },
     remove: async (id) => {
       await call(connection, fetchFn, path(id), AuthOkSchema, undefined, 'DELETE');
     },

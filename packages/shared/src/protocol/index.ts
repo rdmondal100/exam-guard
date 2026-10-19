@@ -3,3 +3,4 @@ export * from './auth.js';
 export * from './class-lists.js';
 export * from './exams.js';
 export * from './questions.js';
+export * from './hosting.js';

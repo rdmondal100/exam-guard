@@ -12,6 +12,7 @@ import { useExams } from '@/lib/useExams';
 import { useQuestions } from '@/lib/useQuestions';
 import { QuestionEditor } from './QuestionEditor';
 import { QuestionList } from './QuestionList';
+import { HostingPanel } from './HostingPanel';
 import { ReadyPanel } from './ReadyPanel';
 
 type Editing = { question?: Question; type?: QuestionType } | null;
@@ -73,6 +74,18 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
       await reloadExams();
     });
 
+  const host = () =>
+    void run(async () => {
+      setProblems([]);
+      await examApi?.host(exam.id);
+      await reloadExams();
+    });
+
+  const stopHosting = async () => {
+    await examApi?.stopHosting(exam.id);
+    await reloadExams();
+  };
+
   const backToDraft = () =>
     void run(async () => {
       await examApi?.backToDraft(exam.id);
@@ -113,7 +126,11 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
             busy={busy || !examApi}
             onMarkReady={markReady}
             onBackToDraft={backToDraft}
+            onHost={host}
           />
+          {exam.state === 'hosting' && examApi && (
+            <HostingPanel examId={exam.id} api={examApi} onStop={stopHosting} />
+          )}
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">Questions</h2>
             <div className="flex gap-2">

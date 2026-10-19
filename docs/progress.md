@@ -5,8 +5,8 @@ Read this first every session. Update it at the end of every session.
 ## Current status
 - **Stage:** 1
 - **Phase:** 2 — Exam setup & joining
-- **Current milestone:** M08 done (manual check pending). M09 Hosting: TLS, PIN, student listener is next
-- **Next step:** do the M02–M08 manual tests (close old dev instances first), then start M09 (see `milestones.md`).
+- **Current milestone:** M09 done (manual check pending). M10 is next
+- **Next step:** do the M02–M09 manual tests (close old dev instances first), then start M10 (see `milestones.md`).
 
 ## Completed milestones
 Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
@@ -18,6 +18,7 @@ Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
 - M06 Class list CSV import — 2026-10-19 — `0002_class_lists`, server-side papaparse import with dry-run preview and per-row errors, `/class-lists*` endpoints, Class lists page (TanStack Table); manual check pending.
 - M07 Exam CRUD and settings — 2026-10-19 — `0003_exams`, exam state machine, `/exams*` (create, edit, duplicate, delete), Exams page + settings form; manual check pending.
 - M08 Question editor — 2026-10-19 — `0004_questions`, question repo + routes, `/ready` and `/unready` with reasons, duplicate copies questions, Question editor UI with Monaco; manual check pending.
+- M09 Hosting: TLS, PIN, student listener — 2026-10-20 — self-signed ECDSA cert + 4-char code, `/exams/:id/host|stop-hosting|hosting`, student HTTPS `/info` on 47820 only while hosting, hosting panel, sleep blocker; manual check pending.
 
 ## Decisions log
 Newest at the bottom. Format: `date — decision — why (doc that owns the detail)`.
@@ -108,6 +109,13 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - 2026-10-19 — Reorder is move up/down buttons (no drag library). The repo shifts positions by +100000 then assigns, to respect `UNIQUE(exam_id, position)`. Delete re-packs positions.
 - 2026-10-19 — Monaco (`monaco-editor` 0.57 + `@monaco-editor/react`) is bundled and loaded lazily (`MonacoField` via `React.lazy`), with `loader.config({ monaco })` and Vite `?worker` imports (`lib/monaco.ts`). CSP gained `worker-src 'self' blob:` and `font-src 'self' data:`. `TeacherApiError` now carries `details`.
 
+**M09**
+- 2026-10-20 — `HostingManager` (`hosting/hosting-manager.ts`) owns the student listener and the ready↔hosting change; routes only translate `HostingError` to HTTP. `buildTeacherApp` takes an optional `hosting` options object (data dir, port, host, callbacks); without it the hosting routes are not registered, which keeps older tests unchanged.
+- 2026-10-20 — Cert: ECDSA P-256 via `selfsigned` 5 (async), 10 years, in `<dataDir>/certs/server.key|crt`, created on first host and reused. The fingerprint is SHA-256 of the DER, base64url. The code is the first 20 bits in Crockford base32 (`tls/fingerprint.ts`). "Regenerate cert" (Settings) is not wired yet; `loadOrCreateCert(dir, true)` exists.
+- 2026-10-20 — PIN: 6 digits from `crypto.randomInt`, stored in `exams.pin` while hosting and cleared on stop. Hosting start re-runs `readyProblems` (422 `not_ready`). Only one exam can be hosted (409 `already_hosting`).
+- 2026-10-20 — Server → main reply `{type:'hosting', active}` drives `powerSaveBlocker.start('prevent-display-sleep')` in `ServerHost`. It is released on stop, on server exit and when the listener closes. On boot the server calls `resume()`: an exam still in `hosting` gets its listener back with the same PIN and cert (a failure is logged, the teacher API stays up). This is the minimal slice of the crash recovery in architecture.md; the rest stays in the recovery milestone.
+- 2026-10-20 — `/info` returns 503 `not_hosting` when nothing is hosted (the listener is normally closed then). Its state is always `hosting` for now; `running` arrives with start (M10+).
+
 ## Known issues / open questions
 - Confirm with lab IT (before a real exam): admin install rights, antivirus/EDR tolerance of the agent and screen capture, reboot-restore software (e.g. Deep Freeze wipes the local queue on reboot), group policies, and whether students are on one subnet.
 - Check Gemini's current data-use terms and use a paid tier for real student data.
@@ -140,6 +148,11 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - M08: the question form has no markdown preview and no "unsaved changes" prompt. The class list is chosen in the exam Settings form, not on the detail page.
 - M08: nothing yet re-checks readiness when hosting starts; M09 must call `readyProblems`.
 
+- M09: no UI/component tests (node-only vitest). Cert, fingerprint code, PIN, LAN address filter, hosting manager/routes (real loopback HTTPS: /info works, refused after stop, resume) and the client api are tested; the panel and the sleep blocker were not run. Use `powercfg /requests` to check the blocker.
+- M09: first LAN listen may trigger the Windows Firewall prompt on the teacher PC (allow Private). The installer's firewall rule is M46.
+- M09: `stopHosting` returns the exam to `ready`, so students who already joined are not told yet; join counts on the panel are static 0 until M10. Hosting stays "on" if the teacher closes the app: on next launch `resume()` reopens it.
+- M09: `GET /exams/:id/hosting` only answers while the listener is open. If a resume fails (port busy) the exam stays in `hosting` without a listener and the panel keeps showing "Loading hosting details" until the teacher clicks Stop hosting (which works from the stored state).
+
 ## Manual recovery checklist (filled in during M48)
 _Empty._
 
@@ -156,3 +169,4 @@ Format: `date — milestone — what was done — tests run — next`.
 - 2026-10-19 — M06 — migration 0002, shared class-list schemas, server `class-lists/csv-parser`, `db/class-list-repo` + `db/ids`, `/class-lists*` routes, desktop `classListApi`, `useClassLists`, `DataTable`, `ImportPreview`, `ClassListsPage`, nav switching — server (45), shared (21), desktop (21) tests, typecheck, lint, format, desktop build pass; app not clicked through — manual test, then M07.
 - 2026-10-19 — M07 — migration 0003, shared exam schemas + DEFAULT_MONITORING, server `exams/exam-state`, `db/exam-repo`, `/exams*` routes, desktop `examApi`, `useExams`, `ExamsPage`, `ExamSettingsForm`, Exams nav enabled — shared (25), server (57), desktop (26) tests, typecheck, lint, format, desktop build pass; app not clicked through — manual test, then M08.
 - 2026-10-19 — M08 — migration 0004, shared question schemas, server `db/question-repo`, `exams/ready-check`, `http/question-routes`, `/ready` + `/unready`, duplicate copies questions; desktop `questionApi`, `questionDraft`, `useQuestions`, Monaco setup, `ExamDetailPage` + QuestionList/QuestionEditor/CriteriaEditor/ReadyPanel, CSP for Monaco — shared (29), server (73), desktop (36) tests, full `pnpm test` (138), typecheck, lint, format, desktop build pass; app not clicked through — manual test, then M09.
+- 2026-10-20 — M09 — shared hosting schemas + `hosting` server reply, server `tls/` (cert, fingerprint, lan-addresses), `hosting/` (pin, manager), `http/student-app` + `hosting-routes`, `ExamRepo` hosting methods, resume on boot; desktop `examApi` host/stop/hosting, `HostingPanel`, Start hosting button, power-save blocker in `ServerHost` — shared (33), server (87+), desktop tests, full `pnpm test` (159), typecheck, lint, format, build pass; app not clicked through — manual test, then M10.

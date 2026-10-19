@@ -120,6 +120,36 @@ export class ExamRepo {
     return this.get(id);
   }
 
+  /** ready → hosting: stores the PIN and the hosting start time. */
+  startHosting(id: string, pin: string, now: number): ExamSummary | undefined {
+    this.db
+      .prepare(
+        `UPDATE exams SET state = 'hosting', pin = ?, hosting_started_at = ?, updated_at = ?
+           WHERE id = ?`,
+      )
+      .run(pin, now, now, id);
+    return this.get(id);
+  }
+
+  /** hosting → ready: clears the PIN and the hosting start time. */
+  stopHosting(id: string, now: number): ExamSummary | undefined {
+    this.db
+      .prepare(
+        `UPDATE exams SET state = 'ready', pin = NULL, hosting_started_at = NULL, updated_at = ?
+           WHERE id = ?`,
+      )
+      .run(now, id);
+    return this.get(id);
+  }
+
+  /** The exam currently in `hosting`, with its PIN. At most one exists. */
+  hostedExam(): { exam: ExamSummary; pin: string } | undefined {
+    const row = this.db.prepare("SELECT id, pin FROM exams WHERE state = 'hosting'").get() as
+      { id: string; pin: string | null } | undefined;
+    const exam = row && this.get(row.id);
+    return row?.pin && exam ? { exam, pin: row.pin } : undefined;
+  }
+
   delete(id: string): boolean {
     return this.db.prepare('DELETE FROM exams WHERE id = ?').run(id).changes > 0;
   }
