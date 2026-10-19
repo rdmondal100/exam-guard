@@ -5,14 +5,15 @@ Read this first every session. Update it at the end of every session.
 ## Current status
 - **Stage:** 1
 - **Phase:** 1 — Foundation
-- **Current milestone:** M04 SQLite + migrations (not started)
-- **Next step:** do the M02 and M03 manual tests if not done yet, then start M04 (see `milestones.md`).
+- **Current milestone:** M04 done (manual check pending); M05 Teacher password and login gate is next
+- **Next step:** do the M02–M04 manual tests (close old dev instances first), then start M05 (see `milestones.md`).
 
 ## Completed milestones
 Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
 - M01 Monorepo skeleton — 2026-10-18 — pnpm + Cargo workspaces; build/test/lint/typecheck/clippy all pass; `any` and `unwrap()` are rejected.
 - M02 Electron shell + mode selection — 2026-10-18 — secure window, per-profile mode.json, student install lock; manual check pending.
 - M03 Exam server in a utilityProcess — 2026-10-18 — Fastify loopback `/api/v1/health` with token check, supervised by main with backoff restart, status chip + restart banner; manual UI check pending.
+- M04 SQLite + migrations — 2026-10-18 — better-sqlite3 13, migration runner on `user_version`, `0001_init` (settings, teacher), opened by the server at start; manual check pending.
 
 ## Decisions log
 Newest at the bottom. Format: `date — decision — why (doc that owns the detail)`.
@@ -72,6 +73,11 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - 2026-10-18 — Ports, header name and the main↔server message schemas live in `packages/shared/src/server/`. Status (`stopped|starting|running|restarting`, `restartCount`) is pushed main → renderer on `server:status`. Server logs go to `<userData>/logs/server.log`.
 - 2026-10-18 — Backoff: 1 s, 2 s, 5 s, then 10 s. It resets when the server stayed up 30 s or more.
 
+**M04**
+- 2026-10-18 — better-sqlite3 13 ships N-API prebuilds (win32-x64), so one binary works under system Node (Vitest) and Electron 44 (utilityProcess). No electron-rebuild step is needed. Allowed in `onlyBuiltDependencies`. (data-model)
+- 2026-10-18 — The server gets the data folder in its config message (`dataDir` = profile userData) and creates `<dataDir>/db/examguard.sqlite` itself. Main passes `userData`. A DB or migration failure posts the `error` reply and exits, so main's backoff restarts it. (protocol/architecture unchanged)
+- 2026-10-18 — Each migration runs in its own transaction and a DB newer than the app is refused. Numbers must be contiguous from 0001. `.sql` files are copied to `dist/db/migrations` by `apps/server/scripts/copy-migrations.mjs` as part of `build`.
+
 ## Known issues / open questions
 - Confirm with lab IT (before a real exam): admin install rights, antivirus/EDR tolerance of the agent and screen capture, reboot-restore software (e.g. Deep Freeze wipes the local queue on reboot), group policies, and whether students are on one subnet.
 - Check Gemini's current data-use terms and use a paid tier for real student data.
@@ -82,6 +88,9 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - M03: `server.log` is append-only with no rotation yet.
 - M03: the server entry path comes from `import.meta.resolve`; check it again when packaging (M45, asar unpack).
 - M03: a headless smoke run (Electron, teacher profile) confirmed 127.0.0.1:47821 listens and that killing the process brings it back in about 1.2 s. The 401 and 200 cases are covered by `app.inject` tests only. The UI chip and banner have not been clicked through.
+- M04: only an isolated Electron probe was run (server in a utilityProcess, temp data dir): DB, -wal and -shm created. The full `pnpm dev:teacher` run was blocked because older teacher/student dev instances were still running (single-instance lock, port 47821).
+- M04: asar-unpack of the better-sqlite3 `.node` file is for packaging (M45). Dropping the `tsc` + copy build for a bundler is also an M45 choice.
+- M04: the data folder is not movable yet (Settings, later). The `teacher` repo is left to M05.
 
 ## Manual recovery checklist (filled in during M48)
 _Empty._
@@ -94,3 +103,4 @@ Format: `date — milestone — what was done — tests run — next`.
 - 2026-10-18 — M01 — verified the Rust toolchain (rustc/cargo 1.99.1, stable-x86_64-pc-windows-msvc, VS 2026 C++ workload); closed M01 — `cargo build`, `cargo test` (2 pass), `cargo clippy --all-targets -D warnings`, `cargo fmt --check`, both binaries run, a test `unwrap()` fails clippy; JS install/build/test (4 pass)/lint/typecheck re-run green — start M02.
 - 2026-10-18 — M02 — `apps/desktop` (electron-vite, React, Tailwind v4, shadcn Button/Card), secure window + CSP, typed preload bridge, profile/install-type/mode-store modules, shared app schemas, root dev scripts — desktop (11) + shared (8) tests, lint, typecheck, build pass; dev app launched with no renderer errors — manual test, then M03.
 - 2026-10-18 — M03 — `apps/server` (Fastify teacher app with token hook, utilityProcess entry), shared server schemas, desktop `ServerHost` + backoff + IPC/preload + chip/banner, CSP for loopback — server (4), shared (13), desktop (13) tests, lint, format, typecheck, build pass; headless Electron run: server listens, kill → restart in ~1.2 s — manual test, then M04.
+- 2026-10-18 — M04 — `apps/server/src/db/` (connection, migrations loader, migrate, database, settings-repo, 0001_init.sql), `dataDir` in the server config message, copy-migrations build step — server (12), shared (14), desktop (13) tests, typecheck, lint, format pass; Electron probe confirms the DB is created in the utilityProcess — manual test, then M05.

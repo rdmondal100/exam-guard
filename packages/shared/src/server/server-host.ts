@@ -9,6 +9,8 @@ export const TEACHER_TOKEN_HEADER = 'x-teacher-token';
 export const ServerConfigMessageSchema = z.object({
   type: z.literal('config'),
   token: z.string().min(32),
+  /** Profile userData folder; the database lives in `<dataDir>/db`. */
+  dataDir: z.string().min(1),
   host: z.string().default(TEACHER_API_HOST),
   port: z.number().int().min(0).max(65535).default(TEACHER_API_PORT),
 });

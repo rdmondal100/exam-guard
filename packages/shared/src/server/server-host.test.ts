@@ -8,15 +8,25 @@ import {
 
 describe('ServerConfigMessageSchema', () => {
   it('fills the loopback defaults', () => {
-    const msg = ServerConfigMessageSchema.parse({ type: 'config', token: 'a'.repeat(32) });
+    const msg = ServerConfigMessageSchema.parse({
+      type: 'config',
+      token: 'a'.repeat(32),
+      dataDir: '/data',
+    });
     expect(msg.host).toBe('127.0.0.1');
     expect(msg.port).toBe(TEACHER_API_PORT);
   });
 
   it('rejects a short token', () => {
-    expect(ServerConfigMessageSchema.safeParse({ type: 'config', token: 'abc' }).success).toBe(
-      false,
-    );
+    expect(
+      ServerConfigMessageSchema.safeParse({ type: 'config', token: 'abc', dataDir: '/d' }).success,
+    ).toBe(false);
+  });
+
+  it('requires a data folder', () => {
+    expect(
+      ServerConfigMessageSchema.safeParse({ type: 'config', token: 'a'.repeat(32) }).success,
+    ).toBe(false);
   });
 });
 
