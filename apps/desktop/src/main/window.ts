@@ -14,6 +14,9 @@ function contentSecurityPolicy(): string {
     dev ? `script-src 'self' 'unsafe-inline'` : "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
+    // Monaco runs its language services in blob: workers and ships its icon font as a data: URI.
+    "worker-src 'self' blob:",
+    "font-src 'self' data:",
     // The teacher renderer calls the loopback server directly (architecture §2).
     dev
       ? `connect-src 'self' http://${origin} ws://${origin} ${TEACHER_API}`
