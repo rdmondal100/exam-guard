@@ -36,7 +36,7 @@ if (!app.requestSingleInstanceLock()) {
       installType,
       mode: resolveMode(installType, await loadStoredMode(userData)),
     };
-    const server = new ServerHost(join(userData, 'logs'), (status) => {
+    const server = new ServerHost(userData, join(userData, 'logs'), (status) => {
       for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send(IPC.serverStatus, status);
       }

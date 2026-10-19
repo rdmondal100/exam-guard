@@ -1,4 +1,5 @@
 import { ServerConfigMessageSchema, type ServerReplyMessage } from '@examguard/shared';
+import { initDatabase } from './db/database.js';
 import { buildTeacherApp } from './http/teacher-app.js';
 
 /** The slice of Electron's `process.parentPort` this entry uses. */
@@ -11,7 +12,11 @@ const parentPort = (process as unknown as { parentPort?: ParentPort }).parentPor
 
 async function start(data: unknown, port: ParentPort): Promise<void> {
   const config = ServerConfigMessageSchema.parse(data);
+  const db = initDatabase(config.dataDir);
   const app = buildTeacherApp({ token: config.token });
+  app.addHook('onClose', async () => {
+    db.close();
+  });
   await app.listen({ host: config.host, port: config.port });
   console.log(`teacher API listening on ${config.host}:${config.port}`);
   port.postMessage({ type: 'ready', port: config.port });

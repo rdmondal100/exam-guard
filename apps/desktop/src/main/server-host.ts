@@ -24,6 +24,7 @@ export class ServerHost {
   private status: ServerStatus = { state: 'stopped', restartCount: 0, lastRestartAt: null };
 
   constructor(
+    private readonly dataDir: string,
     private readonly logDir: string,
     private readonly onStatus: (status: ServerStatus) => void,
   ) {}
@@ -70,7 +71,7 @@ export class ServerHost {
     child.stderr?.on('data', (chunk: Buffer) => this.write('err', chunk));
     child.on('message', (raw: unknown) => this.onMessage(raw));
     child.on('exit', (code) => this.onExit(child, code));
-    child.postMessage({ type: 'config', token: this.token });
+    child.postMessage({ type: 'config', token: this.token, dataDir: this.dataDir });
   }
 
   private onMessage(raw: unknown): void {
