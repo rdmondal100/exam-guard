@@ -24,7 +24,7 @@ Everything else for students goes over WS.
 | Area | Endpoints |
 |---|---|
 | Auth | `GET /auth/status → {setupRequired, loggedIn}`, `POST /auth/setup {password}` (min 8 chars; 409 `already_setup`; logs in), `POST /auth/login {password} → {ok}` (401 `bad_password`, 409 `setup_required`, 429 `rate_limited` with `details.retryAfterSec`), `POST /auth/logout`, `POST /auth/change` (not built yet). Every other route except `/health` answers 401 `login_required` until login. Login state lives in the server process |
-| Class lists | `GET /class-lists`, `POST /class-lists/import {name, csvText}` → `{list, rows, errors[]}` (preview with `dryRun`), `DELETE /class-lists/:id`, `GET /class-lists/:id/students` |
+| Class lists | `GET /class-lists → [{id, name, studentCount, createdAt}]`, `POST /class-lists/import {name, csvText, dryRun?}` → `{list?, rows[{studentCode,name}], errors[{line,code,message,raw}]}` (`list` absent on `dryRun`, which writes nothing; error codes `blank_id, blank_name, duplicate_id, too_few_columns`; 400 `no_valid_rows` with `details.errors`, 400 `too_many_rows`), `GET /class-lists/:id/students → [{studentCode,name}]` (404 `not_found`), `DELETE /class-lists/:id → {ok}` (404 `not_found`, 409 `list_in_use`) |
 | Exams | `GET /exams`, `POST /exams`, `GET/PATCH/DELETE /exams/:id`, `POST /exams/:id/duplicate`, `POST /exams/:id/ready` (validates) |
 | Questions | `POST /exams/:id/questions`, `PATCH/DELETE /questions/:qid`, `POST /exams/:id/questions/reorder {ids[]}` (criteria are embedded in question bodies) |
 | Hosting | `POST /exams/:id/host` → `{pin, addresses[], port, fpCode}`, `POST /exams/:id/stop-hosting`, `POST /exams/:id/start`, `POST /exams/:id/end` |

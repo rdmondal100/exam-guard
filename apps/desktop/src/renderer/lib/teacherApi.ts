@@ -20,19 +20,21 @@ export class TeacherApiError extends Error {
   }
 }
 
-type FetchFn = typeof fetch;
+export type FetchFn = typeof fetch;
 
 const RetryDetailsSchema = z.object({ retryAfterSec: z.number() });
 
-async function call<T>(
+/** One teacher API call: GET by default, POST when there is a body, or an explicit method. */
+export async function call<T>(
   connection: ServerConnection,
   fetchFn: FetchFn,
   path: string,
   schema: z.ZodType<T>,
   body?: unknown,
+  method: 'GET' | 'POST' | 'DELETE' = body === undefined ? 'GET' : 'POST',
 ): Promise<T> {
   const res = await fetchFn(`${connection.baseUrl}/api/v1${path}`, {
-    method: body === undefined ? 'GET' : 'POST',
+    method,
     headers: {
       [TEACHER_TOKEN_HEADER]: connection.token,
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),

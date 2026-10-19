@@ -13,9 +13,11 @@
     "@examguard/shared": "workspace:*",
     "better-sqlite3": "^13.0.3",
     "fastify": "^5.8.0",
+    "papaparse": "^5.7.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^9.6.0"
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/papaparse": "^5.5.2"
   }
 }
