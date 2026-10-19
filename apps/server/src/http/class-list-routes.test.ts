@@ -104,12 +104,14 @@ describe('class list routes', () => {
   });
 
   it('refuses to delete a list that is in use (exams.class_list_id is RESTRICT)', async () => {
-    // The exams table arrives in M07; a table with the same foreign key stands in for it.
-    db.exec(
-      'CREATE TABLE exams (id TEXT PRIMARY KEY, class_list_id TEXT REFERENCES class_lists (id) ON DELETE RESTRICT)',
-    );
     const { list } = (await importCsv({ name: 'x', csvText: CSV })).json();
-    db.prepare('INSERT INTO exams (id, class_list_id) VALUES (?, ?)').run('e1', list.id);
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/exams',
+      headers: HEADERS,
+      payload: { title: 'Midterm', durationMin: 60, classListId: list.id },
+    });
+    expect(created.statusCode).toBe(201);
 
     const res = await app.inject({
       method: 'DELETE',

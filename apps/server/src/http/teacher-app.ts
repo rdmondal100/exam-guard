@@ -5,10 +5,12 @@ import { AuthState } from '../auth/auth-state.js';
 import { LoginLimiter } from '../auth/login-limiter.js';
 import { ClassListRepo } from '../db/class-list-repo.js';
 import type { Db } from '../db/connection.js';
+import { ExamRepo } from '../db/exam-repo.js';
 import { TeacherRepo } from '../db/teacher-repo.js';
 import { registerAuthRoutes } from './auth-routes.js';
 import { registerClassListRoutes } from './class-list-routes.js';
 import { sendError } from './errors.js';
+import { registerExamRoutes } from './exam-routes.js';
 
 export interface TeacherAppOptions {
   token: string;
@@ -76,6 +78,12 @@ export function buildTeacherApp({ token, db, now }: TeacherAppOptions): TeacherA
 
   registerClassListRoutes(app, {
     classLists: new ClassListRepo(db),
+    requireLogin: state.requireLogin,
+    now,
+  });
+
+  registerExamRoutes(app, {
+    exams: new ExamRepo(db),
     requireLogin: state.requireLogin,
     now,
   });
