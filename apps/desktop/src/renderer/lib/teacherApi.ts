@@ -31,7 +31,7 @@ export async function call<T>(
   path: string,
   schema: z.ZodType<T>,
   body?: unknown,
-  method: 'GET' | 'POST' | 'DELETE' = body === undefined ? 'GET' : 'POST',
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = body === undefined ? 'GET' : 'POST',
 ): Promise<T> {
   const res = await fetchFn(`${connection.baseUrl}/api/v1${path}`, {
     method,

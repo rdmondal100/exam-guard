@@ -5,8 +5,8 @@ Read this first every session. Update it at the end of every session.
 ## Current status
 - **Stage:** 1
 - **Phase:** 2 — Exam setup & joining
-- **Current milestone:** M06 done (manual check pending). M07 Exam CRUD and settings is next
-- **Next step:** do the M02–M06 manual tests (close old dev instances first), then start M07 (see `milestones.md`).
+- **Current milestone:** M07 done (manual check pending). M08 Question editor is next
+- **Next step:** do the M02–M07 manual tests (close old dev instances first), then start M08 (see `milestones.md`).
 
 ## Completed milestones
 Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
@@ -16,6 +16,7 @@ Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
 - M04 SQLite + migrations — 2026-10-18 — better-sqlite3 13, migration runner on `user_version`, `0001_init` (settings, teacher), opened by the server at start; manual check pending.
 - M05 Teacher password and login gate — 2026-10-19 — scrypt password, `/auth/status|setup|login|logout` with lockout, setup/login/shell screens behind a gate; manual check pending.
 - M06 Class list CSV import — 2026-10-19 — `0002_class_lists`, server-side papaparse import with dry-run preview and per-row errors, `/class-lists*` endpoints, Class lists page (TanStack Table); manual check pending.
+- M07 Exam CRUD and settings — 2026-10-19 — `0003_exams`, exam state machine, `/exams*` (create, edit, duplicate, delete), Exams page + settings form; manual check pending.
 
 ## Decisions log
 Newest at the bottom. Format: `date — decision — why (doc that owns the detail)`.
@@ -92,6 +93,13 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - 2026-10-19 — "In use" is enforced by the `exams.class_list_id ON DELETE RESTRICT` foreign key (M07 migration must keep it). `DELETE` maps a SQLite constraint error to 409 `list_in_use`. The test stands in a scratch `exams` table with the same FK.
 - 2026-10-19 — `@tanstack/react-table` is pinned to v8 (`^8`): v9 is a different API. Plain `useClassLists` hook, no TanStack Query yet. IDs are UUIDv7 from `db/ids.ts`. `call()` in `teacherApi.ts` is exported and takes an optional method (used for `DELETE`).
 
+**M07**
+- 2026-10-19 — The API speaks minutes (`durationMin`, 1–600); the DB keeps `duration_sec`. Conversion is in `db/exam-repo.ts`. (protocol §2)
+- 2026-10-19 — Settings can be edited and the exam deleted only in `draft` or `ready` (`exams/exam-state.ts` `isEditable`), else 409 `invalid_state`. Transitions: draft→ready, ready→draft|hosting, hosting→ready|running, running→ended, ended→grading, grading→in_review, in_review→grading|finalized. Nothing calls `assertTransition` yet; M08 (`/ready`) and M09+ will.
+- 2026-10-19 — Duplicate makes a draft titled `"<title> (copy)"` with the same duration, class list and monitoring, and no pin, timestamps or extension. It works from any state.
+- 2026-10-19 — `MonitoringSettings` (screenshot on switch / title change, interval 20 s, min gap 5 s, high-severity apps, grace 60 s) and `DEFAULT_MONITORING` live in `packages/shared` so the form and server share defaults. The high-severity list is free text, comma separated.
+- 2026-10-19 — `class_list_id` stays `ON DELETE RESTRICT`; the M06 "in use" test now uses a real exam.
+
 ## Known issues / open questions
 - Confirm with lab IT (before a real exam): admin install rights, antivirus/EDR tolerance of the agent and screen capture, reboot-restore software (e.g. Deep Freeze wipes the local queue on reboot), group policies, and whether students are on one subnet.
 - Check Gemini's current data-use terms and use a paid tier for real student data.
@@ -114,6 +122,11 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - M06: not built (not needed yet): rename a list, add/remove single students, re-import into an existing list. A duplicate list name is allowed. The students view is not paginated (scrolls; max 5 000 rows).
 - M06: the "in use" delete refusal is only proven against a stand-in table until M07 adds `exams`; re-check it with a real exam in M07.
 
+- M07: no UI/component tests (node-only vitest). State machine, repo/routes, shared schemas and the client api are tested; the Exams page click-through is the manual test.
+- M07: duplicate does not copy questions yet. Add it in `ExamRepo.duplicate` when M08 adds `questions`/`marking_criteria`.
+- M07: an exam cannot yet leave `draft` (no `/ready`), so the 409 `invalid_state` paths are tested by setting state in SQL.
+- M07: the exam list is not paginated or filtered.
+
 ## Manual recovery checklist (filled in during M48)
 _Empty._
 
@@ -128,3 +141,4 @@ Format: `date — milestone — what was done — tests run — next`.
 - 2026-10-18 — M04 — `apps/server/src/db/` (connection, migrations loader, migrate, database, settings-repo, 0001_init.sql), `dataDir` in the server config message, copy-migrations build step — server (12), shared (14), desktop (13) tests, typecheck, lint, format pass; Electron probe confirms the DB is created in the utilityProcess — manual test, then M05.
 - 2026-10-19 — M05 — shared auth schemas, server `auth/` (scrypt, login limiter, auth state), `db/teacher-repo`, `/auth/*` routes, `http/errors`, renderer teacherApi/useAuth, Setup/Login/TeacherShell/TeacherGate — shared (17), server (27), desktop (17) tests, full `pnpm test` (61), lint, format, typecheck, build pass — manual test, then M06.
 - 2026-10-19 — M06 — migration 0002, shared class-list schemas, server `class-lists/csv-parser`, `db/class-list-repo` + `db/ids`, `/class-lists*` routes, desktop `classListApi`, `useClassLists`, `DataTable`, `ImportPreview`, `ClassListsPage`, nav switching — server (45), shared (21), desktop (21) tests, typecheck, lint, format, desktop build pass; app not clicked through — manual test, then M07.
+- 2026-10-19 — M07 — migration 0003, shared exam schemas + DEFAULT_MONITORING, server `exams/exam-state`, `db/exam-repo`, `/exams*` routes, desktop `examApi`, `useExams`, `ExamsPage`, `ExamSettingsForm`, Exams nav enabled — shared (25), server (57), desktop (26) tests, typecheck, lint, format, desktop build pass; app not clicked through — manual test, then M08.
