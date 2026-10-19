@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { AppInfo, AppMode } from '@examguard/shared';
 import { ModeHome } from './components/ModeHome';
+import { TeacherGate } from './components/teacher/TeacherGate';
 import { ModeSelect } from './components/ModeSelect';
 
 export function App() {
@@ -18,5 +19,6 @@ export function App() {
   if (error) return <p className="p-8 text-red-700">Something went wrong: {error}</p>;
   if (!info) return null;
   if (!info.mode) return <ModeSelect allowed={info.allowedModes} onChoose={choose} />;
+  if (info.mode === 'teacher') return <TeacherGate info={info} />;
   return <ModeHome info={info} />;
 }
