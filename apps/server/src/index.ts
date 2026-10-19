@@ -13,11 +13,22 @@ const parentPort = (process as unknown as { parentPort?: ParentPort }).parentPor
 async function start(data: unknown, port: ParentPort): Promise<void> {
   const config = ServerConfigMessageSchema.parse(data);
   const db = initDatabase(config.dataDir);
-  const { app } = buildTeacherApp({ token: config.token, db });
+  const { app, hosting } = buildTeacherApp({
+    token: config.token,
+    db,
+    hosting: {
+      dataDir: config.dataDir,
+      onActive: (active) => port.postMessage({ type: 'hosting', active }),
+    },
+  });
   app.addHook('onClose', async () => {
     db.close();
   });
   await app.listen({ host: config.host, port: config.port });
+  // A student port that cannot be reopened must not take the teacher API down with it.
+  await hosting?.resume().catch((err: unknown) => {
+    console.error(`could not resume hosting: ${err instanceof Error ? err.message : String(err)}`);
+  });
   console.log(`teacher API listening on ${config.host}:${config.port}`);
   port.postMessage({ type: 'ready', port: config.port });
 }

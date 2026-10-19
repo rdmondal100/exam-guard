@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { createWriteStream, mkdirSync, type WriteStream } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { utilityProcess, type UtilityProcess } from 'electron';
+import { powerSaveBlocker, utilityProcess, type UtilityProcess } from 'electron';
 import {
   ServerReplyMessageSchema,
   TEACHER_API_HOST,
@@ -21,6 +21,7 @@ export class ServerHost {
   private timer: NodeJS.Timeout | null = null;
   private stopping = false;
   private log: WriteStream | null = null;
+  private sleepBlockerId: number | null = null;
   private status: ServerStatus = { state: 'stopped', restartCount: 0, lastRestartAt: null };
 
   constructor(
@@ -52,6 +53,7 @@ export class ServerHost {
     this.timer = null;
     this.child?.kill();
     this.child = null;
+    this.setSleepBlocked(false);
     this.log?.end();
     this.log = null;
     this.setStatus({ state: 'stopped' });
@@ -80,6 +82,8 @@ export class ServerHost {
     if (parsed.data.type === 'ready') {
       this.startedAt = Date.now();
       this.setStatus({ state: 'running' });
+    } else if (parsed.data.type === 'hosting') {
+      this.setSleepBlocked(parsed.data.active);
     } else {
       this.write('err', Buffer.from(`start error: ${parsed.data.message}\n`));
     }
@@ -88,6 +92,8 @@ export class ServerHost {
   private onExit(child: UtilityProcess, code: number): void {
     if (this.child !== child) return;
     this.child = null;
+    // The listener died with the process; the restarted server reports again if it resumes.
+    this.setSleepBlocked(false);
     if (this.stopping) return;
     const upFor = this.startedAt ? Date.now() - this.startedAt : 0;
     this.failures = upFor >= STABLE_UPTIME_MS ? 1 : this.failures + 1;
@@ -103,6 +109,16 @@ export class ServerHost {
       this.timer = null;
       this.spawn('restarting');
     }, delay);
+  }
+
+  /** No sleep while the student listener is open (docs/architecture.md §1). */
+  private setSleepBlocked(blocked: boolean): void {
+    if (blocked && this.sleepBlockerId === null) {
+      this.sleepBlockerId = powerSaveBlocker.start('prevent-display-sleep');
+    } else if (!blocked && this.sleepBlockerId !== null) {
+      powerSaveBlocker.stop(this.sleepBlockerId);
+      this.sleepBlockerId = null;
+    }
   }
 
   private write(stream: 'out' | 'err', chunk: Buffer): void {

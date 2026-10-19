@@ -7,10 +7,11 @@ interface Props {
   busy: boolean;
   onMarkReady: () => void;
   onBackToDraft: () => void;
+  onHost: () => void;
 }
 
 /** Mark Ready / Back to draft, plus the reasons when Ready was refused. */
-export function ReadyPanel({ state, problems, busy, onMarkReady, onBackToDraft }: Props) {
+export function ReadyPanel({ state, problems, busy, onMarkReady, onBackToDraft, onHost }: Props) {
   return (
     <section
       aria-label="Ready check"
@@ -29,12 +30,15 @@ export function ReadyPanel({ state, problems, busy, onMarkReady, onBackToDraft }
       {state === 'ready' && (
         <div className="flex items-center gap-3">
           <span className="font-medium text-green-700">Ready to host.</span>
+          <Button disabled={busy} onClick={onHost}>
+            Start hosting
+          </Button>
           <Button variant="outline" disabled={busy} onClick={onBackToDraft}>
             Back to draft
           </Button>
         </div>
       )}
-      {state !== 'draft' && state !== 'ready' && (
+      {state !== 'draft' && state !== 'ready' && state !== 'hosting' && (
         <p className="text-sm text-muted">
           This exam is {state.replace('_', ' ')} and can no longer be edited.
         </p>

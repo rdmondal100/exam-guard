@@ -20,6 +20,8 @@ export type ServerConfigMessage = z.infer<typeof ServerConfigMessageSchema>;
 export const ServerReplyMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('ready'), port: z.number().int() }),
   z.object({ type: z.literal('error'), message: z.string() }),
+  /** The student listener opened or closed; main blocks sleep while it is open. */
+  z.object({ type: z.literal('hosting'), active: z.boolean() }),
 ]);
 export type ServerReplyMessage = z.infer<typeof ServerReplyMessageSchema>;
 

@@ -6,12 +6,14 @@ import { LoginLimiter } from '../auth/login-limiter.js';
 import { ClassListRepo } from '../db/class-list-repo.js';
 import type { Db } from '../db/connection.js';
 import { ExamRepo } from '../db/exam-repo.js';
+import { HostingManager, type HostingManagerDeps } from '../hosting/hosting-manager.js';
 import { QuestionRepo } from '../db/question-repo.js';
 import { TeacherRepo } from '../db/teacher-repo.js';
 import { registerAuthRoutes } from './auth-routes.js';
 import { registerClassListRoutes } from './class-list-routes.js';
 import { sendError } from './errors.js';
 import { registerExamRoutes } from './exam-routes.js';
+import { registerHostingRoutes } from './hosting-routes.js';
 import { registerQuestionRoutes } from './question-routes.js';
 
 export interface TeacherAppOptions {
@@ -19,12 +21,16 @@ export interface TeacherAppOptions {
   db: Db;
   /** Clock for the login rate limiter and the teacher row; tests inject a fake. */
   now?: () => number;
+  /** Student listener settings. Without it the hosting routes are not registered. */
+  hosting?: Omit<HostingManagerDeps, 'exams' | 'questions'>;
 }
 
 export interface TeacherApp {
   app: FastifyInstance;
   /** `preHandler` for every route that needs a logged-in teacher. */
   requireLogin: AuthState['requireLogin'];
+  /** Present when `hosting` options were given. */
+  hosting?: HostingManager;
 }
 
 function tokenMatches(expected: string, received: unknown): boolean {
@@ -38,7 +44,12 @@ function tokenMatches(expected: string, received: unknown): boolean {
  * Loopback API for the teacher UI. Every route needs the per-launch token; routes other than
  * `/health` and `/auth/*` also need `requireLogin`.
  */
-export function buildTeacherApp({ token, db, now }: TeacherAppOptions): TeacherApp {
+export function buildTeacherApp({
+  token,
+  db,
+  now,
+  hosting: hostingOptions,
+}: TeacherAppOptions): TeacherApp {
   const app = Fastify({ logger: false });
   const state = new AuthState();
 
@@ -89,5 +100,15 @@ export function buildTeacherApp({ token, db, now }: TeacherAppOptions): TeacherA
   registerExamRoutes(app, { exams, questions, requireLogin: state.requireLogin, now });
   registerQuestionRoutes(app, { exams, questions, requireLogin: state.requireLogin, now });
 
-  return { app, requireLogin: state.requireLogin };
+  let hosting: HostingManager | undefined;
+  if (hostingOptions) {
+    hosting = new HostingManager({ exams, questions, now, ...hostingOptions });
+    registerHostingRoutes(app, { hosting, requireLogin: state.requireLogin });
+    const manager = hosting;
+    app.addHook('onClose', async () => {
+      await manager.close();
+    });
+  }
+
+  return { app, requireLogin: state.requireLogin, hosting };
 }
