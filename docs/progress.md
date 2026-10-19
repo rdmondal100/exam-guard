@@ -4,9 +4,9 @@ Read this first every session. Update it at the end of every session.
 
 ## Current status
 - **Stage:** 1
-- **Phase:** 1 — Foundation
-- **Current milestone:** M05 done (manual check pending). This closes Phase 1; M06 Class list CSV import is next
-- **Next step:** do the M02–M05 manual tests (close old dev instances first), then start M06 (see `milestones.md`).
+- **Phase:** 2 — Exam setup & joining
+- **Current milestone:** M06 done (manual check pending). M07 Exam CRUD and settings is next
+- **Next step:** do the M02–M06 manual tests (close old dev instances first), then start M07 (see `milestones.md`).
 
 ## Completed milestones
 Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
@@ -15,6 +15,7 @@ Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
 - M03 Exam server in a utilityProcess — 2026-10-18 — Fastify loopback `/api/v1/health` with token check, supervised by main with backoff restart, status chip + restart banner; manual UI check pending.
 - M04 SQLite + migrations — 2026-10-18 — better-sqlite3 13, migration runner on `user_version`, `0001_init` (settings, teacher), opened by the server at start; manual check pending.
 - M05 Teacher password and login gate — 2026-10-19 — scrypt password, `/auth/status|setup|login|logout` with lockout, setup/login/shell screens behind a gate; manual check pending.
+- M06 Class list CSV import — 2026-10-19 — `0002_class_lists`, server-side papaparse import with dry-run preview and per-row errors, `/class-lists*` endpoints, Class lists page (TanStack Table); manual check pending.
 
 ## Decisions log
 Newest at the bottom. Format: `date — decision — why (doc that owns the detail)`.
@@ -85,6 +86,12 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - 2026-10-19 — Password: min 8, max 200 chars; scrypt N=2^15, r=8, p=1, stored as `scrypt$N$r$p$salt$hash` (base64). `buildTeacherApp` now takes `db` and returns `{ app, requireLogin }`.
 - 2026-10-19 — Renderer uses a plain React hook (`useAuth`) and a small fetch client (`lib/teacherApi.ts`), not Zustand: no shared client state yet. Add Zustand/TanStack Query when M06 needs lists and caching.
 
+**M06**
+- 2026-10-19 — The renderer sends raw `csvText`; the server parses it (`class-lists/csv-parser.ts`, papaparse) so the renderer needs no parser and the preview and the saved rows can't differ. `dryRun: true` returns `{rows, errors}`, a real import also returns `list`. (protocol §2)
+- 2026-10-19 — Row rules: column 1 = student ID, column 2 = name, extra columns ignored. A first row is a header only if it looks like one (`id|student id|student_code|code` + `name|student name|full name`). Errors `blank_id|blank_name|duplicate_id|too_few_columns` carry the 1-based line; for a repeated ID the first row wins. Rows with every cell empty are skipped silently. A file with no valid rows is 400 `no_valid_rows` (with `details.errors`); max 5 000 rows, 1 MB.
+- 2026-10-19 — "In use" is enforced by the `exams.class_list_id ON DELETE RESTRICT` foreign key (M07 migration must keep it). `DELETE` maps a SQLite constraint error to 409 `list_in_use`. The test stands in a scratch `exams` table with the same FK.
+- 2026-10-19 — `@tanstack/react-table` is pinned to v8 (`^8`): v9 is a different API. Plain `useClassLists` hook, no TanStack Query yet. IDs are UUIDv7 from `db/ids.ts`. `call()` in `teacherApi.ts` is exported and takes an optional method (used for `DELETE`).
+
 ## Known issues / open questions
 - Confirm with lab IT (before a real exam): admin install rights, antivirus/EDR tolerance of the agent and screen capture, reboot-restore software (e.g. Deep Freeze wipes the local queue on reboot), group policies, and whether students are on one subnet.
 - Check Gemini's current data-use terms and use a paid tier for real student data.
@@ -103,6 +110,10 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - M05: after a server restart the teacher lands on the login screen and the "server restarted" banner is not shown there.
 - M05: the teacher nav (Class lists, Exams, Settings) is disabled placeholders; no router yet.
 
+- M06: no UI/component tests (node-only vitest), as in M05. Server parser, routes and repo, shared schemas and the client api are tested; the page click-through is the manual test.
+- M06: not built (not needed yet): rename a list, add/remove single students, re-import into an existing list. A duplicate list name is allowed. The students view is not paginated (scrolls; max 5 000 rows).
+- M06: the "in use" delete refusal is only proven against a stand-in table until M07 adds `exams`; re-check it with a real exam in M07.
+
 ## Manual recovery checklist (filled in during M48)
 _Empty._
 
@@ -116,3 +127,4 @@ Format: `date — milestone — what was done — tests run — next`.
 - 2026-10-18 — M03 — `apps/server` (Fastify teacher app with token hook, utilityProcess entry), shared server schemas, desktop `ServerHost` + backoff + IPC/preload + chip/banner, CSP for loopback — server (4), shared (13), desktop (13) tests, lint, format, typecheck, build pass; headless Electron run: server listens, kill → restart in ~1.2 s — manual test, then M04.
 - 2026-10-18 — M04 — `apps/server/src/db/` (connection, migrations loader, migrate, database, settings-repo, 0001_init.sql), `dataDir` in the server config message, copy-migrations build step — server (12), shared (14), desktop (13) tests, typecheck, lint, format pass; Electron probe confirms the DB is created in the utilityProcess — manual test, then M05.
 - 2026-10-19 — M05 — shared auth schemas, server `auth/` (scrypt, login limiter, auth state), `db/teacher-repo`, `/auth/*` routes, `http/errors`, renderer teacherApi/useAuth, Setup/Login/TeacherShell/TeacherGate — shared (17), server (27), desktop (17) tests, full `pnpm test` (61), lint, format, typecheck, build pass — manual test, then M06.
+- 2026-10-19 — M06 — migration 0002, shared class-list schemas, server `class-lists/csv-parser`, `db/class-list-repo` + `db/ids`, `/class-lists*` routes, desktop `classListApi`, `useClassLists`, `DataTable`, `ImportPreview`, `ClassListsPage`, nav switching — server (45), shared (21), desktop (21) tests, typecheck, lint, format, desktop build pass; app not clicked through — manual test, then M07.

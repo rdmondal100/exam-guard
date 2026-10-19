@@ -17,16 +17,21 @@ afterEach(() => {
 });
 
 describe('initDatabase', () => {
-  it('creates a WAL database at version 1 with the first tables', () => {
+  it('creates a WAL database at the latest version with the tables so far', () => {
     const db = initDatabase(dir);
     expect(existsSync(databasePath(dir))).toBe(true);
     expect(db.pragma('journal_mode', { simple: true })).toBe('wal');
     expect(db.pragma('foreign_keys', { simple: true })).toBe(1);
-    expect(db.pragma('user_version', { simple: true })).toBe(1);
+    expect(db.pragma('user_version', { simple: true })).toBe(2);
     const tables = db
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
       .all() as { name: string }[];
-    expect(tables.map((t) => t.name)).toEqual(['settings', 'teacher']);
+    expect(tables.map((t) => t.name)).toEqual([
+      'class_lists',
+      'class_students',
+      'settings',
+      'teacher',
+    ]);
     db.close();
   });
 
@@ -35,7 +40,7 @@ describe('initDatabase', () => {
     new SettingsRepo(first).set('a', 1);
     first.close();
     const second = initDatabase(dir);
-    expect(second.pragma('user_version', { simple: true })).toBe(1);
+    expect(second.pragma('user_version', { simple: true })).toBe(2);
     expect(new SettingsRepo(second).get('a')).toBe(1);
     second.close();
   });

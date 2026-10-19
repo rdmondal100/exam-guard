@@ -3,9 +3,11 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { PROTOCOL_VERSION, TEACHER_TOKEN_HEADER } from '@examguard/shared';
 import { AuthState } from '../auth/auth-state.js';
 import { LoginLimiter } from '../auth/login-limiter.js';
+import { ClassListRepo } from '../db/class-list-repo.js';
 import type { Db } from '../db/connection.js';
 import { TeacherRepo } from '../db/teacher-repo.js';
 import { registerAuthRoutes } from './auth-routes.js';
+import { registerClassListRoutes } from './class-list-routes.js';
 import { sendError } from './errors.js';
 
 export interface TeacherAppOptions {
@@ -69,6 +71,12 @@ export function buildTeacherApp({ token, db, now }: TeacherAppOptions): TeacherA
     teacher: new TeacherRepo(db),
     state,
     limiter: new LoginLimiter(now),
+    now,
+  });
+
+  registerClassListRoutes(app, {
+    classLists: new ClassListRepo(db),
+    requireLogin: state.requireLogin,
     now,
   });
 
