@@ -5,8 +5,8 @@ Read this first every session. Update it at the end of every session.
 ## Current status
 - **Stage:** 1
 - **Phase:** 2 — Exam setup & joining
-- **Current milestone:** M07 done (manual check pending). M08 Question editor is next
-- **Next step:** do the M02–M07 manual tests (close old dev instances first), then start M08 (see `milestones.md`).
+- **Current milestone:** M08 done (manual check pending). M09 Hosting: TLS, PIN, student listener is next
+- **Next step:** do the M02–M08 manual tests (close old dev instances first), then start M09 (see `milestones.md`).
 
 ## Completed milestones
 Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
@@ -17,6 +17,7 @@ Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
 - M05 Teacher password and login gate — 2026-10-19 — scrypt password, `/auth/status|setup|login|logout` with lockout, setup/login/shell screens behind a gate; manual check pending.
 - M06 Class list CSV import — 2026-10-19 — `0002_class_lists`, server-side papaparse import with dry-run preview and per-row errors, `/class-lists*` endpoints, Class lists page (TanStack Table); manual check pending.
 - M07 Exam CRUD and settings — 2026-10-19 — `0003_exams`, exam state machine, `/exams*` (create, edit, duplicate, delete), Exams page + settings form; manual check pending.
+- M08 Question editor — 2026-10-19 — `0004_questions`, question repo + routes, `/ready` and `/unready` with reasons, duplicate copies questions, Question editor UI with Monaco; manual check pending.
 
 ## Decisions log
 Newest at the bottom. Format: `date — decision — why (doc that owns the detail)`.
@@ -100,6 +101,13 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - 2026-10-19 — `MonitoringSettings` (screenshot on switch / title change, interval 20 s, min gap 5 s, high-severity apps, grace 60 s) and `DEFAULT_MONITORING` live in `packages/shared` so the form and server share defaults. The high-severity list is free text, comma separated.
 - 2026-10-19 — `class_list_id` stays `ON DELETE RESTRICT`; the M06 "in use" test now uses a real exam.
 
+**M08**
+- 2026-10-19 — The API speaks marks (numbers in 0.5 steps, `MarksSchema`); the repo converts to integer half-units at the edge. `questions.marks` is recomputed from the criteria on every write. Criterion names must differ (case-insensitive).
+- 2026-10-19 — A question body is a full replacement (`PATCH` resends everything, criteria included). Drafts may be saved unfinished (empty sample answer, no criteria, no languages); completeness is checked only by `/ready` (`exams/ready-check.ts`), which returns every problem at once as 422 `not_ready`.
+- 2026-10-19 — Added `POST /exams/:id/unready` (ready→draft) so a ready exam can be reworked; questions stay editable in `ready` (via `isEditable`) and M09 must re-run `readyProblems` when hosting starts. Allowed languages are `c`, `cpp`, `js` (`QUESTION_LANGUAGES`); add more there when the runner config grows.
+- 2026-10-19 — Reorder is move up/down buttons (no drag library). The repo shifts positions by +100000 then assigns, to respect `UNIQUE(exam_id, position)`. Delete re-packs positions.
+- 2026-10-19 — Monaco (`monaco-editor` 0.57 + `@monaco-editor/react`) is bundled and loaded lazily (`MonacoField` via `React.lazy`), with `loader.config({ monaco })` and Vite `?worker` imports (`lib/monaco.ts`). CSP gained `worker-src 'self' blob:` and `font-src 'self' data:`. `TeacherApiError` now carries `details`.
+
 ## Known issues / open questions
 - Confirm with lab IT (before a real exam): admin install rights, antivirus/EDR tolerance of the agent and screen capture, reboot-restore software (e.g. Deep Freeze wipes the local queue on reboot), group policies, and whether students are on one subnet.
 - Check Gemini's current data-use terms and use a paid tier for real student data.
@@ -127,6 +135,11 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - M07: an exam cannot yet leave `draft` (no `/ready`), so the 409 `invalid_state` paths are tested by setting state in SQL.
 - M07: the exam list is not paginated or filtered.
 
+- M08: no UI/component tests (node-only vitest). Server repo/routes/ready-check, shared schemas, the client api and the draft helper are tested; the editor click-through is the manual test.
+- M08: the Monaco bundle was only type-checked and built, not run: confirm in the dev app that the sample answer editor loads (workers, CSP, icon font) with no console errors. `import * as monaco` bundles every language (about 7 MB of chunks, loaded only when a question form opens); trim to `editor.api` plus c/cpp/js when packaging (M45).
+- M08: the question form has no markdown preview and no "unsaved changes" prompt. The class list is chosen in the exam Settings form, not on the detail page.
+- M08: nothing yet re-checks readiness when hosting starts; M09 must call `readyProblems`.
+
 ## Manual recovery checklist (filled in during M48)
 _Empty._
 
@@ -142,3 +155,4 @@ Format: `date — milestone — what was done — tests run — next`.
 - 2026-10-19 — M05 — shared auth schemas, server `auth/` (scrypt, login limiter, auth state), `db/teacher-repo`, `/auth/*` routes, `http/errors`, renderer teacherApi/useAuth, Setup/Login/TeacherShell/TeacherGate — shared (17), server (27), desktop (17) tests, full `pnpm test` (61), lint, format, typecheck, build pass — manual test, then M06.
 - 2026-10-19 — M06 — migration 0002, shared class-list schemas, server `class-lists/csv-parser`, `db/class-list-repo` + `db/ids`, `/class-lists*` routes, desktop `classListApi`, `useClassLists`, `DataTable`, `ImportPreview`, `ClassListsPage`, nav switching — server (45), shared (21), desktop (21) tests, typecheck, lint, format, desktop build pass; app not clicked through — manual test, then M07.
 - 2026-10-19 — M07 — migration 0003, shared exam schemas + DEFAULT_MONITORING, server `exams/exam-state`, `db/exam-repo`, `/exams*` routes, desktop `examApi`, `useExams`, `ExamsPage`, `ExamSettingsForm`, Exams nav enabled — shared (25), server (57), desktop (26) tests, typecheck, lint, format, desktop build pass; app not clicked through — manual test, then M08.
+- 2026-10-19 — M08 — migration 0004, shared question schemas, server `db/question-repo`, `exams/ready-check`, `http/question-routes`, `/ready` + `/unready`, duplicate copies questions; desktop `questionApi`, `questionDraft`, `useQuestions`, Monaco setup, `ExamDetailPage` + QuestionList/QuestionEditor/CriteriaEditor/ReadyPanel, CSP for Monaco — shared (29), server (73), desktop (36) tests, full `pnpm test` (138), typecheck, lint, format, desktop build pass; app not clicked through — manual test, then M09.

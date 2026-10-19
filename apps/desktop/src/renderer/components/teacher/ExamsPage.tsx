@@ -6,6 +6,7 @@ import { TeacherApiError } from '@/lib/teacherApi';
 import { useClassLists } from '@/lib/useClassLists';
 import { useExams } from '@/lib/useExams';
 import { DataTable } from './DataTable';
+import { ExamDetailPage } from './ExamDetailPage';
 import { ExamSettingsForm, type ExamFormValues } from './ExamSettingsForm';
 
 const STATE_LABEL: Record<ExamSummary['state'], string> = {
@@ -32,6 +33,7 @@ export function ExamsPage() {
   const { lists } = useClassLists();
   const [form, setForm] = useState<{ exam?: ExamSummary } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [detail, setDetail] = useState<ExamSummary | null>(null);
 
   const run = async (action: () => Promise<unknown>) => {
     try {
@@ -77,6 +79,9 @@ export function ExamsPage() {
         return (
           api && (
             <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setDetail(exam)}>
+                Questions
+              </Button>
               <Button variant="outline" disabled={!editable} onClick={() => setForm({ exam })}>
                 Edit
               </Button>
@@ -99,6 +104,18 @@ export function ExamsPage() {
       },
     },
   ];
+
+  if (detail) {
+    return (
+      <ExamDetailPage
+        exam={detail}
+        onBack={() => {
+          setDetail(null);
+          void reload();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">

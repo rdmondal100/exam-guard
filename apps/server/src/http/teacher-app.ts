@@ -6,11 +6,13 @@ import { LoginLimiter } from '../auth/login-limiter.js';
 import { ClassListRepo } from '../db/class-list-repo.js';
 import type { Db } from '../db/connection.js';
 import { ExamRepo } from '../db/exam-repo.js';
+import { QuestionRepo } from '../db/question-repo.js';
 import { TeacherRepo } from '../db/teacher-repo.js';
 import { registerAuthRoutes } from './auth-routes.js';
 import { registerClassListRoutes } from './class-list-routes.js';
 import { sendError } from './errors.js';
 import { registerExamRoutes } from './exam-routes.js';
+import { registerQuestionRoutes } from './question-routes.js';
 
 export interface TeacherAppOptions {
   token: string;
@@ -82,11 +84,10 @@ export function buildTeacherApp({ token, db, now }: TeacherAppOptions): TeacherA
     now,
   });
 
-  registerExamRoutes(app, {
-    exams: new ExamRepo(db),
-    requireLogin: state.requireLogin,
-    now,
-  });
+  const exams = new ExamRepo(db);
+  const questions = new QuestionRepo(db);
+  registerExamRoutes(app, { exams, questions, requireLogin: state.requireLogin, now });
+  registerQuestionRoutes(app, { exams, questions, requireLogin: state.requireLogin, now });
 
   return { app, requireLogin: state.requireLogin };
 }

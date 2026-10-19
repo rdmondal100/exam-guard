@@ -15,6 +15,7 @@ export class TeacherApiError extends Error {
     readonly code: string,
     message: string,
     readonly retryAfterSec?: number,
+    readonly details?: unknown,
   ) {
     super(message);
   }
@@ -52,6 +53,7 @@ export async function call<T>(
       code,
       message,
       retry.success ? retry.data.retryAfterSec : undefined,
+      details,
     );
   }
   return schema.parse(json);

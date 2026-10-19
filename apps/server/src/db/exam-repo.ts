@@ -8,6 +8,7 @@ import {
 } from '@examguard/shared';
 import type { Db } from './connection.js';
 import { newId } from './ids.js';
+import { QuestionRepo } from './question-repo.js';
 
 interface ExamRow {
   id: string;
@@ -94,21 +95,29 @@ export class ExamRepo {
 
   /**
    * A new draft with the same title, duration, class list and monitoring settings, and no
-   * runtime data (pin, timestamps, extension). M08 also copies the questions here.
+   * runtime data (pin, timestamps, extension). Questions and criteria are copied too.
    */
   duplicate(id: string, now: number): ExamSummary | undefined {
     const source = this.get(id);
     if (!source) return undefined;
     const copyId = newId(now);
-    this.insert(
-      copyId,
-      `${source.title} (copy)`,
-      source.durationMin * 60,
-      source.classListId,
-      source.monitoring,
-      now,
-    );
+    this.db.transaction(() => {
+      this.insert(
+        copyId,
+        `${source.title} (copy)`,
+        source.durationMin * 60,
+        source.classListId,
+        source.monitoring,
+        now,
+      );
+      new QuestionRepo(this.db).copyAll(id, copyId, now);
+    })();
     return this.requireExam(copyId);
+  }
+
+  setState(id: string, state: ExamState, now: number): ExamSummary | undefined {
+    this.db.prepare('UPDATE exams SET state = ?, updated_at = ? WHERE id = ?').run(state, now, id);
+    return this.get(id);
   }
 
   delete(id: string): boolean {

@@ -1,19 +1,22 @@
 import type { FastifyInstance, preHandlerAsyncHookHandler } from 'fastify';
 import { ExamCreateBodySchema, ExamUpdateBodySchema } from '@examguard/shared';
 import type { ExamRepo } from '../db/exam-repo.js';
-import { isEditable } from '../exams/exam-state.js';
+import type { QuestionRepo } from '../db/question-repo.js';
+import { canTransition, isEditable } from '../exams/exam-state.js';
+import { readyProblems } from '../exams/ready-check.js';
 import { sendError } from './errors.js';
 
 export interface ExamRoutesDeps {
   exams: ExamRepo;
+  questions: QuestionRepo;
   requireLogin: preHandlerAsyncHookHandler;
   now?: () => number;
 }
 
-/** `/exams*`: list, create, edit settings, duplicate and delete. Hosting and more come later. */
+/** `/exams*`: list, create, edit settings, duplicate, delete and ready/unready. Hosting and more come later. */
 export function registerExamRoutes(
   app: FastifyInstance,
-  { exams, requireLogin, now = Date.now }: ExamRoutesDeps,
+  { exams, questions, requireLogin, now = Date.now }: ExamRoutesDeps,
 ): void {
   const guarded = { preHandler: requireLogin };
 
@@ -55,6 +58,48 @@ export function registerExamRoutes(
       const copy = exams.duplicate(request.params.id, now());
       if (!copy) return sendError(reply, 404, 'not_found', 'Exam not found');
       return reply.code(201).send(copy);
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/api/v1/exams/:id/ready',
+    guarded,
+    async (request, reply) => {
+      const current = exams.get(request.params.id);
+      if (!current) return sendError(reply, 404, 'not_found', 'Exam not found');
+      if (current.state === 'ready') return current;
+      if (!canTransition(current.state, 'ready')) {
+        return sendError(
+          reply,
+          409,
+          'invalid_state',
+          `A ${current.state} exam cannot be marked ready`,
+        );
+      }
+      const problems = readyProblems(current, questions.list(current.id));
+      if (problems.length > 0) {
+        return sendError(reply, 422, 'not_ready', 'The exam is not ready yet', { problems });
+      }
+      return exams.setState(current.id, 'ready', now());
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/api/v1/exams/:id/unready',
+    guarded,
+    async (request, reply) => {
+      const current = exams.get(request.params.id);
+      if (!current) return sendError(reply, 404, 'not_found', 'Exam not found');
+      if (current.state === 'draft') return current;
+      if (!canTransition(current.state, 'draft')) {
+        return sendError(
+          reply,
+          409,
+          'invalid_state',
+          `A ${current.state} exam cannot go back to draft`,
+        );
+      }
+      return exams.setState(current.id, 'draft', now());
     },
   );
 
