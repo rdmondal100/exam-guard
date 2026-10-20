@@ -1,7 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { STUDENT_API_PORT, type HostingInfo } from '@examguard/shared';
+import type { EventRepo } from '../db/event-repo.js';
 import type { ExamRepo } from '../db/exam-repo.js';
+import type { ExamStudentRepo } from '../db/exam-student-repo.js';
 import type { QuestionRepo } from '../db/question-repo.js';
+import { JoinService } from '../join/join-service.js';
 import { assertTransition } from '../exams/exam-state.js';
 import { readyProblems } from '../exams/ready-check.js';
 import { buildStudentApp } from '../http/student-app.js';
@@ -26,6 +29,8 @@ export class HostingError extends Error {
 export interface HostingManagerDeps {
   exams: ExamRepo;
   questions: QuestionRepo;
+  students: ExamStudentRepo;
+  events: EventRepo;
   dataDir: string;
   /** Tests use 0 (any free port) and 127.0.0.1. */
   port?: number;
@@ -113,8 +118,16 @@ export class HostingManager {
 
   private async open(examId: string, pin: string): Promise<Active> {
     const cert = await loadOrCreateCert(this.deps.dataDir);
+    const join = new JoinService({
+      exams: this.deps.exams,
+      students: this.deps.students,
+      events: this.deps.events,
+      now: this.now,
+      target: () => ({ examId, pin, fingerprint: cert.fingerprint }),
+    });
     const app = buildStudentApp({
       cert,
+      join,
       current: () => {
         const exam = this.deps.exams.get(examId);
         return exam ? { examTitle: exam.title, state: 'hosting' } : null;

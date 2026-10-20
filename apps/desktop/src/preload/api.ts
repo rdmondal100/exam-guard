@@ -2,6 +2,9 @@ import type {
   AppInfo,
   AppMode,
   DiscoveredHost,
+  JoinAttempt,
+  JoinConfirmResult,
+  JoinResult,
   ProbeRequest,
   ProbeResult,
   ServerConnection,
@@ -24,4 +27,8 @@ export interface ExamGuardApi {
   onDiscoveryHosts(listener: (hosts: DiscoveredHost[]) => void): () => void;
   /** Contacts a host (mDNS or manual IP), pins its cert and reads its info. */
   probeHost(request: ProbeRequest): Promise<ProbeResult>;
+  /** Student mode: join the pinned host. The session token stays in main. */
+  joinExam(attempt: JoinAttempt): Promise<JoinResult>;
+  /** Student mode: the monitoring notice was accepted. */
+  confirmJoin(): Promise<JoinConfirmResult>;
 }

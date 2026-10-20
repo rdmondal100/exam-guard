@@ -22,19 +22,26 @@ describe('initDatabase', () => {
     expect(existsSync(databasePath(dir))).toBe(true);
     expect(db.pragma('journal_mode', { simple: true })).toBe('wal');
     expect(db.pragma('foreign_keys', { simple: true })).toBe(1);
-    expect(db.pragma('user_version', { simple: true })).toBe(4);
+    expect(db.pragma('user_version', { simple: true })).toBe(5);
     const tables = db
-      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+      )
       .all() as { name: string }[];
-    expect(tables.map((t) => t.name)).toEqual([
-      'class_lists',
-      'class_students',
-      'exams',
-      'marking_criteria',
-      'questions',
-      'settings',
-      'teacher',
-    ]);
+    expect(tables.map((t) => t.name)).toEqual(
+      [
+        'class_lists',
+        'class_students',
+        'exam_students',
+        'events',
+        'exams',
+        'marking_criteria',
+        'questions',
+        'settings',
+        'teacher',
+        'teacher_actions',
+      ].sort(),
+    );
     db.close();
   });
 
@@ -43,7 +50,7 @@ describe('initDatabase', () => {
     new SettingsRepo(first).set('a', 1);
     first.close();
     const second = initDatabase(dir);
-    expect(second.pragma('user_version', { simple: true })).toBe(4);
+    expect(second.pragma('user_version', { simple: true })).toBe(5);
     expect(new SettingsRepo(second).get('a')).toBe(1);
     second.close();
   });

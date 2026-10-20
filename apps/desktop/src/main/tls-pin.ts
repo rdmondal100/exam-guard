@@ -70,15 +70,39 @@ function connectPinned(target: PinnedTarget): Promise<{ socket: TLSSocket; finge
   });
 }
 
-/** One HTTPS GET to a pinned host. Later milestones reuse this for join and WS. */
-export async function pinnedGet(target: PinnedTarget, path: string): Promise<PinnedResponse> {
+export interface PinnedRequestOptions {
+  method?: 'GET' | 'POST';
+  path: string;
+  headers?: Record<string, string>;
+  /** Sent as JSON with a content-length. */
+  json?: unknown;
+}
+
+/** One HTTPS GET to a pinned host. */
+export function pinnedGet(target: PinnedTarget, path: string): Promise<PinnedResponse> {
+  return pinnedRequest(target, { path });
+}
+
+/** One HTTPS request to a pinned host. The first HTTP byte goes out only after the pin matched. */
+export async function pinnedRequest(
+  target: PinnedTarget,
+  options: PinnedRequestOptions,
+): Promise<PinnedResponse> {
   const { socket, fingerprint } = await connectPinned(target);
+  const payload = options.json === undefined ? undefined : JSON.stringify(options.json);
   return new Promise((resolve, reject) => {
     const req = request(
       {
         host: target.address,
         port: target.port,
-        path,
+        method: options.method ?? 'GET',
+        path: options.path,
+        headers: {
+          ...(payload === undefined
+            ? {}
+            : { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) }),
+          ...options.headers,
+        },
         agent: false,
         // The socket above is already pinned; this only stops a second chain check on it.
         rejectUnauthorized: false,
@@ -94,6 +118,6 @@ export async function pinnedGet(target: PinnedTarget, path: string): Promise<Pin
     );
     req.setTimeout(target.timeoutMs ?? 5000, () => req.destroy(new Error('The request timed out')));
     req.on('error', (e) => reject(new PinError('unreachable', e.message)));
-    req.end();
+    req.end(payload);
   });
 }
