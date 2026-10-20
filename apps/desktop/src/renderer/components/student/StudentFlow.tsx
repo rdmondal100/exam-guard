@@ -3,8 +3,8 @@ import type { JoinResult, ProbeResult } from '@examguard/shared';
 import { ConfirmName } from './ConfirmName';
 import { FindExamScreen } from './FindExamScreen';
 import { JoinForm } from './JoinForm';
+import { LobbyScreen } from './LobbyScreen';
 import { MonitoringNotice } from './MonitoringNotice';
-import { WaitingScreen } from './WaitingScreen';
 
 type Host = Extract<ProbeResult, { ok: true }>;
 type Joined = Extract<JoinResult, { ok: true }>;
@@ -14,9 +14,9 @@ type Step =
   | { name: 'credentials'; host: Host }
   | { name: 'confirm'; host: Host; joined: Joined }
   | { name: 'notice'; host: Host; joined: Joined }
-  | { name: 'waiting'; joined: Joined };
+  | { name: 'lobby'; joined: Joined };
 
-/** Student screens in order: find a host, ID + PIN, confirm name, notice, waiting. */
+/** Student screens in order: find a host, ID + PIN, confirm name, notice, lobby. */
 export function StudentFlow() {
   const [step, setStep] = useState<Step>({ name: 'find' });
   const toFind = () => setStep({ name: 'find' });
@@ -47,11 +47,11 @@ export function StudentFlow() {
     case 'notice':
       return (
         <MonitoringNotice
-          onAccepted={() => setStep({ name: 'waiting', joined: step.joined })}
+          onAccepted={() => setStep({ name: 'lobby', joined: step.joined })}
           onBack={() => setStep({ name: 'credentials', host: step.host })}
         />
       );
-    case 'waiting':
-      return <WaitingScreen name={step.joined.name} examTitle={step.joined.examTitle} />;
+    case 'lobby':
+      return <LobbyScreen name={step.joined.name} examTitle={step.joined.examTitle} />;
   }
 }

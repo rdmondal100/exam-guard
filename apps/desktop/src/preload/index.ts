@@ -9,6 +9,7 @@ import {
   ProbeResultSchema,
   ServerConnectionSchema,
   ServerStatusSchema,
+  SessionStatusSchema,
   type AppMode,
   type ServerStatus,
 } from '@examguard/shared';
@@ -53,6 +54,17 @@ const api: ExamGuardApi = {
       await ipcRenderer.invoke(IPC.joinExam, JoinAttemptSchema.parse(attempt)),
     ),
   confirmJoin: async () => JoinConfirmResultSchema.parse(await ipcRenderer.invoke(IPC.confirmJoin)),
+  startSession: async () => {
+    await ipcRenderer.invoke(IPC.startSession);
+  },
+  onSessionStatus: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown) => {
+      const parsed = SessionStatusSchema.safeParse(payload);
+      if (parsed.success) listener(parsed.data);
+    };
+    ipcRenderer.on(IPC.sessionStatus, handler);
+    return () => ipcRenderer.removeListener(IPC.sessionStatus, handler);
+  },
 };
 
 contextBridge.exposeInMainWorld('examguard', api);

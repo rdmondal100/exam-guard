@@ -7,3 +7,4 @@ export * from './hosting.js';
 export * from './fingerprint-code.js';
 export * from './discovery.js';
 export * from './join.js';
+export * from './ws.js';

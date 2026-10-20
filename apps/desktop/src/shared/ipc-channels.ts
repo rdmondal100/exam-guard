@@ -11,4 +11,6 @@ export const IPC = {
   probeHost: 'discovery:probe',
   joinExam: 'join:attempt',
   confirmJoin: 'join:confirm',
+  startSession: 'session:start',
+  sessionStatus: 'session:status',
 } as const;

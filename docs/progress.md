@@ -5,8 +5,8 @@ Read this first every session. Update it at the end of every session.
 ## Current status
 - **Stage:** 1
 - **Phase:** 2 — Exam setup & joining
-- **Current milestone:** M11 done (manual check pending). M12 is next
-- **Next step:** do the M02–M11 manual tests (close old dev instances first), then start M12 (see `milestones.md`).
+- **Current milestone:** M12 done (manual check pending). **Phase 2 demo** is ready to run. M13 is next
+- **Next step:** do the M02–M12 manual tests (close old dev instances first; the M12 steps are in `milestones.md`), then start M13 (see `milestones.md`).
 
 ## Completed milestones
 Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
@@ -22,6 +22,7 @@ Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
 - M10 Discovery + manual IP + cert pinning — 2026-10-20 — server advertises `_examguard._tcp` (TXT v/exam/fp) while hosting, student main browses it and pins the cert by fingerprint, Find exam screen with manual IP + 4-char code; manual check pending.
 
 - M11 Student join + monitoring notice — 2026-10-20 — `0005_exam_students` (+ events, teacher_actions), `/join` + `/join/confirm`, one session per student with duplicate-login rejection, student ID/PIN, name and notice screens; manual check pending.
+- M12 WebSocket session, lobby, student-sim v1 — 2026-10-20 — student `wss /ws` (hello/welcome, ping/pong, 15 s idle drop, connected flag), teacher `ws /ws?token=` roster + counts with 250 ms batching, `SessionHub`, pinned `SessionClient` in student main, lobby screen, live hosting panel, `tools/student-sim`; 200 sim students connect in about 1.4 s; manual check pending.
 
 ## Decisions log
 Newest at the bottom. Format: `date — decision — why (doc that owns the detail)`.
@@ -134,6 +135,15 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - 2026-10-20 — `deviceId = SHA-256(MachineGuid + "examguard")` via `reg query` in `main/device-id.ts`. In dev (not packaged) `EG_DEVICE_ID=<text>` replaces the machine value so two profiles on one PC act as two computers.
 - 2026-10-20 — The `agent` block is sent as `{ok:true,...}` and accepted without checks; enforcement is M21. After joining, the student sees a placeholder "waiting" screen (real lobby is M12).
 
+**M12**
+- 2026-10-20 — `SessionHub` (`server/src/ws/`) is the one place that knows live sockets and teacher subscribers. Roster changes are coalesced per student and pushed at most every 250 ms (`roster` carries only changed students, then a `hosting` counts message). One hub per teacher app; `HostingManager` closes student sockets (code 4503) on stop and resets `connected` flags on open and close, so a crash cannot leave a student shown as connected.
+- 2026-10-20 — Student WS lives on the student HTTPS app at `/ws` (not under `/api/v1`, as in protocol §3) via `@fastify/websocket`; routes are registered inside a plugin so they load after it. Student frames are `safeParse`d; only `hello` and `ping` exist so far. Idle limit 15 s (sweep checks about every 1 s); hello must arrive within 5 s. Close codes are in protocol.md.
+- 2026-10-20 — Teacher WS token is `?token=` and is checked inside the socket handler, not by the global token hook, which skips `/ws`. A bad token or a logged-out teacher gets close code 4401 after the upgrade. An HTTP-level 401 on an upgrade request left the connection half open and stalled `app.close()`. The teacher Fastify also uses `forceCloseConnections: true`.
+- 2026-10-20 — `joined` in the counts means the student accepted the notice (state is not `not_joined`). Students who joined but have not accepted are hidden from the roster. `agentOk` is always true until M21.
+- 2026-10-20 — `SessionClient` (student main) reuses `connectPinned` and hands the pinned socket to `ws` (`createConnection`), so hello (and the token) goes out only after the pin matched. The token never reaches the renderer. Reconnect: 0.5 s doubling to 5 s with jitter. No retry after 4401, 4426 or 4409 (reason shown on the lobby screen). Clock offset = server time minus (clientSent + RTT/2), keeping the lowest-RTT sample; nothing uses it until timers (M16+).
+- 2026-10-20 — `ws` is a desktop devDependency (electron-vite bundles it into main) and a dependency of student-sim; the server has it as a devDependency for tests only (`@fastify/websocket` brings the runtime copy).
+- 2026-10-20 — `tools/student-sim` is a pnpm workspace package built with `tsc`: `pnpm build` then `pnpm sim -- --host <ip[:port]> --pin <6 digits> [--students N] [--csv file] [--ramp-ms 20]`. Without `--csv` it uses the codes 1..N, so the teacher's class list must contain them. One shared keep-alive agent (20 sockets) for the joins; each fake student has its own deviceId. `tools/*` was added to the root vitest projects.
+
 ## Known issues / open questions
 - Confirm with lab IT (before a real exam): admin install rights, antivirus/EDR tolerance of the agent and screen capture, reboot-restore software (e.g. Deep Freeze wipes the local queue on reboot), group policies, and whether students are on one subnet.
 - Check Gemini's current data-use terms and use a paid tier for real student data.
@@ -181,6 +191,13 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - M11: the rate limiter is in memory (cleared on server restart) and keyed by the socket IP.
 - M11: `anon_id` exists on `exam_students` but nothing uses it until the grading pipeline.
 
+- M12: no UI/component tests (node-only vitest). Tested: shared ws schemas, `SessionHub` (batching, replace, subscribers), real loopback student and teacher sockets plus roster HTTP against SQLite (hello, bad token, protocol mismatch, no hello, ping before hello, idle drop, replace, hosting stop, roster within 1 s), desktop `SessionClient` against a local WSS server (pin, clock offset, reconnect, no retry on 4401/4409, stop), roster reducer, student-sim args/CSV and a 26-student run against a fake teacher. A scripted run of the built server plus the real sim CLI with 200 students: all connected in 1.4 s, no churn over 12 s, all disconnected after Ctrl+C. The two Electron screens and the two-machine run are the manual test.
+- M12: no `network_lost` event yet (needs the events classifier): the disconnect only flips `connected` and shows on the roster. The 10 s grace belongs to the monitoring milestone.
+- M12: the teacher roster list is a plain scrolling list (about 200 rows is fine); the monitor grid, pagination and sorting come with M26 onward. A server restart drops the teacher WS; the hook retries every 1 s and re-subscribes.
+- M12: students whose socket drops because the teacher stopped hosting are not told why (the lobby shows "reconnecting" and retries until hosting is back). A "hosting stopped" screen belongs with the start/end milestone.
+- M12: the clock offset is estimated but not exposed beyond the status object. `resume.lastServerSeq` is always 0 until server commands exist.
+- M12: still no teacher "reset session" (M11 issue) and no WS rate limit per token yet (the 512 KB frame limit and 15 s idle drop are in).
+
 ## Manual recovery checklist (filled in during M48)
 _Empty._
 
@@ -200,3 +217,4 @@ Format: `date — milestone — what was done — tests run — next`.
 - 2026-10-20 — M09 — shared hosting schemas + `hosting` server reply, server `tls/` (cert, fingerprint, lan-addresses), `hosting/` (pin, manager), `http/student-app` + `hosting-routes`, `ExamRepo` hosting methods, resume on boot; desktop `examApi` host/stop/hosting, `HostingPanel`, Start hosting button, power-save blocker in `ServerHost` — shared (33), server (87+), desktop tests, full `pnpm test` (159), typecheck, lint, format, build pass; app not clicked through — manual test, then M10.
 - 2026-10-20 — M10 — shared `discovery` schemas + `fpCodeOf`, server `mdns-advertiser` + `HostingManager` advertise/stop, desktop `discovery`, `tls-pin`, `probe-host`, IPC/preload, `FindExamScreen`/`HostList`/`ManualIpForm`, `hostAddress` — shared (39), server (88), desktop (55) tests, typecheck, lint, format, desktop build pass; real bonjour smoke OK; app not clicked through — manual test, then M11.
 - 2026-10-20 — M11 — shared `join` schemas, migration 0005, server `exam-student-repo`/`event-repo`, `join/` (service, limiter), `http/join-routes`, student app + hosting manager wiring; desktop `device-id`, `join-client`, `pinnedRequest`, IPC/preload, `StudentFlow` with `JoinForm`/`ConfirmName`/`MonitoringNotice`/`WaitingScreen` — full `pnpm test` (228), typecheck, lint, format, build pass; app not clicked through — manual test, then M12.
+- 2026-10-20 — M12 — shared `ws` schemas, server `ws/` (session-hub, student-socket, teacher-socket), roster repo queries + `GET /exams/:id/roster`, hosting manager wiring, `JoinService.onChange`; desktop `session-client`, IPC/preload `startSession`/`onSessionStatus`, `LobbyScreen` (replaces `WaitingScreen`), `useRoster`/`rosterState`/`RosterList`, live `HostingPanel`; `tools/student-sim` v1 + root `sim` script — full `pnpm test` (285), typecheck, lint, format, build pass; scripted 200-student run OK; app not clicked through — manual test, then M13.

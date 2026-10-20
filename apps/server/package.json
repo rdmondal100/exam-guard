@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@examguard/shared": "workspace:*",
+    "@fastify/websocket": "^11.3.4",
     "better-sqlite3": "^13.0.3",
     "bonjour-service": "^1.4.4",
     "fastify": "^5.8.0",
@@ -20,6 +21,8 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
-    "@types/papaparse": "^5.5.2"
+    "@types/papaparse": "^5.5.2",
+    "@types/ws": "^8.18.2",
+    "ws": "^8.22.0"
   }
 }

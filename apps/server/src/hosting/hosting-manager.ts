@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { STUDENT_API_PORT, type HostingInfo } from '@examguard/shared';
+import { STUDENT_API_PORT, WS_CLOSE, type HostingInfo } from '@examguard/shared';
 import type { EventRepo } from '../db/event-repo.js';
 import type { ExamRepo } from '../db/exam-repo.js';
 import type { ExamStudentRepo } from '../db/exam-student-repo.js';
@@ -11,6 +11,7 @@ import { buildStudentApp } from '../http/student-app.js';
 import { loadOrCreateCert } from '../tls/cert.js';
 import { lanAddresses } from '../tls/lan-addresses.js';
 import { advertiseOverMdns, type Advertise } from './mdns-advertiser.js';
+import type { SessionHub } from '../ws/session-hub.js';
 import { generatePin } from './pin.js';
 
 /** A refusal the routes turn into an HTTP error. */
@@ -31,6 +32,8 @@ export interface HostingManagerDeps {
   questions: QuestionRepo;
   students: ExamStudentRepo;
   events: EventRepo;
+  /** Live student sockets and teacher subscribers. */
+  hub: SessionHub;
   dataDir: string;
   /** Tests use 0 (any free port) and 127.0.0.1. */
   port?: number;
@@ -42,6 +45,8 @@ export interface HostingManagerDeps {
   makePin?: () => string;
   /** mDNS advertising; tests pass a fake. */
   advertise?: Advertise;
+  /** Student socket timings; tests shorten them. */
+  socketTimings?: { helloTimeoutMs?: number; idleMs?: number };
 }
 
 interface Active {
@@ -112,17 +117,22 @@ export class HostingManager {
     if (!active) return;
     this.active = null;
     active.stopAdvertising();
+    this.deps.hub.closeAll(WS_CLOSE.notHosting, 'not_hosting');
     await active.app.close();
+    this.deps.students.resetConnections();
     this.deps.onActive?.(false);
   }
 
   private async open(examId: string, pin: string): Promise<Active> {
     const cert = await loadOrCreateCert(this.deps.dataDir);
+    // No socket survives a restart, so any leftover flag is stale.
+    this.deps.students.resetConnections();
     const join = new JoinService({
       exams: this.deps.exams,
       students: this.deps.students,
       events: this.deps.events,
       now: this.now,
+      onChange: (id) => this.deps.hub.changed(id),
       target: () => ({ examId, pin, fingerprint: cert.fingerprint }),
     });
     const app = buildStudentApp({
@@ -131,6 +141,13 @@ export class HostingManager {
       current: () => {
         const exam = this.deps.exams.get(examId);
         return exam ? { examTitle: exam.title, state: 'hosting' } : null;
+      },
+      live: {
+        hub: this.deps.hub,
+        students: this.deps.students,
+        examId: () => (this.active?.examId === examId ? examId : null),
+        now: this.now,
+        ...this.deps.socketTimings,
       },
     });
     try {

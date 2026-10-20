@@ -28,7 +28,7 @@ Everything else for students goes over WS.
 | Exams | `GET /exams → [ExamSummary]`, `POST /exams {title, durationMin 1–600, classListId?, monitoring?}` → 201 `ExamSummary` (400 `invalid_body`, 400 `class_list_not_found`), `GET /exams/:id` (404 `not_found`), `PATCH /exams/:id` (any create field; 409 `invalid_state` unless draft/ready), `DELETE /exams/:id → {ok}` (409 `invalid_state` unless draft/ready), `POST /exams/:id/duplicate` → 201 draft copy titled `"… (copy)"`, no runtime data, `POST /exams/:id/ready` (draft→ready; 422 `not_ready` with `details.problems[{code,message,questionId?}]`, codes `no_class_list, no_questions, missing_sample_answer, no_criteria, no_languages`; 409 `invalid_state`), `POST /exams/:id/unready` (ready→draft). `ExamSummary = {id, title, state, durationMin, classListId, classListName, monitoring, createdAt, updatedAt}`; `monitoring = {screenshotOnSwitch, screenshotOnTitleChange, screenshotIntervalSec, minScreenshotGapSec, highSeverityApps[], graceSec}` |
 | Questions | `GET /exams/:id/questions → [Question]`, `POST /exams/:id/questions` → 201, `PATCH/DELETE /questions/:qid`, `POST /exams/:id/questions/reorder {ids[]}` (ids must be exactly the exam's questions, else 400; returns the list). Body = `{type code|written, body, allowedLanguages[c|cpp|js] (empty for written), studentNote, sampleAnswer, sampleLanguage, aiNotes, criteria[{name, maxMarks}]}`; marks are plain numbers in 0.5 steps (stored as half-units), `Question.marks` = sum of criteria. Writes are 409 `invalid_state` unless the exam is draft/ready |
 | Hosting | `POST /exams/:id/host` (ready→hosting) → `HostingInfo = {pin, addresses[], port, fpCode}`; errors 404 `not_found`, 409 `invalid_state` / `already_hosting` / `port_in_use`, 422 `not_ready` (readiness is re-checked). `POST /exams/:id/stop-hosting` (hosting→ready, PIN cleared) → `{ok}`. `GET /exams/:id/hosting` → `HostingInfo`, or 404 `not_hosting`. `POST /exams/:id/start`, `POST /exams/:id/end` come later. Student `GET /info` answers 503 `not_hosting` if no exam is hosted |
-| Live | `GET /exams/:id/roster`, `GET /exams/:id/events?studentId&severity&after`, `GET /screenshots/:eventId` (JPEG), `POST /exams/:id/students/:sid/actions {type, ...}`, `POST /exams/:id/actions {type, ...}` |
+| Live | `GET /exams/:id/roster → {students: RosterEntry[], counts}` (404 `not_found`; joined students only, by student code), `GET /exams/:id/events?studentId&severity&after`, `GET /screenshots/:eventId` (JPEG), `POST /exams/:id/students/:sid/actions {type, ...}`, `POST /exams/:id/actions {type, ...}` |
 | Grading | `POST /exams/:id/grading {questionIds?}`, `GET /exams/:id/grading`, `POST /grading/reevaluate {questionId, examStudentIds[]|'all', includeEdited, instruction}`, `POST /grading/cancel/:jobId` |
 | Review | `GET /exams/:id/review/:qid` (table), `GET /answers/:sid/:qid` (answer + sample + history + timeline), `POST /answers/:sid/:qid/accept`, `POST /answers/:sid/:qid/edit {criteria, feedback}` |
 | Results | `POST /exams/:id/finalize`, `GET /exams/:id/export.csv` |
@@ -84,11 +84,11 @@ type LiveClose     = { t:'live.close'; sessionId:string }
 type RtcSignalT    = { t:'rtc.signal'; sessionId:string; data:unknown }
 
 // server → teacher
-type RosterUpdate  = { t:'roster'; students:{ id:string; state:StudentState; connected:boolean; riskScore:number;
-                       outsideMs:number; lastSeen:number; agentOk:boolean }[] }   // full on subscribe, then diffs
+type RosterUpdate  = { t:'roster'; students:{ id:string; studentCode:string; name:string; state:StudentState; connected:boolean;
+                       riskScore:number; outsideMs:number; lastSeen:number|null; agentOk:boolean }[] }   // full on subscribe, then only changed students, batched at most every 250 ms
 type Alert         = { t:'alert'; event:{ id:number; examStudentId:string; type:EventType; severity:Severity;
                        serverTs:number; details:object; hasScreenshot:boolean } }
-type HostingStatus = { t:'hosting'; joined:number; inLobby:number; active:number; submitted:number }
+type HostingStatus = { t:'hosting'; joined:number; inLobby:number; active:number; submitted:number; connected:number }   // joined = accepted the notice; sent with every roster push
 type Timer         = { t:'timer'; startedAt:number|null; durationSec:number; globalExtensionSec:number }
 type ThumbFrame    = binary kind 1, header { examStudentId, ts }
 type LiveSession   = { t:'live.session'; sessionId:string; examStudentId:string; status:'connecting'|'live'|'ended'|'failed' }
@@ -96,6 +96,12 @@ type GradingProg   = { t:'grading.progress'; jobId:string; questionId:string; do
 type ServerNotice  = { t:'notice'; level:'info'|'warn'|'error'; text:string }   // e.g. "server restarted"
 ```
 Teacher actions go over HTTP so they're easy to retry and audit. Their effects arrive as `roster`/`alert` updates.
+
+### Auth, limits and close codes (built in M12)
+- Student `hello` must be the first frame, within 5 s. `ping` before `hello`, a non-JSON frame or an unknown `t` closes the socket. Max frame 512 KB. Only `hello` and `ping` exist so far; the rest of the student messages above arrive with their milestones.
+- Student close codes: `4400` bad or missing hello, `4401` unknown token or wrong exam, `4426` protocol major mismatch, `4409` replaced by a newer socket of the same student, `4503` not hosting (hosting stopped). The student client does not retry after 4401, 4426 or 4409; it retries everything else with backoff.
+- `welcome.state` in M12: `examState` is `hosting`, `deadline` null, `saved` empty, `monitoring` false.
+- Teacher WS takes the token as `?token=` (a browser WebSocket cannot set headers). A wrong token or a teacher who is not logged in gets the socket closed with `4401` right after the upgrade. `subscribe` replaces the previous subscription.
 
 ### Flow rules
 - The server pushes events and state through a per-student `serverSeq`. `hello.resume.lastServerSeq` lets the server resend missed commands (messages, lock).
