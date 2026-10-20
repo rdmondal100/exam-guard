@@ -1,0 +1,23 @@
+{
+  "name": "@examguard/student-sim",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "student-sim": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "sim": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@examguard/shared": "workspace:*",
+    "ws": "^8.18.2"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.2",
+    "selfsigned": "^5.5.0"
+  }
+}

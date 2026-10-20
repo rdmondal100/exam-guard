@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import type { StudentState } from '@examguard/shared';
+import type { HostingCounts, RosterEntry, StudentState } from '@examguard/shared';
 import type { Db } from './connection.js';
 import { newId } from './ids.js';
 
@@ -106,4 +106,93 @@ export class ExamStudentRepo {
       { state: StudentState } | undefined;
     return row?.state;
   }
+
+  findById(id: string): ExamStudent | undefined {
+    const row = this.db.prepare(`${SELECT} WHERE id = ?`).get(id) as Row | undefined;
+    return row && toStudent(row);
+  }
+
+  /** Marks the live socket state. Connecting and disconnecting both count as being seen. */
+  setConnected(id: string, connected: boolean, now: number): void {
+    this.db
+      .prepare('UPDATE exam_students SET connected = ?, last_seen_at = ? WHERE id = ?')
+      .run(connected ? 1 : 0, now, id);
+  }
+
+  /** A crash or restart leaves no socket open, so no row may stay `connected`. */
+  resetConnections(): void {
+    this.db.prepare('UPDATE exam_students SET connected = 0 WHERE connected = 1').run();
+  }
+
+  /** One student's roster row with the exam it belongs to. */
+  rosterEntry(id: string): { examId: string; entry: RosterEntry } | undefined {
+    const row = this.db.prepare(`${ROSTER_SELECT} WHERE s.id = ?`).get(id) as RosterRow | undefined;
+    return row && { examId: row.exam_id, entry: toEntry(row) };
+  }
+
+  /** Students who accepted the notice (`not_joined` rows are hidden), by student code. */
+  roster(examId: string): RosterEntry[] {
+    const rows = this.db
+      .prepare(
+        `${ROSTER_SELECT} WHERE s.exam_id = ? AND s.state <> 'not_joined' ORDER BY c.student_code`,
+      )
+      .all(examId) as RosterRow[];
+    return rows.map(toEntry);
+  }
+
+  counts(examId: string): HostingCounts {
+    const row = this.db
+      .prepare(
+        `SELECT
+           COUNT(CASE WHEN state <> 'not_joined' THEN 1 END) AS joined,
+           COUNT(CASE WHEN state = 'lobby' THEN 1 END) AS in_lobby,
+           COUNT(CASE WHEN state = 'active' THEN 1 END) AS active,
+           COUNT(CASE WHEN state = 'submitted' THEN 1 END) AS submitted,
+           COUNT(CASE WHEN state <> 'not_joined' AND connected = 1 THEN 1 END) AS connected
+         FROM exam_students WHERE exam_id = ?`,
+      )
+      .get(examId) as {
+      joined: number;
+      in_lobby: number;
+      active: number;
+      submitted: number;
+      connected: number;
+    };
+    return {
+      joined: row.joined,
+      inLobby: row.in_lobby,
+      active: row.active,
+      submitted: row.submitted,
+      connected: row.connected,
+    };
+  }
 }
+
+interface RosterRow {
+  id: string;
+  exam_id: string;
+  student_code: string;
+  name: string;
+  state: StudentState;
+  connected: number;
+  risk_score: number;
+  outside_ms_total: number;
+  last_seen_at: number | null;
+}
+
+const ROSTER_SELECT = `SELECT s.id, s.exam_id, c.student_code, c.name, s.state, s.connected,
+    s.risk_score, s.outside_ms_total, s.last_seen_at
+  FROM exam_students s JOIN class_students c ON c.id = s.class_student_id`;
+
+const toEntry = (row: RosterRow): RosterEntry => ({
+  id: row.id,
+  studentCode: row.student_code,
+  name: row.name,
+  state: row.state,
+  connected: row.connected === 1,
+  riskScore: row.risk_score,
+  outsideMs: row.outside_ms_total,
+  lastSeen: row.last_seen_at,
+  // The agent is stubbed until M21.
+  agentOk: true,
+});

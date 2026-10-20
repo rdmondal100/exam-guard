@@ -13,6 +13,7 @@ import { readDeviceId } from './device-id.js';
 import { Discovery } from './discovery.js';
 import { JoinClient } from './join-client.js';
 import { probeHost } from './probe-host.js';
+import { SessionClient } from './session-client.js';
 import { resolveMode, saveStoredMode } from './mode-store.js';
 import type { ServerHost } from './server-host.js';
 
@@ -65,6 +66,19 @@ export function registerIpc(state: AppState, server: ServerHost): void {
   ipcMain.handle(IPC.confirmJoin, () => {
     requireStudent();
     return joinClient.confirm();
+  });
+
+  const session = new SessionClient({
+    onStatus: (status) => {
+      for (const win of BrowserWindow.getAllWindows())
+        win.webContents.send(IPC.sessionStatus, status);
+    },
+  });
+  ipcMain.handle(IPC.startSession, () => {
+    requireStudent();
+    const credentials = joinClient.credentials();
+    if (!credentials) throw new Error('Join an exam first');
+    session.start(credentials.target, credentials.token);
   });
 
   ipcMain.handle(IPC.setMode, async (_event, payload: unknown) => {

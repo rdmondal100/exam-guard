@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
+import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { PROTOCOL_VERSION, TEACHER_TOKEN_HEADER } from '@examguard/shared';
 import { AuthState } from '../auth/auth-state.js';
@@ -17,6 +18,9 @@ import { sendError } from './errors.js';
 import { registerExamRoutes } from './exam-routes.js';
 import { registerHostingRoutes } from './hosting-routes.js';
 import { registerQuestionRoutes } from './question-routes.js';
+import { registerRosterRoutes } from './roster-routes.js';
+import { SessionHub } from '../ws/session-hub.js';
+import { registerTeacherSocket } from '../ws/teacher-socket.js';
 
 export interface TeacherAppOptions {
   token: string;
@@ -24,7 +28,7 @@ export interface TeacherAppOptions {
   /** Clock for the login rate limiter and the teacher row; tests inject a fake. */
   now?: () => number;
   /** Student listener settings. Without it the hosting routes are not registered. */
-  hosting?: Omit<HostingManagerDeps, 'exams' | 'questions' | 'students' | 'events'>;
+  hosting?: Omit<HostingManagerDeps, 'exams' | 'questions' | 'students' | 'events' | 'hub'>;
 }
 
 export interface TeacherApp {
@@ -52,7 +56,8 @@ export function buildTeacherApp({
   now,
   hosting: hostingOptions,
 }: TeacherAppOptions): TeacherApp {
-  const app = Fastify({ logger: false });
+  // Live sockets must not hold shutdown open.
+  const app = Fastify({ logger: false, forceCloseConnections: true });
   const state = new AuthState();
 
   // The renderer is a different origin (dev server or file://), and the token header makes
@@ -72,6 +77,8 @@ export function buildTeacherApp({
   });
 
   app.addHook('onRequest', async (request, reply) => {
+    // `/ws` checks the token itself (a browser WebSocket cannot set headers).
+    if (request.url.split('?', 1)[0] === '/ws') return undefined;
     if (!tokenMatches(token, request.headers[TEACHER_TOKEN_HEADER])) {
       return sendError(reply, 401, 'unauthorized', 'Missing or invalid teacher token');
     }
@@ -104,18 +111,33 @@ export function buildTeacherApp({
 
   let hosting: HostingManager | undefined;
   if (hostingOptions) {
+    const students = new ExamStudentRepo(db);
+    const hub = new SessionHub({ students, now });
     hosting = new HostingManager({
       exams,
       questions,
-      students: new ExamStudentRepo(db),
+      students,
       events: new EventRepo(db),
+      hub,
       now,
       ...hostingOptions,
     });
     registerHostingRoutes(app, { hosting, requireLogin: state.requireLogin });
+    registerRosterRoutes(app, { exams, students, requireLogin: state.requireLogin });
+    void app.register(websocket);
+    // Inside a plugin so it loads after the websocket plugin.
+    void app.register(async (scope) => {
+      registerTeacherSocket(scope, {
+        hub,
+        allowed: (request) =>
+          state.isLoggedIn() &&
+          tokenMatches(token, new URL(request.url, 'http://x').searchParams.get('token')),
+      });
+    });
     const manager = hosting;
     app.addHook('onClose', async () => {
       await manager.close();
+      hub.dispose();
     });
   }
 

@@ -38,6 +38,8 @@ export interface JoinServiceDeps {
   now?: () => number;
   limiter?: JoinLimiter;
   makeToken?: () => string;
+  /** Called after a student's visible state changed (lobby entry), for the live roster. */
+  onChange?: (examStudentId: string) => void;
 }
 
 export const hashToken = (token: string): string =>
@@ -131,6 +133,8 @@ export class JoinService {
   confirm(token: string): StudentState {
     const session = this.deps.students.findByTokenHash(hashToken(token));
     if (!session) throw new JoinError(401, 'unauthorized', 'Sign in again');
-    return this.deps.students.confirm(session.id, this.now()) ?? session.state;
+    const state = this.deps.students.confirm(session.id, this.now()) ?? session.state;
+    this.deps.onChange?.(session.id);
+    return state;
   }
 }

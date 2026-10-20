@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import type { HostingInfo } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
 import type { ExamApi } from '@/lib/examApi';
+import { sortedStudents } from '@/lib/rosterState';
+import { useRoster } from '@/lib/useRoster';
+import { RosterList } from './RosterList';
 
 interface Props {
   examId: string;
@@ -9,11 +12,13 @@ interface Props {
   onStop: () => Promise<void>;
 }
 
-/** PIN, addresses and fingerprint code for a hosted exam. Join counts arrive with M10. */
+/** PIN, addresses and fingerprint code for a hosted exam. Joined students update live. */
 export function HostingPanel({ examId, api, onStop }: Props) {
   const [info, setInfo] = useState<HostingInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
+  const roster = useRoster(examId);
+  const counts = roster.counts;
 
   useEffect(() => {
     let cancelled = false;
@@ -69,11 +74,17 @@ export function HostingPanel({ examId, api, onStop }: Props) {
           <dt className="text-muted">Check code</dt>
           <dd className="font-mono text-2xl">{info.fpCode}</dd>
           <dt className="text-muted">Joined</dt>
-          <dd>0 joined · 0 in lobby</dd>
+          <dd>
+            {counts
+              ? `${counts.joined} joined · ${counts.inLobby} in lobby · ${counts.connected} connected`
+              : '0 joined'}
+            {!roster.live && <span className="ml-2 text-amber-700">(reconnecting…)</span>}
+          </dd>
         </dl>
       ) : (
         !error && <p className="text-sm text-muted">Loading hosting details…</p>
       )}
+      <RosterList students={sortedStudents(roster)} />
       <p className="text-sm text-muted">
         Students enter the address, the PIN and their ID. With a typed address, they compare the
         check code on their screen with this one.

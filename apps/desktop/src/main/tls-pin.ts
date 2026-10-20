@@ -38,7 +38,9 @@ export interface PinnedResponse {
  * Opens TLS and checks the fingerprint BEFORE any HTTP byte is sent, so a PIN can never reach a
  * host with the wrong cert. Chain validation is off: the cert is self-signed, the pin is the trust.
  */
-function connectPinned(target: PinnedTarget): Promise<{ socket: TLSSocket; fingerprint: string }> {
+export function connectPinned(
+  target: PinnedTarget,
+): Promise<{ socket: TLSSocket; fingerprint: string }> {
   return new Promise((resolve, reject) => {
     const socket = connect({
       host: target.address,

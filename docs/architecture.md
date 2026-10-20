@@ -29,7 +29,7 @@ Main restarts the server on exit with backoff (1 s, 2 s, 5 s, then every 10 s). 
   - via mDNS: the `fp` from TXT must match the presented cert
   - via manual IP: trust on first use for this exam. The student screen shows a **4-character code** (first 20 bits of the fingerprint, Crockford base32) next to the PIN field, and the teacher's hosting screen shows the same code. Invigilators compare them by eye.
   - the pinned fingerprint is stored with the student's session, so a reconnect to a different cert is refused.
-- **Teacher UI → server:** loopback only, plain HTTP. The token is random per app launch, passed from main to the utilityProcess and to preload. Never bound to the LAN.
+- **Teacher UI → server:** loopback only, plain HTTP. The token is random per app launch, passed from main to the utilityProcess and to preload. Never bound to the LAN. HTTP calls send it in the `X-Teacher-Token` header; the WebSocket (`/ws`) takes it as `?token=` because a browser WebSocket cannot set headers.
 - **WebRTC:** peer-to-peer on the LAN using host candidates only (no STUN/TURN, no internet). Signaling is relayed over the existing WS connections.
 - **Firewall:** the installer adds program-based inbound rules (TCP + UDP) for `ExamGuard.exe` on Teacher installs only. Student PCs make outbound connections only. ICE checks from the student side open the stateful path.
 - **Limits:** WS max frame 512 KB (screenshots are chunked if larger). Per-token rate limits on saves/events, and a per-IP limit on `/join` that counts failed tries only (5 wrong PINs or unknown IDs per minute, then 429 `rate_limited` with `retryAfterSec`), so a lab behind one address is not throttled. Every inbound frame passes `safeParse` against `packages/shared`.

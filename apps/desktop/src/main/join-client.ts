@@ -70,6 +70,11 @@ export class JoinClient {
 
   constructor(private readonly deviceId: () => Promise<string>) {}
 
+  /** What the live socket needs. Main only: it is never sent to the renderer. */
+  credentials(): { target: PinnedTarget; token: string } | null {
+    return this.session && { target: this.session.target, token: this.session.token };
+  }
+
   async join(attempt: JoinAttempt): Promise<JoinResult> {
     this.session = null;
     const target: PinnedTarget = {

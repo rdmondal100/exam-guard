@@ -9,6 +9,7 @@ import type {
   ProbeResult,
   ServerConnection,
   ServerStatus,
+  SessionStatus,
 } from '@examguard/shared';
 
 /** The only surface the renderer gets: `window.examguard`. */
@@ -31,4 +32,8 @@ export interface ExamGuardApi {
   joinExam(attempt: JoinAttempt): Promise<JoinResult>;
   /** Student mode: the monitoring notice was accepted. */
   confirmJoin(): Promise<JoinConfirmResult>;
+  /** Student mode: open the live session socket after the notice. Status arrives below. */
+  startSession(): Promise<void>;
+  /** Returns an unsubscribe function. */
+  onSessionStatus(listener: (status: SessionStatus) => void): () => void;
 }
