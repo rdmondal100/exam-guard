@@ -1,5 +1,6 @@
-import { ipcMain } from 'electron';
+import { BrowserWindow, ipcMain } from 'electron';
 import {
+  ProbeRequestSchema,
   SetModeRequestSchema,
   allowedModesFor,
   type AppInfo,
@@ -7,6 +8,8 @@ import {
   type InstallType,
 } from '@examguard/shared';
 import { IPC } from '../shared/ipc-channels.js';
+import { Discovery } from './discovery.js';
+import { probeHost } from './probe-host.js';
 import { resolveMode, saveStoredMode } from './mode-store.js';
 import type { ServerHost } from './server-host.js';
 
@@ -27,9 +30,27 @@ function toInfo(state: AppState): AppInfo {
 }
 
 export function registerIpc(state: AppState, server: ServerHost): void {
+  const discovery = new Discovery((hosts) => {
+    for (const win of BrowserWindow.getAllWindows())
+      win.webContents.send(IPC.discoveryHosts, hosts);
+  });
+  const requireStudent = () => {
+    if (state.mode !== 'student') throw new Error('Discovery is for Student mode');
+  };
   ipcMain.handle(IPC.getInfo, () => toInfo(state));
   ipcMain.handle(IPC.getServerConnection, () => server.getConnection());
   ipcMain.handle(IPC.getServerStatus, () => server.getStatus());
+
+  ipcMain.handle(IPC.startDiscovery, () => {
+    requireStudent();
+    discovery.start();
+    return discovery.list();
+  });
+  ipcMain.handle(IPC.stopDiscovery, () => discovery.stop());
+  ipcMain.handle(IPC.probeHost, (_event, payload: unknown) => {
+    requireStudent();
+    return probeHost(ProbeRequestSchema.parse(payload));
+  });
 
   ipcMain.handle(IPC.setMode, async (_event, payload: unknown) => {
     const request = SetModeRequestSchema.parse(payload);

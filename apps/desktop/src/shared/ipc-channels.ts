@@ -5,4 +5,8 @@ export const IPC = {
   getServerConnection: 'server:get-connection',
   getServerStatus: 'server:get-status',
   serverStatus: 'server:status',
+  startDiscovery: 'discovery:start',
+  stopDiscovery: 'discovery:stop',
+  discoveryHosts: 'discovery:hosts',
+  probeHost: 'discovery:probe',
 } as const;

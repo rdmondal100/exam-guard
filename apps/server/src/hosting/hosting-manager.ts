@@ -7,6 +7,7 @@ import { readyProblems } from '../exams/ready-check.js';
 import { buildStudentApp } from '../http/student-app.js';
 import { loadOrCreateCert } from '../tls/cert.js';
 import { lanAddresses } from '../tls/lan-addresses.js';
+import { advertiseOverMdns, type Advertise } from './mdns-advertiser.js';
 import { generatePin } from './pin.js';
 
 /** A refusal the routes turn into an HTTP error. */
@@ -34,6 +35,8 @@ export interface HostingManagerDeps {
   now?: () => number;
   addresses?: () => string[];
   makePin?: () => string;
+  /** mDNS advertising; tests pass a fake. */
+  advertise?: Advertise;
 }
 
 interface Active {
@@ -42,6 +45,7 @@ interface Active {
   fpCode: string;
   app: FastifyInstance;
   port: number;
+  stopAdvertising: () => void;
 }
 
 /** Owns the student HTTPS listener: open only while an exam is `hosting`. */
@@ -102,6 +106,7 @@ export class HostingManager {
     const active = this.active;
     if (!active) return;
     this.active = null;
+    active.stopAdvertising();
     await active.app.close();
     this.deps.onActive?.(false);
   }
@@ -129,7 +134,18 @@ export class HostingManager {
     }
     const address = app.server.address();
     const port = typeof address === 'object' && address ? address.port : STUDENT_API_PORT;
-    this.active = { examId, pin, fpCode: cert.fpCode, app, port };
+    let stopAdvertising = () => {};
+    try {
+      const exam = this.deps.exams.get(examId);
+      stopAdvertising = (this.deps.advertise ?? advertiseOverMdns)({
+        title: exam?.title ?? '',
+        port,
+        fingerprint: cert.fingerprint,
+      });
+    } catch {
+      // Discovery is best effort: students can still join by manual IP.
+    }
+    this.active = { examId, pin, fpCode: cert.fpCode, app, port, stopAdvertising };
     this.deps.onActive?.(true);
     return this.active;
   }
