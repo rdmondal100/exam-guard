@@ -18,12 +18,16 @@ let db: Db;
 let dir: string;
 let clock = 1000;
 let active: boolean[];
+let ads: { title: string; port: number; fingerprint: string }[];
+let stopped: number;
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'eg-host-'));
   db = initDatabase(dir);
   clock = 1000;
   active = [];
+  ads = [];
+  stopped = 0;
   const built = buildTeacherApp({
     token: TOKEN,
     db,
@@ -35,6 +39,10 @@ beforeEach(async () => {
       onActive: (a) => active.push(a),
       addresses: () => ['192.168.1.7'],
       makePin: () => '004217',
+      advertise: (ad) => {
+        ads.push(ad);
+        return () => void stopped++;
+      },
     },
   });
   app = built.app;
@@ -101,6 +109,38 @@ function getInfo(port: number): Promise<{ status: number; body: string }> {
 }
 
 describe('hosting routes', () => {
+  it('advertises over mDNS while hosting and stops when hosting stops', async () => {
+    const exam = await readyExam('Mid');
+    const { port } = (await send('POST', `/exams/${exam.id}/host`)).json();
+    expect(ads).toHaveLength(1);
+    expect(ads[0]).toMatchObject({ title: 'Mid', port });
+    expect(ads[0]?.fingerprint).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(stopped).toBe(0);
+    await send('POST', `/exams/${exam.id}/stop-hosting`);
+    expect(stopped).toBe(1);
+  });
+
+  it('re-advertises after a restart (resume)', async () => {
+    const exam = await readyExam();
+    await send('POST', `/exams/${exam.id}/host`);
+    await hosting.close();
+    expect(stopped).toBe(1);
+    await hosting.resume();
+    expect(ads).toHaveLength(2);
+  });
+
+  it('still hosts when advertising throws', async () => {
+    const exam = await readyExam();
+    await hosting.close();
+    const original = ads.push.bind(ads);
+    ads.push = () => {
+      throw new Error('mdns down');
+    };
+    const res = await send('POST', `/exams/${exam.id}/host`);
+    ads.push = original;
+    expect(res.statusCode).toBe(200);
+  });
+
   it('hosts a ready exam: PIN, addresses, code, and /info over TLS', async () => {
     const exam = await readyExam();
     const res = await send('POST', `/exams/${exam.id}/host`);

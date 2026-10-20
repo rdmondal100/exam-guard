@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import {
   AppInfoSchema,
+  DiscoveredHostSchema,
+  ProbeRequestSchema,
+  ProbeResultSchema,
   ServerConnectionSchema,
   ServerStatusSchema,
   type AppMode,
@@ -25,6 +28,23 @@ const api: ExamGuardApi = {
     ipcRenderer.on(IPC.serverStatus, handler);
     return () => ipcRenderer.removeListener(IPC.serverStatus, handler);
   },
+  startDiscovery: async () =>
+    DiscoveredHostSchema.array().parse(await ipcRenderer.invoke(IPC.startDiscovery)),
+  stopDiscovery: async () => {
+    await ipcRenderer.invoke(IPC.stopDiscovery);
+  },
+  onDiscoveryHosts: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown) => {
+      const parsed = DiscoveredHostSchema.array().safeParse(payload);
+      if (parsed.success) listener(parsed.data);
+    };
+    ipcRenderer.on(IPC.discoveryHosts, handler);
+    return () => ipcRenderer.removeListener(IPC.discoveryHosts, handler);
+  },
+  probeHost: async (request) =>
+    ProbeResultSchema.parse(
+      await ipcRenderer.invoke(IPC.probeHost, ProbeRequestSchema.parse(request)),
+    ),
 };
 
 contextBridge.exposeInMainWorld('examguard', api);

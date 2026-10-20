@@ -5,8 +5,8 @@ Read this first every session. Update it at the end of every session.
 ## Current status
 - **Stage:** 1
 - **Phase:** 2 — Exam setup & joining
-- **Current milestone:** M09 done (manual check pending). M10 is next
-- **Next step:** do the M02–M09 manual tests (close old dev instances first), then start M10 (see `milestones.md`).
+- **Current milestone:** M10 done (manual check pending). M11 is next
+- **Next step:** do the M02–M10 manual tests (close old dev instances first), then start M11 (see `milestones.md`).
 
 ## Completed milestones
 Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
@@ -19,6 +19,7 @@ Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
 - M07 Exam CRUD and settings — 2026-10-19 — `0003_exams`, exam state machine, `/exams*` (create, edit, duplicate, delete), Exams page + settings form; manual check pending.
 - M08 Question editor — 2026-10-19 — `0004_questions`, question repo + routes, `/ready` and `/unready` with reasons, duplicate copies questions, Question editor UI with Monaco; manual check pending.
 - M09 Hosting: TLS, PIN, student listener — 2026-10-20 — self-signed ECDSA cert + 4-char code, `/exams/:id/host|stop-hosting|hosting`, student HTTPS `/info` on 47820 only while hosting, hosting panel, sleep blocker; manual check pending.
+- M10 Discovery + manual IP + cert pinning — 2026-10-20 — server advertises `_examguard._tcp` (TXT v/exam/fp) while hosting, student main browses it and pins the cert by fingerprint, Find exam screen with manual IP + 4-char code; manual check pending.
 
 ## Decisions log
 Newest at the bottom. Format: `date — decision — why (doc that owns the detail)`.
@@ -116,6 +117,12 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - 2026-10-20 — Server → main reply `{type:'hosting', active}` drives `powerSaveBlocker.start('prevent-display-sleep')` in `ServerHost`. It is released on stop, on server exit and when the listener closes. On boot the server calls `resume()`: an exam still in `hosting` gets its listener back with the same PIN and cert (a failure is logged, the teacher API stays up). This is the minimal slice of the crash recovery in architecture.md; the rest stays in the recovery milestone.
 - 2026-10-20 — `/info` returns 503 `not_hosting` when nothing is hosted (the listener is normally closed then). Its state is always `hosting` for now; `running` arrives with start (M10+).
 
+**M10**
+- 2026-10-20 — Pinning (`desktop/src/main/tls-pin.ts`) opens `tls.connect` with `rejectUnauthorized:false`, compares SHA-256 of the peer cert DER with the expected fp, and only then reuses that socket for `https.request` (`createConnection`). Node skips `checkServerIdentity` for self-signed certs, so a custom check would not have run; this way no HTTP byte (later: PIN) is sent to a wrong cert. M11/M12 reuse `pinnedGet`/`connectPinned` and store the fp with the session.
+- 2026-10-20 — mDNS service name is `ExamGuard-<first 8 chars of fp>`; TXT `v` is `major.minor`. Advertising is best effort: if it throws, hosting still works (manual IP). Advertiser is injected into `HostingManager` (`advertise` dep) so tests use a fake.
+- 2026-10-20 — Discovery and probing run in student main only (IPC refuses outside Student mode); the renderer never touches the network. `fpCodeOf` moved to `packages/shared` (server re-exports it). Hosts without IPv4 or with another protocol major are ignored.
+- 2026-10-20 — The old placeholder `ModeHome` was replaced by `FindExamScreen`. Selecting a host only probes and shows the code; the Continue button is disabled until M11 (join).
+
 ## Known issues / open questions
 - Confirm with lab IT (before a real exam): admin install rights, antivirus/EDR tolerance of the agent and screen capture, reboot-restore software (e.g. Deep Freeze wipes the local queue on reboot), group policies, and whether students are on one subnet.
 - Check Gemini's current data-use terms and use a paid tier for real student data.
@@ -153,6 +160,10 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - M09: `stopHosting` returns the exam to `ready`, so students who already joined are not told yet; join counts on the panel are static 0 until M10. Hosting stays "on" if the teacher closes the app: on next launch `resume()` reopens it.
 - M09: `GET /exams/:id/hosting` only answers while the listener is open. If a resume fails (port busy) the exam stays in `hosting` without a listener and the panel keeps showing "Loading hosting details" until the teacher clicks Stop hosting (which works from the stored state).
 
+- M10: no UI/component tests (node-only vitest). Tested: shared schemas, server advertise/stop/resume with a fake, desktop `tls-pin`/`probe-host` against a real local HTTPS server (match, TOFU, mismatch refused before any request, unreachable, 503, bad body, protocol major), `toDiscoveredHost`, `parseHostAddress`. A node smoke script confirmed real bonjour advertise → browse on the dev PC. The Electron screen and the two-machine run are the manual test.
+- M10: mDNS needs UDP 5353 allowed (Private network profile). With a firewall in the way, use manual IP. A stale entry can linger up to the mDNS TTL after the teacher stops hosting.
+- M10: the pinned fp is not stored anywhere yet (M11 stores it with the session). Regenerating the cert is still not wired to Settings.
+
 ## Manual recovery checklist (filled in during M48)
 _Empty._
 
@@ -170,3 +181,4 @@ Format: `date — milestone — what was done — tests run — next`.
 - 2026-10-19 — M07 — migration 0003, shared exam schemas + DEFAULT_MONITORING, server `exams/exam-state`, `db/exam-repo`, `/exams*` routes, desktop `examApi`, `useExams`, `ExamsPage`, `ExamSettingsForm`, Exams nav enabled — shared (25), server (57), desktop (26) tests, typecheck, lint, format, desktop build pass; app not clicked through — manual test, then M08.
 - 2026-10-19 — M08 — migration 0004, shared question schemas, server `db/question-repo`, `exams/ready-check`, `http/question-routes`, `/ready` + `/unready`, duplicate copies questions; desktop `questionApi`, `questionDraft`, `useQuestions`, Monaco setup, `ExamDetailPage` + QuestionList/QuestionEditor/CriteriaEditor/ReadyPanel, CSP for Monaco — shared (29), server (73), desktop (36) tests, full `pnpm test` (138), typecheck, lint, format, desktop build pass; app not clicked through — manual test, then M09.
 - 2026-10-20 — M09 — shared hosting schemas + `hosting` server reply, server `tls/` (cert, fingerprint, lan-addresses), `hosting/` (pin, manager), `http/student-app` + `hosting-routes`, `ExamRepo` hosting methods, resume on boot; desktop `examApi` host/stop/hosting, `HostingPanel`, Start hosting button, power-save blocker in `ServerHost` — shared (33), server (87+), desktop tests, full `pnpm test` (159), typecheck, lint, format, build pass; app not clicked through — manual test, then M10.
+- 2026-10-20 — M10 — shared `discovery` schemas + `fpCodeOf`, server `mdns-advertiser` + `HostingManager` advertise/stop, desktop `discovery`, `tls-pin`, `probe-host`, IPC/preload, `FindExamScreen`/`HostList`/`ManualIpForm`, `hostAddress` — shared (39), server (88), desktop (55) tests, typecheck, lint, format, desktop build pass; real bonjour smoke OK; app not clicked through — manual test, then M11.

@@ -1,4 +1,12 @@
-import type { AppInfo, AppMode, ServerConnection, ServerStatus } from '@examguard/shared';
+import type {
+  AppInfo,
+  AppMode,
+  DiscoveredHost,
+  ProbeRequest,
+  ProbeResult,
+  ServerConnection,
+  ServerStatus,
+} from '@examguard/shared';
 
 /** The only surface the renderer gets: `window.examguard`. */
 export interface ExamGuardApi {
@@ -9,4 +17,11 @@ export interface ExamGuardApi {
   getServerStatus(): Promise<ServerStatus>;
   /** Returns an unsubscribe function. */
   onServerStatus(listener: (status: ServerStatus) => void): () => void;
+  /** Student mode: start browsing for teachers over mDNS. Returns the hosts known so far. */
+  startDiscovery(): Promise<DiscoveredHost[]>;
+  stopDiscovery(): Promise<void>;
+  /** Returns an unsubscribe function. */
+  onDiscoveryHosts(listener: (hosts: DiscoveredHost[]) => void): () => void;
+  /** Contacts a host (mDNS or manual IP), pins its cert and reads its info. */
+  probeHost(request: ProbeRequest): Promise<ProbeResult>;
 }

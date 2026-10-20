@@ -4,3 +4,5 @@ export * from './class-lists.js';
 export * from './exams.js';
 export * from './questions.js';
 export * from './hosting.js';
+export * from './fingerprint-code.js';
+export * from './discovery.js';
