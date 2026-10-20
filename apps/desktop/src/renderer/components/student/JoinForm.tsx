@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { JoinResult } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,12 +20,19 @@ export function JoinForm({ address, port, fingerprint, examTitle, onJoined, onBa
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [waitSec, setWaitSec] = useState(0);
+
+  useEffect(() => {
+    if (waitSec <= 0) return;
+    const timer = setTimeout(() => setWaitSec((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [waitSec]);
 
   const pinValid = /^\d{6}$/.test(pin);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!pinValid || studentCode.trim() === '') return;
+    if (waitSec > 0 || !pinValid || studentCode.trim() === '') return;
     setBusy(true);
     setError(null);
     try {
@@ -37,11 +44,8 @@ export function JoinForm({ address, port, fingerprint, examTitle, onJoined, onBa
         pin,
       });
       if (result.ok) return onJoined(result);
-      setError(
-        result.retryAfterSec
-          ? `${result.message} (try again in ${result.retryAfterSec} s)`
-          : result.message,
-      );
+      setError(result.message);
+      setWaitSec(result.retryAfterSec ?? 0);
     } catch {
       setError('Something went wrong while joining. Try again.');
     } finally {
@@ -87,11 +91,15 @@ export function JoinForm({ address, port, fingerprint, examTitle, onJoined, onBa
             {error}
           </p>
         )}
+        {waitSec > 0 && <p role="status">Try again in {waitSec} s.</p>}
         <div className="flex gap-2">
           <Button type="button" variant="outline" onClick={onBack} disabled={busy}>
             Back
           </Button>
-          <Button type="submit" disabled={busy || !pinValid || studentCode.trim() === ''}>
+          <Button
+            type="submit"
+            disabled={busy || waitSec > 0 || !pinValid || studentCode.trim() === ''}
+          >
             {busy ? 'Joining…' : 'Join'}
           </Button>
         </div>

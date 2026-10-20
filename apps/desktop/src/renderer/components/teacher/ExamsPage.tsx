@@ -58,7 +58,16 @@ export function ExamsPage() {
     {
       header: 'State',
       accessorKey: 'state',
-      cell: ({ getValue }) => STATE_LABEL[getValue<ExamSummary['state']>()],
+      cell: ({ getValue }) => {
+        const state = getValue<ExamSummary['state']>();
+        if (state !== 'hosting') return STATE_LABEL[state];
+        return (
+          <span className="inline-flex items-center gap-2 rounded-full bg-green-100 px-2 py-0.5 text-sm font-medium text-green-900">
+            <span aria-hidden className="h-2 w-2 rounded-full bg-green-600" />
+            Hosting now
+          </span>
+        );
+      },
     },
     {
       header: 'Duration',
@@ -79,8 +88,18 @@ export function ExamsPage() {
         return (
           api && (
             <div className="flex justify-end gap-2">
+              {exam.state === 'hosting' && (
+                <Button
+                  onClick={() => {
+                    if (window.confirm(`Stop hosting "${exam.title}"?`))
+                      void run(() => api.stopHosting(exam.id));
+                  }}
+                >
+                  Stop hosting
+                </Button>
+              )}
               <Button variant="outline" onClick={() => setDetail(exam)}>
-                Questions
+                Open
               </Button>
               <Button variant="outline" disabled={!editable} onClick={() => setForm({ exam })}>
                 Edit

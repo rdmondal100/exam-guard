@@ -5,8 +5,8 @@ Read this first every session. Update it at the end of every session.
 ## Current status
 - **Stage:** 1
 - **Phase:** 2 — Exam setup & joining
-- **Current milestone:** M12 done (manual check pending). **Phase 2 demo** is ready to run. M13 is next
-- **Next step:** do the M02–M12 manual tests (close old dev instances first; the M12 steps are in `milestones.md`), then start M13 (see `milestones.md`).
+- **Current milestone:** M12 done (manual check pending). **Phase 2: built, not accepted** (see "Phase 2 review" below). M13 is next, but not started.
+- **Next step:** (1) ~~fix the two reported Phase 2 bugs~~ done 2026-10-20 (not clicked through), (2) do the M02–M12 manual tests on the laptop (close old dev instances first; the M12 steps are in `milestones.md`), (3) then start M13.
 
 ## Completed milestones
 Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
@@ -23,6 +23,27 @@ Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
 
 - M11 Student join + monitoring notice — 2026-10-20 — `0005_exam_students` (+ events, teacher_actions), `/join` + `/join/confirm`, one session per student with duplicate-login rejection, student ID/PIN, name and notice screens; manual check pending.
 - M12 WebSocket session, lobby, student-sim v1 — 2026-10-20 — student `wss /ws` (hello/welcome, ping/pong, 15 s idle drop, connected flag), teacher `ws /ws?token=` roster + counts with 250 ms batching, `SessionHub`, pinned `SessionClient` in student main, lobby screen, live hosting panel, `tools/student-sim`; 200 sim students connect in about 1.4 s; manual check pending.
+
+## Phase 2 review (2026-10-20)
+Checked against requirements.md §10 and the M06–M12 Accept lines. Nothing was fixed in this session and the suite was not re-run (285 tests were green at M12).
+
+**"Done when": a student on another PC joins an exam and waits in the lobby — NOT yet demonstrated.** The whole path is built (discover or manual IP → cert pin → PIN + ID → name → notice → WS lobby → teacher roster), but it has never been run on a second machine. Every milestone from M02 on is still "manual check pending".
+
+| M | Accept line | Verdict |
+|---|---|---|
+| M06 | BOM, quotes, duplicate and blank IDs reported; list in use can't be deleted | Met by tests; page unverified by hand |
+| M07 | Duplicate copies settings and questions; bad transitions rejected | Met by tests (`assertTransition` is used by hosting) |
+| M08 | Marks = sum of criteria; Ready fails with reasons; reorder persists | Met by tests; Monaco never run in the app |
+| M09 | `/info` works while hosting and is refused after; sleep blocked | Met by tests; `powercfg /requests` check pending |
+| M10 | LAN discovery, manual IP, mismatched cert refused | Met by tests and a bonjour smoke run; the mismatch can't be triggered by hand (nothing regenerates the cert) |
+| M11 | Wrong PIN or unlisted ID rejected; other device rejected + event; same device resumes | Met by tests; two-profile run pending |
+| M12 | Roster within 1 s; disconnect shown; 200-sim stable | Met by the scripted 200-student run; Electron screens and laptop run pending |
+
+**Reported bugs (confirmed in code, to fix before the Phase 2 manual run)**
+1. Student retry timer is static. `JoinForm.tsx` bakes `(try again in N s)` into the error text once. The teacher `LoginScreen.tsx` already has a ticking `waitSec` and a disabled button; the student form has neither. Fix: tick `waitSec` down, show "Try again in N s", disable Join until 0, clear the message at 0.
+2. Hosted exam is not obvious in the Exams list and can't be stopped there. `ExamsPage.tsx` shows the state as plain text, with no badge. Stop hosting exists only in the detail page. The row button "Questions" opens the exam detail page (Ready, Host, Stop, live roster), so the label is wrong. Fix: a "Hosting" badge on the row, a **Stop hosting** button on that row (with confirm, reuse `examApi.stopHosting`), and rename "Questions" to "Open".
+
+**Other gaps found** (also listed under Known issues): no way to regenerate the cert from Settings; no teacher "reset session"; students are not told when hosting stops; a failed `resume()` leaves the panel on "Loading hosting details…".
 
 ## Decisions log
 Newest at the bottom. Format: `date — decision — why (doc that owns the detail)`.
@@ -198,6 +219,10 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - M12: the clock offset is estimated but not exposed beyond the status object. `resume.lastServerSeq` is always 0 until server commands exist.
 - M12: still no teacher "reset session" (M11 issue) and no WS rate limit per token yet (the 512 KB frame limit and 15 s idle drop are in).
 
+- Phase 2 review: two bugs FIXED 2026-10-20, only type-checked, linted and formatted (no UI tests, not clicked through). `JoinForm.tsx` now counts the retry wait down each second, shows "Try again in N s" and disables Join until 0. `ExamsPage.tsx` shows a green "Hosting now" badge, a **Stop hosting** button (with confirm) on the hosted row, and "Questions" is now "Open". Check both in the manual run.
+- Phase 2 review: the M10 manual test "cert regenerated mid-session is refused" can't be done by hand until Settings can regenerate the cert (M43). Until then it is covered only by the `tls-pin` unit tests.
+- Phase 2 review: M13 must not start until the two bugs are fixed and the M02–M12 manual run (with the laptop) has passed.
+
 ## Manual recovery checklist (filled in during M48)
 _Empty._
 
@@ -218,3 +243,5 @@ Format: `date — milestone — what was done — tests run — next`.
 - 2026-10-20 — M10 — shared `discovery` schemas + `fpCodeOf`, server `mdns-advertiser` + `HostingManager` advertise/stop, desktop `discovery`, `tls-pin`, `probe-host`, IPC/preload, `FindExamScreen`/`HostList`/`ManualIpForm`, `hostAddress` — shared (39), server (88), desktop (55) tests, typecheck, lint, format, desktop build pass; real bonjour smoke OK; app not clicked through — manual test, then M11.
 - 2026-10-20 — M11 — shared `join` schemas, migration 0005, server `exam-student-repo`/`event-repo`, `join/` (service, limiter), `http/join-routes`, student app + hosting manager wiring; desktop `device-id`, `join-client`, `pinnedRequest`, IPC/preload, `StudentFlow` with `JoinForm`/`ConfirmName`/`MonitoringNotice`/`WaitingScreen` — full `pnpm test` (228), typecheck, lint, format, build pass; app not clicked through — manual test, then M12.
 - 2026-10-20 — M12 — shared `ws` schemas, server `ws/` (session-hub, student-socket, teacher-socket), roster repo queries + `GET /exams/:id/roster`, hosting manager wiring, `JoinService.onChange`; desktop `session-client`, IPC/preload `startSession`/`onSessionStatus`, `LobbyScreen` (replaces `WaitingScreen`), `useRoster`/`rosterState`/`RosterList`, live `HostingPanel`; `tools/student-sim` v1 + root `sim` script — full `pnpm test` (285), typecheck, lint, format, build pass; scripted 200-student run OK; app not clicked through — manual test, then M13.
+- 2026-10-20 — Phase 2 review — checked M06–M12 and the Phase 2 "Done when" line against the code and docs, confirmed the 2 reported bugs, logged gaps; only `docs/progress.md` changed — no tests run — fix the 2 bugs, run the manual tests, then M13.
+- 2026-10-20 — Phase 2 fixes — student join retry countdown (`JoinForm`), Exams list "Hosting now" badge + Stop hosting + "Open" label (`ExamsPage`) — desktop typecheck, eslint, prettier pass; not clicked through — manual tests, then M13.
