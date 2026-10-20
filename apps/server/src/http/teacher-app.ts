@@ -5,7 +5,9 @@ import { AuthState } from '../auth/auth-state.js';
 import { LoginLimiter } from '../auth/login-limiter.js';
 import { ClassListRepo } from '../db/class-list-repo.js';
 import type { Db } from '../db/connection.js';
+import { EventRepo } from '../db/event-repo.js';
 import { ExamRepo } from '../db/exam-repo.js';
+import { ExamStudentRepo } from '../db/exam-student-repo.js';
 import { HostingManager, type HostingManagerDeps } from '../hosting/hosting-manager.js';
 import { QuestionRepo } from '../db/question-repo.js';
 import { TeacherRepo } from '../db/teacher-repo.js';
@@ -22,7 +24,7 @@ export interface TeacherAppOptions {
   /** Clock for the login rate limiter and the teacher row; tests inject a fake. */
   now?: () => number;
   /** Student listener settings. Without it the hosting routes are not registered. */
-  hosting?: Omit<HostingManagerDeps, 'exams' | 'questions'>;
+  hosting?: Omit<HostingManagerDeps, 'exams' | 'questions' | 'students' | 'events'>;
 }
 
 export interface TeacherApp {
@@ -102,7 +104,14 @@ export function buildTeacherApp({
 
   let hosting: HostingManager | undefined;
   if (hostingOptions) {
-    hosting = new HostingManager({ exams, questions, now, ...hostingOptions });
+    hosting = new HostingManager({
+      exams,
+      questions,
+      students: new ExamStudentRepo(db),
+      events: new EventRepo(db),
+      now,
+      ...hostingOptions,
+    });
     registerHostingRoutes(app, { hosting, requireLogin: state.requireLogin });
     const manager = hosting;
     app.addHook('onClose', async () => {

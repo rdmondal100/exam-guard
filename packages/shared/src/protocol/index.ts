@@ -6,3 +6,4 @@ export * from './questions.js';
 export * from './hosting.js';
 export * from './fingerprint-code.js';
 export * from './discovery.js';
+export * from './join.js';

@@ -1,5 +1,6 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, app, ipcMain } from 'electron';
 import {
+  JoinAttemptSchema,
   ProbeRequestSchema,
   SetModeRequestSchema,
   allowedModesFor,
@@ -8,7 +9,9 @@ import {
   type InstallType,
 } from '@examguard/shared';
 import { IPC } from '../shared/ipc-channels.js';
+import { readDeviceId } from './device-id.js';
 import { Discovery } from './discovery.js';
+import { JoinClient } from './join-client.js';
 import { probeHost } from './probe-host.js';
 import { resolveMode, saveStoredMode } from './mode-store.js';
 import type { ServerHost } from './server-host.js';
@@ -50,6 +53,18 @@ export function registerIpc(state: AppState, server: ServerHost): void {
   ipcMain.handle(IPC.probeHost, (_event, payload: unknown) => {
     requireStudent();
     return probeHost(ProbeRequestSchema.parse(payload));
+  });
+
+  const joinClient = new JoinClient(() =>
+    readDeviceId({ override: process.env.EG_DEVICE_ID, isPackaged: app.isPackaged }),
+  );
+  ipcMain.handle(IPC.joinExam, (_event, payload: unknown) => {
+    requireStudent();
+    return joinClient.join(JoinAttemptSchema.parse(payload));
+  });
+  ipcMain.handle(IPC.confirmJoin, () => {
+    requireStudent();
+    return joinClient.confirm();
   });
 
   ipcMain.handle(IPC.setMode, async (_event, payload: unknown) => {

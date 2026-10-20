@@ -2,6 +2,9 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import {
   AppInfoSchema,
   DiscoveredHostSchema,
+  JoinAttemptSchema,
+  JoinConfirmResultSchema,
+  JoinResultSchema,
   ProbeRequestSchema,
   ProbeResultSchema,
   ServerConnectionSchema,
@@ -45,6 +48,11 @@ const api: ExamGuardApi = {
     ProbeResultSchema.parse(
       await ipcRenderer.invoke(IPC.probeHost, ProbeRequestSchema.parse(request)),
     ),
+  joinExam: async (attempt) =>
+    JoinResultSchema.parse(
+      await ipcRenderer.invoke(IPC.joinExam, JoinAttemptSchema.parse(attempt)),
+    ),
+  confirmJoin: async () => JoinConfirmResultSchema.parse(await ipcRenderer.invoke(IPC.confirmJoin)),
 };
 
 contextBridge.exposeInMainWorld('examguard', api);

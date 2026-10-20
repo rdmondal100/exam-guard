@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { AppInfo, AppMode } from '@examguard/shared';
-import { FindExamScreen } from './components/student/FindExamScreen';
+import { StudentFlow } from './components/student/StudentFlow';
 import { TeacherGate } from './components/teacher/TeacherGate';
 import { ModeSelect } from './components/ModeSelect';
 
@@ -20,5 +20,5 @@ export function App() {
   if (!info) return null;
   if (!info.mode) return <ModeSelect allowed={info.allowedModes} onChoose={choose} />;
   if (info.mode === 'teacher') return <TeacherGate info={info} />;
-  return <FindExamScreen />;
+  return <StudentFlow />;
 }

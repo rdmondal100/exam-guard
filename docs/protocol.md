@@ -15,8 +15,8 @@ Each shape here has a Zod schema in `packages/shared/src/protocol/` with the sam
 | Method & path | Auth | Body → Response |
 |---|---|---|
 | GET `/info` | none | → `{ examTitle, protocol, state: 'hosting'|'running', fpCode }` (used after manual IP to show the 4-char code) |
-| POST `/join` | none (rate-limited) | `{ studentCode, pin, deviceId, protocol, agent: AgentStatus }` → `{ token, examStudentId, name, examTitle, state }` or error `bad_pin, not_on_list, already_active_elsewhere, not_hosting, agent_required, protocol_mismatch` |
-| POST `/join/confirm` | Bearer token | `{ noticeAccepted: true }` → `{ ok }` (moves the student to lobby) |
+| POST `/join` | none (rate-limited) | `{ studentCode, pin, deviceId, protocol, agent: AgentStatus }` → `{ token, examStudentId, name, examTitle, state }` or error `bad_pin` (401), `not_on_list` (403), `already_active_elsewhere` (409, also writes a critical `duplicate_login` event), `not_hosting` (503), `agent_required`, `protocol_mismatch` (426), `rate_limited` (429, `details.retryAfterSec`), `invalid_body` (400). The row is created at join (state `not_joined`); the same device joining again gets a new token (the old one stops working). `agent` is accepted but not enforced before M21 |
+| POST `/join/confirm` | Bearer token | `{ noticeAccepted: true }` → `{ ok, state }` (`not_joined` → `lobby`, idempotent; 401 `unauthorized` for an unknown token, 400 `invalid_body` if the notice was not accepted) |
 
 Everything else for students goes over WS.
 

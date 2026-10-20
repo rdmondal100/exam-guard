@@ -8,8 +8,8 @@ import { ManualIpForm } from './ManualIpForm';
 
 type Found = Extract<ProbeResult, { ok: true }>;
 
-/** Student "Find exam" screen: mDNS list plus manual IP. Joining arrives in M11. */
-export function FindExamScreen() {
+/** Student "Find exam" screen: mDNS list plus manual IP. Continue hands the pinned host on. */
+export function FindExamScreen({ onContinue }: { onContinue: (host: Found) => void }) {
   const hosts = useDiscovery();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +58,7 @@ export function FindExamScreen() {
               ? 'This computer matches what the teacher announced.'
               : 'Check that this code matches the one on the teacher screen before you continue.'}
           </p>
-          <Button disabled>Continue (joining comes next)</Button>
+          <Button onClick={() => onContinue(found.host)}>Continue</Button>
         </section>
       )}
     </main>

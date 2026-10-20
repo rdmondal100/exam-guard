@@ -9,4 +9,6 @@ export const IPC = {
   stopDiscovery: 'discovery:stop',
   discoveryHosts: 'discovery:hosts',
   probeHost: 'discovery:probe',
+  joinExam: 'join:attempt',
+  confirmJoin: 'join:confirm',
 } as const;

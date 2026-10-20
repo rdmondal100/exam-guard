@@ -32,7 +32,7 @@ Main restarts the server on exit with backoff (1 s, 2 s, 5 s, then every 10 s). 
 - **Teacher UI → server:** loopback only, plain HTTP. The token is random per app launch, passed from main to the utilityProcess and to preload. Never bound to the LAN.
 - **WebRTC:** peer-to-peer on the LAN using host candidates only (no STUN/TURN, no internet). Signaling is relayed over the existing WS connections.
 - **Firewall:** the installer adds program-based inbound rules (TCP + UDP) for `ExamGuard.exe` on Teacher installs only. Student PCs make outbound connections only. ICE checks from the student side open the stateful path.
-- **Limits:** WS max frame 512 KB (screenshots are chunked if larger). Per-token rate limits on saves/events, and per-IP rate limits on `/join` (5/min). Every inbound frame passes `safeParse` against `packages/shared`.
+- **Limits:** WS max frame 512 KB (screenshots are chunked if larger). Per-token rate limits on saves/events, and a per-IP limit on `/join` that counts failed tries only (5 wrong PINs or unknown IDs per minute, then 429 `rate_limited` with `retryAfterSec`), so a lab behind one address is not throttled. Every inbound frame passes `safeParse` against `packages/shared`.
 
 ## 3. Monitoring agent (Rust)
 
