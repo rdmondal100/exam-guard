@@ -1,8 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { SessionStatus, StudentQuestion } from '@examguard/shared';
+import { ANSWER_TEXT_KEY, answeredIds, getAnswer, useAnswerStore } from '@/lib/answerStore';
+import { pickLanguage } from '@/lib/languages';
+import { CodeAnswer } from './CodeAnswer';
 import { ExamTimer } from './ExamTimer';
 import { LINK_TEXT } from './LobbyScreen';
 import { QuestionNav } from './QuestionNav';
+import { WrittenAnswer } from './WrittenAnswer';
 
 interface Props {
   name: string;
@@ -13,19 +17,26 @@ interface Props {
 }
 
 /**
- * The exam window: question list, a written answer box, the server timer, the connection state
- * and a monitoring badge. Answers are kept in memory only; autosave arrives with M16 and the
- * code editor with M14.
+ * The exam window: question list, the answer area (Monaco with one buffer per language for code
+ * questions, a text box for written ones), the server timer, the connection state and a
+ * monitoring badge. Answers are kept in memory only; autosave arrives with M16.
  */
 export function ExamScreen({ name, examTitle, questions, deadline, status }: Props) {
   const [selectedId, setSelectedId] = useState(questions[0]?.id ?? '');
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const answers = useAnswerStore((s) => s.answers);
+  const languages = useAnswerStore((s) => s.languages);
+  const setAnswer = useAnswerStore((s) => s.setAnswer);
+  const setLanguage = useAnswerStore((s) => s.setLanguage);
   const question = questions.find((q) => q.id === selectedId) ?? questions[0];
-  const answered = useMemo(
-    () => new Set(Object.entries(answers).flatMap(([id, text]) => (text.trim() ? [id] : []))),
-    [answers],
-  );
+  const languageOf = (q: StudentQuestion) =>
+    q.type === 'code' ? pickLanguage(q.allowedLanguages, languages[q.id]) : undefined;
+  const keyOf = (id: string) => {
+    const q = questions.find((x) => x.id === id);
+    return (q && languageOf(q)) ?? ANSWER_TEXT_KEY;
+  };
+  const answered = answeredIds(answers, keyOf);
   const linkOk = status.link === 'connected';
+  const language = question ? languageOf(question) : undefined;
 
   return (
     <div className="flex h-screen flex-col">
@@ -69,15 +80,28 @@ export function ExamScreen({ name, examTitle, questions, deadline, status }: Pro
                 {question.studentNote}
               </p>
             )}
-            <label className="flex flex-1 flex-col gap-1 text-sm font-medium">
-              Your answer
-              <textarea
-                value={answers[question.id] ?? ''}
-                onChange={(e) => setAnswers({ ...answers, [question.id]: e.target.value })}
-                className="min-h-48 flex-1 resize-none rounded-md border p-3 font-mono text-sm font-normal"
-                spellCheck={false}
+            {language ? (
+              <CodeAnswer
+                questionId={question.id}
+                allowed={question.allowedLanguages}
+                language={language}
+                value={getAnswer(answers, question.id, language)}
+                onLanguage={(l) => setLanguage(question.id, l)}
+                onChange={(v) => setAnswer(question.id, language, v)}
               />
-            </label>
+            ) : (
+              <>
+                {question.type === 'code' && (
+                  <p className="text-sm text-muted">
+                    No language is set for this question. Write your answer below.
+                  </p>
+                )}
+                <WrittenAnswer
+                  value={getAnswer(answers, question.id, ANSWER_TEXT_KEY)}
+                  onChange={(v) => setAnswer(question.id, ANSWER_TEXT_KEY, v)}
+                />
+              </>
+            )}
           </main>
         ) : (
           <main className="p-6">This exam has no questions.</main>
