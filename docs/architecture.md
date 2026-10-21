@@ -31,7 +31,7 @@ Main restarts the server on exit with backoff (1 s, 2 s, 5 s, then every 10 s). 
   - the pinned fingerprint is stored with the student's session, so a reconnect to a different cert is refused.
 - **Teacher UI → server:** loopback only, plain HTTP. The token is random per app launch, passed from main to the utilityProcess and to preload. Never bound to the LAN. HTTP calls send it in the `X-Teacher-Token` header; the WebSocket (`/ws`) takes it as `?token=` because a browser WebSocket cannot set headers.
 - **WebRTC:** peer-to-peer on the LAN using host candidates only (no STUN/TURN, no internet). Signaling is relayed over the existing WS connections.
-- **Firewall:** the installer adds program-based inbound rules (TCP + UDP) for `ExamGuard.exe` on Teacher installs only. Student PCs make outbound connections only. ICE checks from the student side open the stateful path.
+- **Firewall:** the installer adds program-based inbound rules (TCP + UDP) for `ExamGuard.exe` on Teacher installs only. Student PCs make outbound connections only. ICE checks from the student side open the stateful path. During an exam the agent may add temporary internet-off WFP filters that always allow the teacher PC (§3).
 - **Limits:** WS max frame 512 KB (screenshots are chunked if larger). Per-token rate limits on saves/events, and a per-IP limit on `/join` that counts failed tries only (5 wrong PINs or unknown IDs per minute, then 429 `rate_limited` with `retryAfterSec`), so a lab behind one address is not throttled. Every inbound frame passes `safeParse` against `packages/shared`.
 
 ## 3. Monitoring agent (Rust)
@@ -59,16 +59,31 @@ Main restarts the server on exit with backoff (1 s, 2 s, 5 s, then every 10 s). 
 - Join is refused unless the pipe is verified and `systemCheck` passes (helper alive and a test capture is non-black).
 - Monitoring starts on `monitor.start` (sent by the app when the server says the student is Active) and stops on `monitor.stop` (submitted or ended).
 
-**What the agent never does:** close or block apps, change the firewall, network, hosts file or proxy, or install drivers.
+**Internet toggle (WFP, service only)** — milestones M21a/M21b
+- On `net.set {blocked:true, allow}` from the verified app, the service opens a **dynamic** WFP session (`FWPM_SESSION_FLAG_DYNAMIC`) and adds outbound filters on `FWPM_LAYER_ALE_AUTH_CONNECT_V4/V6`: permit loopback, DHCP and the `allow` addresses (the teacher PC from the pinned session, all ports so WebRTC works), block everything else, on all interfaces. Higher-weight permits win over the block.
+- Removal: `net.set {blocked:false}`, `monitor.stop`, service stop, and a **lease**: the app re-sends the current state with every heartbeat; no app contact for 3 minutes removes the filters. A dynamic session's filters disappear by themselves if the service process dies, and on start the service deletes any ExamGuard-tagged persistent filters left by an older build.
+- Every change is reported as `internet_blocked` / `internet_allowed` evidence. If adding filters fails (e.g. group policy), it reports `internet_block_failed` and the dashboard shows that PC as not blocked.
+
+**What the agent never does:** close or block apps, change the hosts file or proxy, add persistent firewall rules, change network adapters, or install drivers. Its only network change is the temporary internet-off filters above.
 
 **Dev:** `eg-agent --console` runs the service logic and the helper in one process in the current user session, without SCM, with the same pipe name. The student app also has a fake agent (`EG_FAKE_AGENT=1`) that sends scripted events.
 
 ## 4. Local code runner (student PC)
-- Lives in Electron main (`apps/desktop/src/main/runner/`). Language definitions are config entries: `{ id, label, fileName(code), compile?: argv[], run: argv[], monacoLanguage }`. Adding Java/Python later means adding a config entry.
-- Toolchains: MinGW-w64 (WinLibs portable, UCRT) under `resources/toolchains/mingw64`, fetched in dev by `scripts/fetch-toolchains`. JS runs `ExamGuard.exe` with `ELECTRON_RUN_AS_NODE=1` (the RunAsNode fuse stays enabled, see progress.md).
-- Work dir: `%LOCALAPPDATA%\ExamGuard\run\<examId>\<questionId>\<lang>\`, wiped before each run. The source is written there.
-- Every compile and run goes through `eg-runner.exe --mem <MB> --time <ms> -- <argv>`. eg-runner creates a Job Object (`JOB_OBJECT_LIMIT_PROCESS_MEMORY`, `ACTIVE_PROCESS` = 8, `KILL_ON_JOB_CLOSE`), starts the child suspended, assigns it to the job, resumes it, forwards stdio and enforces wall time. Its exit code encodes the reason (OK / TLE / MLE / killed). Node enforces the 64 KB output cap and Stop (kills eg-runner, and the job dies with it).
-- One run at a time, with a 2 s cooldown. gcc output is parsed (`file:line:col: error|warning: msg`) into Monaco markers. Each run produces a `run_executed` event.
+- Lives in Electron main (`apps/desktop/src/main/runner/`). Language definitions are config entries: `{ id, label, fileName(code), compile?: argv[], run: argv[], monacoLanguage }`. Adding Python (M15d) or Java (Stage 2) means adding a config entry.
+- Toolchains: MinGW-w64 (WinLibs portable, UCRT, gcc 16.2, pinned URL + SHA-256) under `apps/desktop/resources/toolchains/mingw64`, fetched in dev by `pnpm fetch-toolchains` (`scripts/fetch-toolchains.mjs`). JS runs `ExamGuard.exe` with `ELECTRON_RUN_AS_NODE=1` (the RunAsNode fuse stays enabled, see progress.md). Dev overrides `EG_RUNNER_PATH` / `EG_MINGW_DIR` (ignored when packaged).
+- gcc passes `default-manifest.o` to the linker unquoted, so a MinGW folder with spaces breaks linking. C/C++ compile with `-specs=eg.specs`, a copy of the pinned gcc's `endfile` spec without the `%:if-exists`, written into the work dir (`runner/gcc-specs.ts`). Re-check it when the toolchain changes.
+- Work dir: `%LOCALAPPDATA%\ExamGuard\run\<examStudentId>\<questionId>\<lang>\`, wiped before each run. The source (and `eg.specs`) is written there and commands run with it as cwd. `examStudentId` is unique per exam and student, and is what the student's main knows.
+- Every compile and run goes through `eg-runner.exe --mem <MB> --time <ms> [--procs N] --report <file> -- <argv>`. eg-runner creates a Job Object (`JOB_OBJECT_LIMIT_PROCESS_MEMORY`, `ACTIVE_PROCESS` = 8, `KILL_ON_JOB_CLOSE`, `DIE_ON_UNHANDLED_EXCEPTION`, no crash dialog), starts the child suspended, assigns it to the job, resumes it, passes its stdio through and enforces wall time. Limit hits come from the job's completion port. Its exit code encodes the reason: 0 ran, 10 time, 11 memory, 12 process limit, 20 could not start, 2 bad arguments. The `--report` JSON adds what the exit code can't carry: `{reason, exitCode, timeMs, peakMemMb, error}`. A process-limit hit wins over the time limit (a fork loop usually runs into both). Node enforces the 64 KB output cap (stdout + stderr) and Stop (kills eg-runner, and the job dies with it).
+- Limits: run 5 s / 256 MB; compile 15 s / 1024 MB; 8 processes; 64 KB output (`RUN_LIMITS` in `packages/shared`). Under the memory limit an allocation fails (C `malloc` returns NULL, C++ throws), and the run is reported as `memory_limit`.
+- One run at a time, with a 2 s gap after the previous run ends. Main refuses a run unless the exam is `running` and the language is allowed for that code question. gcc output is parsed (`file:line:col: error|warning|note: msg`, student file only) into Monaco markers. Each run produces a `run_executed` event (`{questionId, language, status, exitCode, timeMs}`).
+
+**Exam terminal and workspace** — milestones M15a–M15d (details are fixed by the M15a spike)
+- Per student exam: `%LOCALAPPDATA%\ExamGuard\run\<examStudentId>\workspace\` holds installed packages (`node_modules`, Python `site-packages` via `pip --target`, MSYS2 user packages) and survives between runs. Per-run folders stay next to it and are still wiped per run.
+- Terminal: node-pty (ConPTY) spawns PowerShell as the student user in the workspace, with PATH = bundled tools first (MinGW trimmed to C/C++ + MSYS2, Node/npm, Python/pip). `node`/`npm` run on Electron through a `node.cmd` shim (`ExamGuard.exe` with `ELECTRON_RUN_AS_NODE=1`), so no separate Node is bundled. The pty lives in student main; the renderer's xterm.js view gets bytes over IPC only. Every process started from it is in one Job Object (memory cap, `KILL_ON_JOB_CLOSE`); turning the terminal off or ending the exam closes the job.
+- It exists only while the server's `state.terminal` says it is on. Each submitted line (Enter in the pty input) is sent as a `terminal_command` event; the transcript (input + output, capped) is uploaded for the teacher. Lines from known installers (`npm i`, `pip install`, `pacman -S`) also produce `package_installed`.
+- Runs (M15c): compile/run commands add workspace include/lib paths, `NODE_PATH` and `PYTHONPATH`, plus the student's own flags. GUI mode keeps the Job Object limits except the wall time (teacher-configurable), and shows the window normally.
+- Language added in Stage 1: Python (a CPython build with tkinter + pip), as a runner config entry and a `QUESTION_LANGUAGES` value. Java (trimmed JDK, jars from `workspace/lib`) is Stage 2.
+- Bundle size (2026-10-21, measured on the dev PC): Electron runtime 369 MB; WinLibs MinGW unpacked 947 MB, trimmed to C/C++ in `fetch-toolchains` (estimate 400–500 MB). Estimated totals: about 0.9–1.1 GB installed, 300–400 MB installer download. One installer always contains everything.
 
 ## 5. Screens: thumbnails and live view
 - **Capture** happens in student Electron main with `desktopCapturer` (`types: ['screen']`) for the whole screen. The helper's screenshots are only for events.
@@ -115,4 +130,7 @@ GradingProvider { id; gradeAnswer(input: GradingInput, opts): Promise<ProviderRe
 | papaparse | Robust CSV import (quotes, BOM, Excel exports) |
 | vitest | Unit/integration tests across packages |
 | electron-builder (NSIS) | Windows installer with custom pages, service and firewall steps |
+| node-pty + @xterm/xterm | Exam terminal (ConPTY) and the interactive program console |
+| WinLibs MinGW (C/C++ only) + MSYS2 pacman, CPython with tkinter + pip, npm | Bundled runtimes and package managers for the student workspace |
+| Rust: windows (`Win32_NetworkManagement_WindowsFilteringPlatform`) | Temporary internet-off filters in the agent service |
 | Rust: windows, windows-service, tokio, jpeg-encoder, aes-gcm, tracing | Win32 access, SCM integration, async pipes, light JPEG encoding, buffer encryption, logs |

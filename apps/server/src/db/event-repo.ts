@@ -16,11 +16,13 @@ export interface NewEvent {
 export class EventRepo {
   constructor(private readonly db: Db) {}
 
-  insert(event: NewEvent): void {
-    this.db
+  /** Returns `false` when an event with the same dedupe key is already stored. */
+  insert(event: NewEvent): boolean {
+    const result = this.db
       .prepare(
         `INSERT INTO events (exam_id, exam_student_id, type, severity, server_ts, client_ts,
-           details_json, source, dedupe_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           details_json, source, dedupe_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (dedupe_key) DO NOTHING`,
       )
       .run(
         event.examId,
@@ -33,5 +35,6 @@ export class EventRepo {
         event.source,
         event.dedupeKey ?? null,
       );
+    return result.changes > 0;
   }
 }

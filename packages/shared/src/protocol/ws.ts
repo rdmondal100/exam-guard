@@ -33,7 +33,27 @@ export type Hello = z.infer<typeof HelloSchema>;
 export const PingSchema = z.object({ t: z.literal('ping'), clientSent: z.number() });
 export type Ping = z.infer<typeof PingSchema>;
 
-export const StudentMessageSchema = z.discriminatedUnion('t', [HelloSchema, PingSchema]);
+/** Event types the student app reports itself. Agent evidence types join with monitoring. */
+export const APP_EVENT_TYPES = ['run_executed'] as const;
+export const AppEventTypeSchema = z.enum(APP_EVENT_TYPES);
+export type AppEventType = z.infer<typeof AppEventTypeSchema>;
+
+export const EventReportSchema = z.object({
+  t: z.literal('event'),
+  id: z.string().min(1).max(100),
+  /** Unique per event; the server stores a key once, so a resend is harmless. */
+  dedupeKey: z.string().min(1).max(200),
+  clientTs: z.number(),
+  type: AppEventTypeSchema,
+  details: z.record(z.string(), z.unknown()),
+});
+export type EventReport = z.infer<typeof EventReportSchema>;
+
+export const StudentMessageSchema = z.discriminatedUnion('t', [
+  HelloSchema,
+  PingSchema,
+  EventReportSchema,
+]);
 export type StudentMessage = z.infer<typeof StudentMessageSchema>;
 
 // ---- server → student ----
@@ -85,10 +105,15 @@ export const WsErrorSchema = z.object({
 });
 export type WsError = z.infer<typeof WsErrorSchema>;
 
+/** The event is stored (or was already). */
+export const EventAckSchema = z.object({ t: z.literal('event.ack'), id: z.string() });
+export type EventAck = z.infer<typeof EventAckSchema>;
+
 export const ServerToStudentSchema = z.discriminatedUnion('t', [
   WelcomeSchema,
   StateUpdateSchema,
   PongSchema,
+  EventAckSchema,
   WsErrorSchema,
 ]);
 export type ServerToStudent = z.infer<typeof ServerToStudentSchema>;

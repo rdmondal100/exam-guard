@@ -109,6 +109,30 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Accept:** an infinite loop is stopped at 5 s, a 1 GB allocation at 256 MB, and output is capped at 64 KB, each with a clear message. A compile error underlines the line. Fork bombs are contained (process limit).
 - **Manual test:** run hello world in C, C++ and JS, then try `while(1);`, a big malloc, printing in a loop, and a syntax error.
 
+### M15a SPIKE — Exam terminal (node-pty + xterm.js)
+- **Goal:** prove a real terminal works in the student window and that packages install without admin rights.
+- **Touches:** node-pty (ConPTY) in student main (native module under Electron 44: prebuilt or rebuild), xterm.js tab under the editor, IPC stream main ↔ renderer (no Node in renderer), workspace `%LOCALAPPDATA%\ExamGuard\run\<examStudentId>\workspace`, PATH with the bundled tools, the terminal's processes in a Job Object (killed on close), MSYS2 `pacman` alongside WinLibs (or MSYS2's own UCRT gcc instead, decided here), bundled `npm` with a `node` shim (`node.cmd` → ExamGuard.exe as Node), **MinGW trimmed to C/C++** in `fetch-toolchains` (drop Fortran/Objective-C/Ada/docs; keep gcc, g++, binutils) with the size recorded.
+- **Accept:** in a dev run, `npm i lodash` and `pacman -S mingw-w64-ucrt-x86_64-freeglut` work as a standard user; a GLUT program builds from the terminal; closing the terminal kills a running `ping -t`. Result and the toolchain choice recorded in progress.md.
+- **Manual test:** open the terminal in an exam, install one npm package and one pacman library, build and run a small program, close the terminal.
+
+### M15b Teacher terminal toggle + command logging
+- **Goal:** the teacher turns the exam terminal on/off (optionally "for N minutes"); every command is logged.
+- **Touches:** shared `state.terminal` (`{enabled, until}`), `POST /exams/:id/actions {type:'terminal', enabled, minutes?}` + `teacher_actions`, server timer for the window (server time), dashboard toggle with countdown, student main enforces it, `terminal_opened|terminal_closed|terminal_command|package_installed` events, transcript storage + teacher view.
+- **Accept:** turning it off mid-command closes the terminal and kills its processes within 1 s; the "N minutes" window closes on time; late joiners get the current state; every command line appears as an event.
+- **Manual test:** turn on for 2 minutes from the teacher, run commands on the laptop, watch the events and the auto-off.
+
+### M15c Workspace runs, own flags, GUI mode, interactive console
+- **Goal:** Run builds against what the student installed, accepts their flags, can run window programs, and supports step-by-step input.
+- **Touches:** runner config: workspace include/lib paths, `node_modules`, extra flags per answer (stored with the answer, shown in the run panel), GUI run mode (window allowed, longer configurable limit, Stop), xterm.js program console with interactive stdin, `run_executed` details include mode and flags.
+- **Accept:** an OpenGL/GLUT window program and a graphics.h program run from Run; an interactive `scanf` loop works in the console; console runs still meet the M15 limits.
+- **Manual test:** install freeglut (M15a), run a spinning-cube program in GUI mode and Stop it; run a menu-driven C program interactively.
+
+### M15d Python runtime + pip
+- **Goal:** Python 3 as an allowed language with `pip` installs into the workspace.
+- **Touches:** a Python 3 build **with tkinter** (e.g. python-build-standalone, not the embeddable zip) fetched by `fetch-toolchains`, pip bootstrap, `QUESTION_LANGUAGES` + runner config + Monaco, workspace `site-packages` on `PYTHONPATH`, question editor checkbox.
+- **Accept:** `pip install numpy` in the terminal, then a NumPy program runs from Run; a matplotlib window works in GUI mode; Python runs meet the limits.
+- **Manual test:** a Python question with numpy and a matplotlib plot.
+
 ### M16 Autosave + versions
 - **Goal:** answers autosave to the server as versions.
 - **Touches:** migration (answer_versions), `answer.save`/`answer.ack`, `answer.select`, batched writer (250 ms/200 rows), student autosave scheduler (10 s on change + Run/switch/submit triggers).
@@ -149,6 +173,18 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** `agent/.../pipe.rs` (peer verification), shared pipe schemas, `apps/desktop/main/agent-client.ts` + fake agent (`EG_FAKE_AGENT=1`), system-check screen, `/join` enforcement, `agent.status` WS message.
 - **Accept:** join is refused with the agent stopped (admin-stopped) or the helper missing. A fake client process (e.g. PowerShell pipe client) is rejected.
 - **Manual test:** on the laptop, stop the service as admin → the join screen shows "Monitoring agent not running". Start it → join works.
+
+### M21a SPIKE — Internet block with WFP (laptop only)
+- **Goal:** the agent service blocks outbound internet while keeping the teacher PC reachable, and can never leave the PC offline.
+- **Touches:** `agent/eg-agent` WFP code (dynamic session, permit loopback/DHCP/teacher address, block other outbound on all interfaces), lease timer, cleanup on service start/stop, a CLI test switch in `--console` mode.
+- **Accept:** with filters on, a browser and `curl https://example.com` fail while the exam (HTTPS/WSS to the teacher) keeps working; killing the service process restores internet at once; the lease restores it after the app goes silent. Run **only on the second laptop** (manual, admin).
+- **Manual test:** as above, plus reboot the laptop mid-block → internet is back after boot.
+
+### M21b Teacher internet toggle
+- **Goal:** the teacher turns student internet off/on per exam from the dashboard.
+- **Touches:** shared `state.internet`, `POST /exams/:id/actions {type:'internet', enabled}` + `teacher_actions`, pipe `net.set {blocked, allow}` (teacher address from the pinned session), app relays on welcome/state, removal on submit/end/`monitor.stop`, `internet_blocked|internet_allowed` events, dashboard toggle with "applied on N of M PCs".
+- **Accept:** toggling off blocks internet on the laptop within 2 s and the event shows; ending the exam or submitting restores it; a late joiner gets the current state; the fake agent (`EG_FAKE_AGENT=1`) acknowledges without touching the network.
+- **Manual test:** laptop as student: toggle off → browser fails, exam still works; toggle on → browser works; end exam while off → internet returns.
 
 ### M22 Focus tracking, outside time, screenshots → events
 - **Goal:** switches away from ExamGuard produce events with screenshots following the policy (switch, title change, every 20 s, ≥5 s gap).
@@ -304,15 +340,15 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Manual test:** move to another drive and restart. Set retention to 0 days on a test exam.
 
 ### M45 Installer: build + install type
-- **Goal:** electron-builder NSIS installer with a Teacher/Student page and a silent `/TYPE=student|teacher`, bundling MinGW, eg-runner and eg-agent.
+- **Goal:** electron-builder NSIS installer with a Teacher/Student page and a silent `/TYPE=student|teacher`, bundling MinGW (C/C++ only) + MSYS2 pacman, npm, Python + pip, node-pty, eg-runner and eg-agent. One installer always contains everything.
 - **Touches:** `apps/desktop/electron-builder.yml`, `build/installer.nsh`, registry `InstallType`, fuses config (RunAsNode kept on, see progress.md).
-- **Accept:** a student install hides Teacher mode. A silent install works from an admin cmd.
+- **Accept:** a student install hides Teacher mode. A silent install works from an admin cmd. Installer and installed sizes are recorded in progress.md (target download ≤ 450 MB).
 - **Manual test:** install both types on the laptop (uninstalling in between).
 
 ### M46 Installer: service, firewall, uninstall
 - **Goal:** a student install registers and starts the agent service. A teacher install adds the program firewall rules. Uninstall removes everything.
 - **Touches:** NSIS steps calling `eg-agent install/uninstall`, `netsh advfirewall` rules (teacher only), uninstall cleanup (keeps the teacher data folder unless ticked).
-- **Accept:** a fresh standard-user login on a student install → agent running. No firewall changes on student installs (`netsh advfirewall firewall show rule name=all` diff).
+- **Accept:** a fresh standard-user login on a student install → agent running. The installer adds no firewall rules on student installs (`netsh advfirewall firewall show rule name=all` diff); internet-off filters (M21b) exist only during an exam.
 - **Manual test:** fresh-ish laptop install as Student, dev PC as Teacher, full join.
 
 ### M47 Load test: 200 simulated students
@@ -335,4 +371,4 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 ---
 
 ## Stage 2 (not broken down)
-Java and Python support (first) · code typing replay · similarity/plagiarism check · optional strict mode · VM/remote-desktop/USB detection · app integrity/tamper checks · PDF reports and releasing results to students · question bank · MCQ questions · more AI providers (OpenAI) · multiple teachers/admin role · analytics across exams · interactive terminal (xterm.js) · plus any [D] milestones deferred at the checkpoint.
+Java support (trimmed JDK, jars in `workspace/lib`) · code typing replay · similarity/plagiarism check · optional strict mode · per-student internet/terminal toggles · package cache on the teacher PC for labs without internet · VM/remote-desktop/USB detection · app integrity/tamper checks · PDF reports and releasing results to students · question bank · MCQ questions · more AI providers (OpenAI) · multiple teachers/admin role · analytics across exams · plus any [D] milestones deferred at the checkpoint. (Python and the interactive terminal moved into Phase 3 on 2026-10-21; Java stays here.)

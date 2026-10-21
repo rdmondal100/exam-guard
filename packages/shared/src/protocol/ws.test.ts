@@ -132,3 +132,27 @@ describe('state update', () => {
     ).toBe(false);
   });
 });
+
+describe('events', () => {
+  const event = {
+    t: 'event',
+    id: 'e1',
+    dedupeKey: 'app:e1',
+    clientTs: 1,
+    type: 'run_executed',
+    details: { language: 'c', status: 'ok' },
+  };
+
+  it('accepts an app event and its ack', () => {
+    expect(StudentMessageSchema.safeParse(event).success).toBe(true);
+    expect(ServerToStudentSchema.safeParse({ t: 'event.ack', id: 'e1' }).success).toBe(true);
+  });
+
+  it.each([
+    { ...event, type: 'focus_lost' },
+    { ...event, dedupeKey: '' },
+    { ...event, details: 'x' },
+  ])('rejects %j', (message) => {
+    expect(StudentMessageSchema.safeParse(message).success).toBe(false);
+  });
+});

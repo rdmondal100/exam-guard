@@ -15,6 +15,7 @@ let clients: ServerSocket[];
 let frames: unknown[];
 let skew: number;
 let welcomeWith: 'welcome' | { closeCode: number };
+let ackEvents: boolean;
 
 beforeAll(async () => {
   const pems = await generate([{ name: 'commonName', value: 'ExamGuard' }], {
@@ -28,11 +29,17 @@ beforeAll(async () => {
   wss.on('connection', (socket) => {
     clients.push(socket);
     socket.on('message', (data) => {
-      const message = JSON.parse(data.toString()) as { t: string; clientSent?: number };
+      const message = JSON.parse(data.toString()) as {
+        t: string;
+        clientSent?: number;
+        id?: string;
+      };
       frames.push(message);
       if (message.t === 'hello') {
         if (welcomeWith !== 'welcome') return socket.close(welcomeWith.closeCode, 'no');
         socket.send(JSON.stringify({ t: 'welcome', serverTime: Date.now() + skew, state: STATE }));
+      } else if (message.t === 'event' && ackEvents) {
+        socket.send(JSON.stringify({ t: 'event.ack', id: message.id }));
       } else if (message.t === 'ping') {
         socket.send(
           JSON.stringify({
@@ -70,6 +77,7 @@ beforeEach(() => {
   frames = [];
   skew = 0;
   welcomeWith = 'welcome';
+  ackEvents = true;
   statuses = [];
   client = new SessionClient({
     onStatus: (s) => statuses.push(s),
@@ -198,5 +206,38 @@ describe('SessionClient exam state', () => {
       deadline: 123_456,
       locked: false,
     });
+  });
+});
+
+describe('SessionClient events', () => {
+  interface Sent {
+    t: string;
+    id: string;
+    dedupeKey: string;
+    type: string;
+    details: object;
+  }
+  const events = () => (frames as Sent[]).filter((f) => f.t === 'event');
+
+  it('holds an event until welcome, then sends it', async () => {
+    client.sendEvent('run_executed', { status: 'ok' });
+    client.start(target(), TOKEN);
+    await until(() => events().length === 1);
+    expect(events()[0]).toMatchObject({ type: 'run_executed', details: { status: 'ok' } });
+    expect(events()[0]?.dedupeKey).toBe(events()[0]?.id);
+  });
+
+  it('re-sends an unacked event after a reconnect, and not an acked one', async () => {
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    client.sendEvent('run_executed', { n: 1 });
+    await until(() => events().length === 1);
+    ackEvents = false;
+    client.sendEvent('run_executed', { n: 2 });
+    await until(() => events().length === 2);
+    for (const c of clients) c.terminate();
+    await until(() => events().length === 3);
+    expect(events()[2]?.details).toEqual({ n: 2 });
+    expect(events()[2]?.id).toBe(events()[1]?.id);
   });
 });

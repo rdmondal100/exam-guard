@@ -1,12 +1,18 @@
+import { randomUUID } from 'node:crypto';
 import WebSocket from 'ws';
 import {
   PROTOCOL_VERSION,
   STUDENT_PING_MS,
   ServerToStudentSchema,
   WS_CLOSE,
+  type AppEventType,
+  type EventReport,
   type SessionState,
   type SessionStatus,
 } from '@examguard/shared';
+
+/** Unacked events kept in memory; the oldest are dropped past this. The disk queue is M17. */
+export const MAX_PENDING_EVENTS = 500;
 import { PinError, connectPinned, type PinnedTarget } from './tls-pin.js';
 
 /** 0.5 s → 5 s doubling, with jitter so 200 students do not reconnect in step. */
@@ -45,8 +51,39 @@ export class SessionClient {
   private bestRtt = Infinity;
   private generation = 0;
   private exam: SessionState | null = null;
+  private welcomed: WebSocket | null = null;
+  /** Sent events waiting for `event.ack`, in send order. */
+  private readonly pending = new Map<string, EventReport>();
 
   constructor(private readonly deps: SessionClientDeps) {}
+
+  /** The latest exam state, or `null` before the first welcome. */
+  get examState(): SessionState | null {
+    return this.exam;
+  }
+
+  /** Reports an app event. It is re-sent after every reconnect until the server acks it. */
+  sendEvent(type: AppEventType, details: Record<string, unknown>): void {
+    const id = randomUUID();
+    const event: EventReport = {
+      t: 'event',
+      id,
+      dedupeKey: id,
+      clientTs: Date.now(),
+      type,
+      details,
+    };
+    this.pending.set(id, event);
+    if (this.pending.size > MAX_PENDING_EVENTS) {
+      const oldest = this.pending.keys().next().value;
+      if (oldest !== undefined) this.pending.delete(oldest);
+    }
+    if (this.welcomed) this.sendFrame(this.welcomed, event);
+  }
+
+  private sendFrame(ws: WebSocket, frame: object): void {
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(frame));
+  }
 
   /** Starts (or restarts) the session. The token never leaves main. */
   start(target: PinnedTarget, token: string): void {
@@ -65,6 +102,7 @@ export class SessionClient {
     this.generation += 1;
     this.target = null;
     this.clearTimers();
+    this.welcomed = null;
     this.socket?.removeAllListeners();
     this.socket?.terminate();
     this.socket = null;
@@ -141,6 +179,10 @@ export class SessionClient {
       this.emit('connected');
       this.pingTimer = setInterval(() => this.ping(ws), this.deps.pingMs ?? STUDENT_PING_MS);
       this.ping(ws);
+      this.welcomed = ws;
+      for (const event of this.pending.values()) this.sendFrame(ws, event);
+    } else if (message.t === 'event.ack') {
+      this.pending.delete(message.id);
     } else if (message.t === 'state') {
       if (!this.exam) return;
       this.exam = { ...this.exam, ...message.state };
@@ -167,6 +209,7 @@ export class SessionClient {
     if (generation !== this.generation) return;
     this.clearTimers();
     this.socket = null;
+    this.welcomed = null;
     const final = FINAL[code];
     if (final) return this.emit('failed', final);
     this.retry(generation);

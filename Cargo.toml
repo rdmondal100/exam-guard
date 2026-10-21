@@ -10,6 +10,7 @@ publish = false
 [workspace.dependencies]
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+windows-sys = "0.61"
 
 [workspace.lints.clippy]
 unwrap_used = "deny"

@@ -7,6 +7,8 @@ import {
   JoinResultSchema,
   ProbeRequestSchema,
   ProbeResultSchema,
+  RunRequestSchema,
+  RunResultSchema,
   ServerConnectionSchema,
   ServerStatusSchema,
   SessionStateSchema,
@@ -73,6 +75,11 @@ const api: ExamGuardApi = {
     };
     ipcRenderer.on(IPC.sessionExam, handler);
     return () => ipcRenderer.removeListener(IPC.sessionExam, handler);
+  },
+  runCode: async (request) =>
+    RunResultSchema.parse(await ipcRenderer.invoke(IPC.runCode, RunRequestSchema.parse(request))),
+  stopRun: async () => {
+    await ipcRenderer.invoke(IPC.stopRun);
   },
 };
 

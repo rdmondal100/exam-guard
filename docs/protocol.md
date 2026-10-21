@@ -98,7 +98,8 @@ type ServerNotice  = { t:'notice'; level:'info'|'warn'|'error'; text:string }   
 Teacher actions go over HTTP so they're easy to retry and audit. Their effects arrive as `roster`/`alert` updates.
 
 ### Auth, limits and close codes (built in M12)
-- Student `hello` must be the first frame, within 5 s. `ping` before `hello`, a non-JSON frame or an unknown `t` closes the socket. Max frame 512 KB. Only `hello` and `ping` exist so far; the rest of the student messages above arrive with their milestones.
+- Student `hello` must be the first frame, within 5 s. `ping` or `event` before `hello`, a non-JSON frame or an unknown `t` closes the socket. Max frame 512 KB. Built so far: `hello`, `ping`, `event` (M15); the rest of the student messages above arrive with their milestones.
+- `event` (M15): `type` is limited to the app's own types (`APP_EVENT_TYPES`, now only `run_executed`); agent evidence types join with monitoring. The server stores it with source `app`, severity `low` until the classifier exists, and dedupe key `app:<dedupeKey>` (the client uses the event id). A repeated key is not stored again but is still answered with `event.ack`. The client keeps unacked events in memory and re-sends them after each `welcome` (the disk queue is M17).
 - Student close codes: `4400` bad or missing hello, `4401` unknown token or wrong exam, `4426` protocol major mismatch, `4409` replaced by a newer socket of the same student, `4503` not hosting (hosting stopped). The student client does not retry after 4401, 4426 or 4409; it retries everything else with backoff.
 - `welcome.state` (M13): `examState` is the real exam state. While `hosting`: `deadline` null, no `questions`. While `running`: `deadline` is the shared end time, `questions` is the `QuestionForStudent` list, and a student still in `lobby` (late joiner) becomes `active`. `saved` is empty and `monitoring` false until their milestones.
 - On `POST /start` the server sends every connected student `{t:'state', state}` with the same fields (full state for now). Students not connected get the same data in their next `welcome`.
@@ -137,5 +138,9 @@ type GEvidence     = { t:'evidence'; seq:number; evidenceSeq:number; ts:number;
 type GError        = { t:'error'; seq:number; code:string; message:string }
 ```
 - The agent replays all un-acked evidence (in `evidenceSeq` order) after every `hello` while monitoring is active. The app turns each item into an `event` WS message with `dedupeKey = deviceId:evidenceSeq`.
+
+### Planned additions (2026-10-21; schemas are written in their milestones)
+- **M15b terminal:** `SessionState.terminal = { enabled:boolean; until:number|null }` (server time); teacher `POST /exams/:id/actions {type:'terminal', enabled, minutes?}`; app events `terminal_opened`, `terminal_closed`, `terminal_command {line}`, `package_installed {manager: npm|pip|pacman, packages}`; transcript upload for the teacher view.
+- **M21b internet:** `SessionState.internet = 'allowed'|'blocked'`; teacher `POST /exams/:id/actions {type:'internet', enabled}`; pipe app → agent `{ t:'net.set'; seq; blocked:boolean; allow:string[] }` (re-sent with each heartbeat ack as the lease); evidence kinds `internet_blocked`, `internet_allowed`, `internet_block_failed`.
 - Severity isn't decided by the agent. The server classifies `kind` + `exe`/`title` against the exam's monitoring settings.
 - Heartbeat timing and the lock rule: architecture §3.
