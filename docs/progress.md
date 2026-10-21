@@ -5,8 +5,8 @@ Read this first every session. Update it at the end of every session.
 ## Current status
 - **Stage:** 1
 - **Phase:** 2 — Exam setup & joining
-- **Current milestone:** M13 done and manually tested (M02–M13, 2026-10-21). **Phase 2: accepted** (see "Phase 2 review" below). M14 is next, not started.
-- **Next step:** start M14 (Monaco + per-language code buffers). A plan was drafted in the 2026-10-21 session and is waiting for the user's OK.
+- **Current milestone:** M14 built, automated checks pass, manual check pending. Phase 2 accepted.
+- **Next step:** run the M14 manual test, then start M15 (code run). 
 
 ## Completed milestones
 Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
@@ -24,6 +24,7 @@ Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
 - M11 Student join + monitoring notice — 2026-10-20 — `0005_exam_students` (+ events, teacher_actions), `/join` + `/join/confirm`, one session per student with duplicate-login rejection, student ID/PIN, name and notice screens; manual check passed 2026-10-21.
 - M12 WebSocket session, lobby, student-sim v1 — 2026-10-20 — student `wss /ws` (hello/welcome, ping/pong, 15 s idle drop, connected flag), teacher `ws /ws?token=` roster + counts with 250 ms batching, `SessionHub`, pinned `SessionClient` in student main, lobby screen, live hosting panel, `tools/student-sim`; 200 sim students connect in about 1.4 s; manual check passed 2026-10-21.
 - M13 Start + exam client shell — 2026-10-21 — `POST /exams/:id/start` (hosting→running), shared deadline for late joiners, `state` push + welcome with student-safe questions, fullscreen non-closable student window, question nav, written answer box (memory only), server-offset timer; manual check passed 2026-10-21.
+- M14 Monaco + per-language code buffers — 2026-10-21 — Zustand `answers[questionId][language]`, language dropdown limited to allowed languages, "Will submit: X" badge, local-worker Monaco on the student exam screen; manual check pending.
 
 **Update 2026-10-21:** the user ran the manual tests for M02–M13 and reports they pass. The "Done when" line below is therefore treated as met, and Phase 2 is accepted. The details of that run (which machines, which steps) were not recorded; the exceptions are listed under Known issues (M10 cert-mismatch by hand, M02 packaged-build checks).
 
@@ -176,6 +177,10 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - 2026-10-21 — `ExamLock` (main): while the exam state is `running` the window is fullscreen, `close` and `before-quit` are cancelled, and leaving fullscreen is undone. It is not always-on-top. Dev escape hatch: `EG_ALLOW_CLOSE=1` (ignored in a packaged app).
 - 2026-10-21 — Timer = `deadline - (Date.now() + clockOffsetMs)` ticking every 250 ms (`lib/examClock.ts`). The offset comes from the M12 ping/pong estimate.
 
+**M14**
+- 2026-10-21 — Answers live in a Zustand store (`lib/answerStore.ts`): `answers[questionId][language]` for code, `answers[questionId].text` for written. The chosen language is kept per question; `pickLanguage` falls back to the first allowed one. Only the selected language's buffer counts as "answered" in the nav, since that is what will be submitted.
+- 2026-10-21 — Student editor is its own `CodeEditor` (full height, `path = questionId.language` so Monaco keeps a model and undo history per buffer); the teacher `MonacoField` is unchanged apart from sharing `lib/languages.ts`. A single allowed language hides the dropdown but keeps the badge. A code question with no allowed languages falls back to the text box with a notice.
+
 ## Known issues / open questions
 - Confirm with lab IT (before a real exam): admin install rights, antivirus/EDR tolerance of the agent and screen capture, reboot-restore software (e.g. Deep Freeze wipes the local queue on reboot), group policies, and whether students are on one subnet.
 - Check Gemini's current data-use terms and use a paid tier for real student data.
@@ -241,6 +246,9 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - M13: if hosting stops or the teacher server dies while the exam runs, the student's socket reconnects with backoff and the lock stays on, as intended.
 - M13: Windows shutdown/log-off fires `before-quit`, which is cancelled while locked; Windows may still force it. Not handled.
 
+- M14: no UI/component tests (node-only vitest). Tested: answer store (C++→JS→C++ restore, isolation, answered detection) and languages helper. Monaco in the student window, the dropdown and workers are the manual test. The store is not cleared between exams in one app run (question ids are unique, so harmless); autosave/restore after restart is M16.
+- M14: the Monaco bundle is still the full build (see M08 note); trim in M45.
+
 ## Manual recovery checklist (filled in during M48)
 _Empty._
 
@@ -265,3 +273,4 @@ Format: `date — milestone — what was done — tests run — next`.
 - 2026-10-20 — Phase 2 fixes — student join retry countdown (`JoinForm`), Exams list "Hosting now" badge + Stop hosting + "Open" label (`ExamsPage`) — desktop typecheck, eslint, prettier pass; not clicked through — manual tests, then M13.
 - 2026-10-21 — M13 — shared `StudentQuestion`, `StateUpdate`, `StartResult`; server `exams/deadline`, `ExamRepo.startRunning/runningExam/timing`, `ExamStudentRepo.activate*`, `HostingManager.startExam/sessionState`, `SessionHub.broadcast/sendTo`, `POST /exams/:id/start`; desktop `ExamLock`, `SessionClient.onExam`, `session:exam` IPC, `SessionScreen`/`ExamScreen`/`ExamTimer`/`QuestionNav`, `examClock`, Start exam button in `HostingPanel` — full `pnpm test` (310), typecheck, lint, prettier, build pass; app not clicked through — manual test, then M14.
 - 2026-10-21 — Manual tests — user ran the M02–M13 manual tests and reported them passing; docs updated (completed list, status, Phase 2 accepted) — no code or tests run — start M14 when the user approves its plan.
+- 2026-10-21 — M14 — `zustand`, desktop `lib/answerStore`, `lib/languages`, student `CodeAnswer`/`CodeEditor`/`WrittenAnswer`, `ExamScreen` uses the store, `MonacoField` shares language maps — desktop tests (107), typecheck, lint, prettier, build pass; app not clicked through — manual test, then M15.

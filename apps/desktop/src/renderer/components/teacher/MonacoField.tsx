@@ -1,7 +1,8 @@
 import Editor from '@monaco-editor/react';
+import { MONACO_LANGUAGE } from '@/lib/languages';
 import '@/lib/monaco';
 
-const MONACO_LANGUAGE: Record<string, string> = { c: 'c', cpp: 'cpp', js: 'javascript' };
+const MONACO_BY_ID: Record<string, string> = MONACO_LANGUAGE;
 
 interface Props {
   value: string;
@@ -15,7 +16,7 @@ export default function MonacoField({ value, language, onChange }: Props) {
     <div className="overflow-hidden rounded-md border border-border">
       <Editor
         height="260px"
-        language={MONACO_LANGUAGE[language] ?? 'plaintext'}
+        language={MONACO_BY_ID[language] ?? 'plaintext'}
         value={value}
         onChange={(next) => onChange(next ?? '')}
         options={{ minimap: { enabled: false }, fontSize: 14, scrollBeyondLastLine: false }}
