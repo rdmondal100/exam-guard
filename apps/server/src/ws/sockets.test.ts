@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import WebSocket from 'ws';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Db } from '../db/connection.js';
 import { initDatabase } from '../db/database.js';
 import type { HostingManager } from '../hosting/hosting-manager.js';
@@ -28,7 +28,7 @@ interface Msg {
   connected?: number;
   clientSent?: number;
   serverTime?: number;
-  state?: { studentState: string; locked: boolean; deadline: number | null };
+  state?: { examState?: string; studentState: string; locked: boolean; deadline: number | null };
 }
 
 let app: FastifyInstance;
@@ -395,5 +395,40 @@ describe('starting the exam', () => {
     await hosting.close();
     await hosting.resume();
     expect(hosting.info(examId)).not.toBeNull();
+  });
+
+  const endExam = () =>
+    app.inject({ method: 'POST', url: `/api/v1/exams/${examId}/end`, headers: HEADERS });
+  const examState = () =>
+    (db.prepare('SELECT state FROM exams WHERE id = ?').get(examId) as { state: string }).state;
+
+  it('lets the teacher end a running exam at any time', async () => {
+    const token = await joinStudent('1');
+    const c = await studentWs();
+    c.ws.send(hello(token));
+    await c.waitFor(() => has(c, 'welcome'));
+    await startExam();
+    await c.waitFor(() => has(c, 'state'));
+    expect((await endExam()).statusCode).toBe(200);
+    expect(examState()).toBe('ended');
+    await c.waitFor(() => last(c, 'state')?.state?.examState === 'ended');
+    expect(last(c, 'state')?.state).toMatchObject({ studentState: 'ended_by_teacher' });
+    expect(hosting.info(examId)).toBeNull();
+    expect((await endExam()).statusCode).toBe(409);
+  });
+
+  it('refuses to end an exam that is not running', async () => {
+    expect((await endExam()).statusCode).toBe(409);
+    expect(examState()).toBe('hosting');
+  });
+
+  it('ends the exam by itself once the deadline has passed', async () => {
+    await startExam();
+    db.prepare('UPDATE exams SET started_at = ? WHERE id = ?').run(
+      Date.now() - 2 * 3_600_000,
+      examId,
+    );
+    await vi.waitFor(() => expect(examState()).toBe('ended'), { timeout: 3000 });
+    expect(hosting.info(examId)).toBeNull();
   });
 });

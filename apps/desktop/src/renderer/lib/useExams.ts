@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { ExamSummary } from '@examguard/shared';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { ExamSummary, ServerConnection } from '@examguard/shared';
 import { createExamApi, type ExamApi } from './examApi';
 
 /** The exams plus an API handle, loaded once the server connection is known. */
 export function useExams() {
-  const [api, setApi] = useState<ExamApi | null>(null);
+  const [connection, setConnection] = useState<ServerConnection | null>(null);
   const [exams, setExams] = useState<ExamSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Derived, not stored in state: a hot reload of examApi.ts then yields the new methods.
+  const api = useMemo(() => (connection ? createExamApi(connection) : null), [connection]);
 
   const refresh = useCallback(async (target: ExamApi) => {
     try {
@@ -21,12 +23,9 @@ export function useExams() {
     let cancelled = false;
     window.examguard
       .getServerConnection()
-      .then(async (connection) => {
-        if (!connection) throw new Error('The exam server is not running');
-        const next = createExamApi(connection);
-        if (cancelled) return;
-        setApi(next);
-        await refresh(next);
+      .then((next) => {
+        if (!next) throw new Error('The exam server is not running');
+        if (!cancelled) setConnection(next);
       })
       .catch((e: unknown) => {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
@@ -34,7 +33,11 @@ export function useExams() {
     return () => {
       cancelled = true;
     };
-  }, [refresh]);
+  }, []);
+
+  useEffect(() => {
+    if (api) void refresh(api);
+  }, [api, refresh]);
 
   return { api, exams, error, reload: () => (api ? refresh(api) : Promise.resolve()) };
 }

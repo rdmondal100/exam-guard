@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type {
   ExamSummary,
   Question,
@@ -86,6 +86,18 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
     await reloadExams();
   };
 
+  const endExam = async () => {
+    await examApi?.end(exam.id);
+    await reloadExams();
+  };
+
+  // The server also ends an exam by itself at the deadline, so keep the state fresh.
+  useEffect(() => {
+    if (exam.state !== 'hosting' && exam.state !== 'running') return;
+    const id = setInterval(() => void reloadExams(), 3000);
+    return () => clearInterval(id);
+  }, [exam.state, reloadExams]);
+
   const stopHosting = async () => {
     await examApi?.stopHosting(exam.id);
     await reloadExams();
@@ -140,7 +152,13 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
               running={exam.state === 'running'}
               onStart={startExam}
               onStop={stopHosting}
+              onEnd={endExam}
             />
+          )}
+          {exam.state === 'ended' && (
+            <p role="status" className="rounded-md border border-border p-4">
+              This exam has ended. Students can no longer join or submit.
+            </p>
           )}
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">Questions</h2>

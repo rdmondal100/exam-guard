@@ -9,14 +9,16 @@ import { RosterList } from './RosterList';
 interface Props {
   examId: string;
   api: ExamApi;
-  /** `running` hides the Start and Stop buttons. */
+  /** `running` swaps the Start and Stop buttons for End exam. */
   running: boolean;
   onStart: () => Promise<void>;
   onStop: () => Promise<void>;
+  /** running → ended. */
+  onEnd: () => Promise<void>;
 }
 
 /** PIN, addresses and fingerprint code for a hosted exam. Joined students update live. */
-export function HostingPanel({ examId, api, running, onStart, onStop }: Props) {
+export function HostingPanel({ examId, api, running, onStart, onStop, onEnd }: Props) {
   const [info, setInfo] = useState<HostingInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
@@ -58,6 +60,15 @@ export function HostingPanel({ examId, api, running, onStart, onStop }: Props) {
     if (ok) void act(onStart);
   };
 
+  const end = () => {
+    const working = counts?.joined ?? 0;
+    const ok = window.confirm(
+      `End the exam now for all ${working} student${working === 1 ? '' : 's'}? ` +
+        'Their exam screens close and this cannot be undone.',
+    );
+    if (ok) void act(onEnd);
+  };
+
   return (
     <section
       aria-label="Hosting"
@@ -67,6 +78,11 @@ export function HostingPanel({ examId, api, running, onStart, onStop }: Props) {
         <h2 className="text-xl font-semibold">
           {running ? 'Exam running' : 'Hosting: waiting for students'}
         </h2>
+        {running && (
+          <Button variant="outline" disabled={stopping} onClick={end}>
+            End exam now
+          </Button>
+        )}
         {!running && (
           <div className="flex gap-2">
             <Button disabled={stopping} onClick={start}>

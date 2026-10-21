@@ -156,6 +156,16 @@ export class ExamRepo {
     return this.get(id);
   }
 
+  /** running → ended. The PIN is cleared: nobody can join an ended exam. */
+  endRunning(id: string, now: number): ExamSummary | undefined {
+    this.db
+      .prepare(
+        "UPDATE exams SET state = 'ended', pin = NULL, ended_at = ?, updated_at = ? WHERE id = ?",
+      )
+      .run(now, now, id);
+    return this.get(id);
+  }
+
   /** The exam currently in `hosting`, with its PIN. At most one exists. */
   hostedExam(): { exam: ExamSummary; pin: string } | undefined {
     return this.exam('hosting');

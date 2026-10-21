@@ -129,6 +129,29 @@ export class ExamStudentRepo {
     return ids;
   }
 
+  /** The teacher ended the exam: everyone still working is marked `ended_by_teacher`. */
+  endAllWorking(examId: string): string[] {
+    const ids = (
+      this.db
+        .prepare("SELECT id FROM exam_students WHERE exam_id = ? AND state IN ('active', 'locked')")
+        .all(examId) as { id: string }[]
+    ).map((r) => r.id);
+    this.db
+      .prepare(
+        "UPDATE exam_students SET state = 'ended_by_teacher' WHERE exam_id = ? AND state IN ('active', 'locked')",
+      )
+      .run(examId);
+    return ids;
+  }
+
+  /** The longest personal extension in the exam, seconds (the exam's real end uses it). */
+  maxExtensionSec(examId: string): number {
+    const row = this.db
+      .prepare('SELECT COALESCE(MAX(extension_sec), 0) AS m FROM exam_students WHERE exam_id = ?')
+      .get(examId) as { m: number };
+    return row.m;
+  }
+
   /** Personal extra time, seconds. */
   extensionSec(id: string): number {
     const row = this.db.prepare('SELECT extension_sec FROM exam_students WHERE id = ?').get(id) as

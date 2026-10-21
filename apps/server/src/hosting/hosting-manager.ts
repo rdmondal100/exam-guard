@@ -69,6 +69,7 @@ interface Active {
 /** Owns the student HTTPS listener: open only while an exam is `hosting`. */
 export class HostingManager {
   private active: Active | null = null;
+  private deadlineTimer: ReturnType<typeof setInterval> | null = null;
   private readonly now: () => number;
 
   constructor(private readonly deps: HostingManagerDeps) {
@@ -125,7 +126,27 @@ export class HostingManager {
     hub.broadcast((id) => ({ t: 'state', state: this.sessionState(id) }));
     const deadline = this.deadlineFor(examId, null);
     if (deadline === null) throw new Error('Running exam has no start time');
+    this.watchDeadline(examId);
     return { ok: true, startedAt, deadline };
+  }
+
+  /**
+   * running → ended, by the teacher (`manual`) or because the last deadline passed. Students get
+   * the `ended` state, then the listener closes. A manual end also marks working students.
+   */
+  async endExam(examId: string, reason: 'manual' | 'time_up' = 'manual'): Promise<void> {
+    const { exams, students, hub } = this.deps;
+    const exam = exams.get(examId);
+    if (!exam) throw new HostingError(404, 'not_found', 'Exam not found');
+    if (exam.state !== 'running') {
+      throw new HostingError(409, 'invalid_state', `A ${exam.state} exam cannot be ended`);
+    }
+    assertTransition(exam.state, 'ended');
+    this.stopWatchingDeadline();
+    exams.endRunning(examId, this.now());
+    if (reason === 'manual') for (const id of students.endAllWorking(examId)) hub.changed(id);
+    hub.broadcast((id) => ({ t: 'state', state: this.sessionState(id) }));
+    await this.close();
   }
 
   /**
@@ -163,6 +184,32 @@ export class HostingManager {
     const { exams } = this.deps;
     const hosted = exams.hostedExam() ?? exams.runningExam();
     if (hosted && !this.active) await this.open(hosted.exam.id, hosted.pin);
+    if (hosted?.exam.state === 'running') this.watchDeadline(hosted.exam.id);
+  }
+
+  /** Ends the exam once the latest deadline (extensions included) has passed. */
+  private watchDeadline(examId: string): void {
+    this.stopWatchingDeadline();
+    const check = () => {
+      const timing = this.deps.exams.timing(examId);
+      if (!timing || timing.startedAt === null) return;
+      const last = computeDeadline({
+        startedAt: timing.startedAt,
+        durationSec: timing.durationSec,
+        globalExtensionSec: timing.globalExtensionSec,
+        studentExtensionSec: this.deps.students.maxExtensionSec(examId),
+      });
+      if (this.now() < last) return;
+      this.endExam(examId, 'time_up').catch(() => this.stopWatchingDeadline());
+    };
+    this.deadlineTimer = setInterval(check, 1000);
+    this.deadlineTimer.unref();
+    check();
+  }
+
+  private stopWatchingDeadline(): void {
+    if (this.deadlineTimer) clearInterval(this.deadlineTimer);
+    this.deadlineTimer = null;
   }
 
   private deadlineFor(examId: string, studentId: string | null): number | null {
@@ -178,6 +225,7 @@ export class HostingManager {
 
   async close(): Promise<void> {
     const active = this.active;
+    this.stopWatchingDeadline();
     if (!active) return;
     this.active = null;
     active.stopAdvertising();
