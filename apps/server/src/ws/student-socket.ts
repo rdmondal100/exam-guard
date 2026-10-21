@@ -9,6 +9,7 @@ import {
   type ServerToStudent,
   type SessionState,
 } from '@examguard/shared';
+import type { EventRepo } from '../db/event-repo.js';
 import type { ExamStudentRepo } from '../db/exam-student-repo.js';
 import { hashToken } from '../join/join-service.js';
 import type { SessionHub, StudentConn } from './session-hub.js';
@@ -16,6 +17,7 @@ import type { SessionHub, StudentConn } from './session-hub.js';
 export interface StudentSocketDeps {
   hub: SessionHub;
   students: ExamStudentRepo;
+  events: EventRepo;
   /** The state the client should show; also activates a late joiner. */
   sessionState: (studentId: string) => SessionState;
   /** The hosted exam id, or `null` when nothing is hosted. */
@@ -46,6 +48,7 @@ export function registerStudentSocket(app: FastifyInstance, deps: StudentSocketD
     };
 
     let studentId: string | null = null;
+    let examId: string | null = null;
     let lastFrame = now();
     const conn: StudentConn = {
       send,
@@ -79,6 +82,24 @@ export function registerStudentSocket(app: FastifyInstance, deps: StudentSocketD
         if (!studentId) return refuse(WS_CLOSE.badHello, 'hello_first', 'Send hello first');
         return send({ t: 'pong', clientSent: message.clientSent, serverTime: now() });
       }
+      if (message.t === 'event') {
+        if (!studentId || !examId)
+          return refuse(WS_CLOSE.badHello, 'hello_first', 'Send hello first');
+        // App events are low until the classifier (M31) grades them. The key is namespaced so
+        // an app id can never collide with agent evidence keys.
+        deps.events.insert({
+          examId,
+          examStudentId: studentId,
+          type: message.type,
+          severity: 'low',
+          source: 'app',
+          details: message.details,
+          serverTs: now(),
+          clientTs: message.clientTs,
+          dedupeKey: `app:${message.dedupeKey}`,
+        });
+        return send({ t: 'event.ack', id: message.id });
+      }
       if (studentId) return refuse(WS_CLOSE.badHello, 'bad_frame', 'Already said hello');
 
       if (!isProtocolCompatible(message.protocol)) {
@@ -88,13 +109,14 @@ export function registerStudentSocket(app: FastifyInstance, deps: StudentSocketD
           "Update ExamGuard to match the teacher's version",
         );
       }
-      const examId = deps.examId();
-      if (!examId) return refuse(WS_CLOSE.notHosting, 'not_hosting', 'No exam is being hosted');
+      const hostedId = deps.examId();
+      if (!hostedId) return refuse(WS_CLOSE.notHosting, 'not_hosting', 'No exam is being hosted');
       const student = deps.students.findByTokenHash(hashToken(message.token));
-      if (!student || student.examId !== examId) {
+      if (!student || student.examId !== hostedId) {
         return refuse(WS_CLOSE.unauthorized, 'unauthorized', 'Sign in again');
       }
       studentId = student.id;
+      examId = hostedId;
       clearTimeout(helloTimer);
       deps.hub.attach(student.id, conn, WS_CLOSE.replaced);
       send({ t: 'welcome', serverTime: now(), state: deps.sessionState(student.id) });

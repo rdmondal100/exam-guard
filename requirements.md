@@ -1,6 +1,6 @@
 # ExamGuard AI — Requirements
 
-Version 1.1 · 2026-10-17 · Source of truth for all design and development decisions.
+Version 1.2 · 2026-10-21 · Source of truth for all design and development decisions.
 If anything in later docs conflicts with this file, this file wins until it is explicitly updated.
 
 ---
@@ -11,7 +11,7 @@ ExamGuard AI is a Windows desktop examination platform for university computer l
 
 **Main goal:** Let a teacher run, monitor, and grade a programming exam for a full lab from one application, catching cheating through evidence and cutting grading time.
 
-**Security approach:** *Monitor, record, and alert* — not block. Students can technically open other apps or websites, but everything they do outside ExamGuard is logged with a screenshot and shown live to the teacher. The evidence is what deters and catches cheating.
+**Security approach:** *Monitor, record, and alert* — not block. Students can technically open other apps or websites, but everything they do outside ExamGuard is logged with a screenshot and shown live to the teacher. The evidence is what deters and catches cheating. The one exception is the teacher's **internet toggle** (8.8): the teacher may turn student internet off for an exam, and ExamGuard always restores it afterwards.
 
 ## 2. Context and constraints
 
@@ -21,7 +21,7 @@ ExamGuard AI is a Windows desktop examination platform for university computer l
 | Network | All students and teacher on **one local network (LAN)**; wired recommended |
 | Class size | **100–200 students** per exam |
 | Hosting | **Teacher's PC is the server.** No cloud server, no VPS |
-| Internet | **Not blocked and not required** on student PCs. Needed only on the teacher PC for AI grading |
+| Internet | **Available on student PCs** (students install packages from the exam terminal, 8.3). The teacher can turn it **off per exam** from the dashboard; ExamGuard restores it when the student's exam ends. Needed on the teacher PC for AI grading |
 | Installation | Lab IT installs ExamGuard on student PCs with administrator rights (needed for the monitoring agent service) — **to be confirmed** |
 | Developer | Solo developer, Windows PC, using Claude Code (Pro plan) |
 | Pace | Phase-based (section 10). **Stage 1** = core product (~60%); **Stage 2** = everything else |
@@ -37,7 +37,7 @@ ExamGuard AI is a Windows desktop examination platform for university computer l
 
 ## 4. Non-goals
 
-- **Blocking internet or network access on student PCs** (in any stage)
+- Blocking network access beyond the teacher's per-exam internet toggle (no per-site filtering, no changes that outlive the exam)
 - **Blocking or closing other apps** (Stage 1; may appear as an optional strict mode in Stage 2)
 - Remote / at-home exams, or exams on students' personal laptops
 - Webcam or face monitoring
@@ -57,9 +57,10 @@ ExamGuard AI is a Windows desktop examination platform for university computer l
 | Exam server | Node.js + TypeScript (Fastify for HTTPS, WebSocket for real-time), runs **inside the teacher app as a separate background process** (Electron `utilityProcess`), auto-restarted if it crashes |
 | Database | **SQLite** (better-sqlite3, WAL mode) on the teacher PC; files (screenshots, exports) in an app data folder |
 | Shared code | A shared package with TypeScript types and Zod schemas for every API and message |
-| Monitoring agent | **Rust**, runs as a **Windows service** on student PCs (plus a helper in the user session where needed, since a service can't see the desktop). **Observes and reports only; it makes no changes to network or firewall settings.** Talks to the student app over a local authenticated channel (named pipe) |
+| Monitoring agent | **Rust**, runs as a **Windows service** on student PCs (plus a helper in the user session where needed, since a service can't see the desktop). **Observes and reports; its only change to the PC is the teacher's internet toggle** (temporary Windows Filtering Platform filters, always removed when the exam ends or the agent stops). Talks to the student app over a local authenticated channel (named pipe) |
 | Code editor | **Monaco** editor embedded in the student app |
-| Local code run | Students choose the language per code question (within what the teacher allows). Stage 1: C/C++ via a **bundled MinGW-w64 gcc/g++**; JavaScript via **Electron's built-in Node runtime** (`ELECTRON_RUN_AS_NODE`). Stage 2: Java (bundled trimmed JDK) and Python (bundled embedded Python). The runner is config-driven so adding a language is a config entry |
+| Local code run | Students choose the language per code question (within what the teacher allows). Stage 1: C/C++ via a **bundled MinGW-w64 gcc/g++** trimmed to C/C++ (+ MSYS2 `pacman` for libraries); JavaScript via **Electron's built-in Node runtime** (`ELECTRON_RUN_AS_NODE`) + bundled `npm`; **Python** (bundled Python 3 with tkinter + `pip`). Stage 2: Java (bundled trimmed JDK). The runner is config-driven so adding a language is a config entry |
+| Exam terminal | A real shell (ConPTY via node-pty, shown with xterm.js) in the student exam window, in the student's exam workspace, so students install the packages they need. The teacher turns it on/off |
 | Screens | Small JPEG thumbnails over WebSocket for the grid; **WebRTC peer-to-peer** (signaled through the exam server) for the single live view |
 | AI grading | Behind a **provider interface**; **Google Gemini** adapter first, others (e.g. OpenAI) later. Called from the teacher PC after the exam; teacher enters their API key; model name configurable |
 | Repo | Monorepo (pnpm workspaces + Cargo workspace): `apps/desktop`, `apps/server`, `packages/shared`, `agent/` (Rust), `tools/student-sim` |
@@ -123,18 +124,28 @@ ExamGuard AI is a Windows desktop examination platform for university computer l
 - **Each language keeps its own code** for that question: switching from C++ to JavaScript and back restores the C++ code. Each language's code is autosaved separately.
 - The language **selected at submission** (or at time-up) is the one submitted and graded; the student is shown which language will be submitted.
 - Monaco editor with syntax highlighting, basic autocomplete (no AI suggestions), and error underlines from compiler output.
-- Panel below the editor with an **input box (stdin)** and **Output / Errors** tabs, showing exit code and run time.
+- Panel below the editor with an **input box (stdin)** and **Output / Errors** tabs, showing exit code and run time. An **interactive console** (xterm.js) lets programs that prompt for input step by step be used directly.
 - Buttons: **Run**, **Stop**.
 - Run happens **on the student's PC only**. It is for the student's own checking; results are **not** used for grading.
 - Compile and run settings (same for everyone, configurable in one place):
   - C: `gcc -std=c11 -O2 -Wall`
   - C++: `g++ -std=c++17 -O2 -Wall`
   - JavaScript: Electron's Node runtime
-  - Stage 2 — Java: bundled JDK (`javac` + `java`); the runner detects the `public class` name and names the file to match. Python: bundled embedded Python 3
+  - Python: bundled Python 3 (with tkinter, so turtle and matplotlib windows work)
+  - Stage 2 — Java: bundled JDK (`javac` + `java`); the runner detects the `public class` name and names the file to match; jars from `workspace/lib`
+  - Students may add **their own compile/link flags** per answer (e.g. `-lfreeglut -lopengl32`) for the libraries they installed.
 - Limits per run: time limit (default 5 s), output cap (default 64 KB), memory limit (default 256 MB, via a Windows Job Object launcher). Exceeding a limit stops the program with a clear message.
-- Runs happen in a temporary exam folder; one run at a time; minimum gap between runs (default 2 s).
+- **GUI run mode** for programs that open a window (OpenGL, graphics.h, image viewers): the window is allowed, the time limit is longer (configurable), and Stop always works.
+- Runs happen in the student's **exam workspace**; one run at a time; minimum gap between runs (default 2 s). Runs build against the packages installed in the workspace (include/lib paths, `node_modules`, Python packages).
 - Every run is logged (timestamp, language, exit status) as an event.
 - **No sample tests, expected outputs, or hints are ever shown to students.**
+
+**Exam terminal**
+- Each student can install the libraries and packages **they** need (students may choose different languages and packages, so the teacher does not declare them in advance).
+- A real terminal (PowerShell) in the exam window, opened in the student's exam workspace (`%LOCALAPPDATA%\ExamGuard\run\<examStudentId>\workspace`). The bundled runtimes and package managers are on PATH: gcc/g++ + MSYS2 `pacman`, Node + `npm`, Python + `pip`. Packages install into the workspace or per-user folders; **no administrator rights** are needed.
+- **The teacher turns the terminal on or off** for the exam from the dashboard, optionally "on for the first N minutes" (8.8). When it is turned off or the student's exam ends, the terminal closes and everything started from it is stopped.
+- Installing packages needs internet; the teacher keeps internet on while students install (8.8).
+- Every command is logged as an event (`terminal_command`, plus `terminal_opened`/`terminal_closed`; recognised installs as `package_installed`), and the teacher can read each student's terminal transcript.
 
 ### 8.4 Autosave and submission
 - Answers autosave to the server every ~10 seconds when changed, and on every Run, question switch, language switch, and submit. Each save is stored as a **version** with its language (this enables code replay in Stage 2).
@@ -146,7 +157,12 @@ ExamGuard AI is a Windows desktop examination platform for university computer l
 - Submitted answers cannot be changed.
 
 ### 8.5 Monitoring agent (Rust Windows service)
-Runs on student PCs. Starts monitoring when the exam starts and stops when the student's exam ends. **It only observes and reports; it never blocks apps or changes network or firewall settings.**
+Runs on student PCs. Starts monitoring when the exam starts and stops when the student's exam ends. **It observes and reports; it never blocks or closes apps.** Its only change to the PC is applying the teacher's **internet toggle** (see below).
+
+**Internet toggle (applied by the agent)**
+- When the teacher turns internet off, the agent adds **Windows Filtering Platform filters** that block outbound traffic except loopback, DHCP and the teacher PC, so the exam, screens and live view keep working.
+- Filters are **temporary** and always removable: they are created in a dynamic session (Windows removes them if the agent process dies), and the agent removes them when the teacher turns internet on, when the student's exam ends (submit/end), when the service stops, when the app has not been heard from for a few minutes (lease), and on service start (cleanup after a crash). A crash must never leave a lab PC offline.
+- Each change is reported as an event (`internet_blocked` / `internet_allowed`), so the teacher sees on which PCs it took effect.
 
 **In-app protections (enforced by the ExamGuard app, not the agent)**
 - **Exam window:** fullscreen, cannot be closed.
@@ -184,7 +200,7 @@ Runs on student PCs. Starts monitoring when the exam starts and stops when the s
 - Network budget target: total thumbnail traffic ≈ 1 MB/s or less.
 
 ### 8.8 Teacher actions (live)
-Per student: send message/warning, lock/unlock screen, extend time, end exam (saves and submits), reset session. Global: extend time for all, end exam for all, broadcast message. **All teacher actions are logged.**
+Per student: send message/warning, lock/unlock screen, extend time, end exam (saves and submits), reset session. Global: extend time for all, end exam for all, broadcast message, **exam terminal on/off** (optionally "on for N minutes"), **student internet on/off** (default on; per student later). Terminal and internet state are server-authoritative, apply to late joiners, and are shown on the dashboard with where they took effect. **All teacher actions are logged.**
 
 ### 8.9 AI grading
 **Inputs per answer:** question text, question type, allowed languages, the teacher's note to students, total marks, sample answer (and its language), marking guide, optional AI notes, the student's answer and **the language the student used**. The AI grades the logic against the sample answer even when the student's language differs from the sample's, and checks the answer against instructions in the teacher's note (e.g. "use recursion"). **Student identity is never sent** — only an anonymous ID.
@@ -220,9 +236,9 @@ Per student: send message/warning, lock/unlock screen, extend time, end exam (sa
 - Data folder location and backup (copy database + files).
 
 ### 8.12 Installer
-- One Windows installer containing both modes, bundled MinGW, and the Rust agent service.
+- One Windows installer containing both modes, the bundled runtimes and package managers (MinGW trimmed to C/C++ + MSYS2 pacman, npm, Python + pip), and the Rust agent service. Everything is always included (no optional components), so every lab PC is identical.
 - The **installer asks for the install type** (Teacher or Student); lab IT can pass a silent flag (e.g. `/TYPE=student`) for mass deployment.
-  - **Student install:** registers the agent service and locks the app to Student mode. Nothing is changed in the firewall of student PCs.
+  - **Student install:** registers the agent service and locks the app to Student mode. The installer adds no firewall rules; during an exam the agent may apply the teacher's temporary internet-off filters (8.5).
   - **Teacher install:** adds inbound firewall rules for the ExamGuard app (exam port and WebRTC) so students can connect. No agent is installed.
 - Installer is unsigned in Stage 1; a short README for lab IT covers Windows SmartScreen and antivirus warnings.
 
@@ -245,6 +261,8 @@ Per student: send message/warning, lock/unlock screen, extend time, end exam (sa
 - Authenticated sessions (token per student per exam), rate limiting, strict validation of every message (Zod), message size limits.
 - Server only accepts student connections while hosting.
 - Electron security best practices: context isolation, sandboxed renderer, no Node in renderer, DevTools disabled in release builds. Exception: the `RunAsNode` fuse stays enabled because the JavaScript runner uses `ELECTRON_RUN_AS_NODE` (alternative if this becomes a problem: bundle a standalone `node.exe`).
+- The exam terminal runs as the student user (no elevation), inside a Job Object, and only while the teacher has it on. Terminal input/output stays in student main and the renderer's xterm.js view; the renderer never gets Node access.
+- Internet-off filters are applied only by the agent service, only during an exam, only on the teacher's instruction relayed through the authenticated app ↔ agent pipe, and are removed by every exit path listed in 8.5.
 
 **Privacy**
 - Students see and accept a monitoring notice before the exam; a visible "monitoring active" indicator during the exam.
@@ -268,22 +286,23 @@ Each phase ends with something that **works and can be demonstrated**. Phases ar
 |---|---|---|
 | **1. Foundation** | Monorepo skeleton, shared schemas, exam server in the teacher app, SQLite, teacher login, Teacher/Student mode | Teacher app starts, server runs, database created, both modes open |
 | **2. Exam setup & joining** | Class list import, exam and question editor, hosting, PIN, LAN discovery + manual IP, TLS, student login, lobby | A student on another PC joins an exam and waits in the lobby |
-| **3. Taking the exam** | Exam client, Monaco editor, language dropdown, local run (C, C++, JS) with limits, autosave, offline queue, reconnect, submit, auto-submit | A student completes and submits a full exam, surviving a network drop |
-| **4. Monitoring agent** | Rust service + user-session helper, named-pipe link to the app, app launches, window switches, time outside ExamGuard, screenshots, second monitor, Task Manager, heartbeat + tamper lock, clipboard/paste control | Opening Chrome or WhatsApp on a student PC creates a logged event with a screenshot |
+| **3. Taking the exam** | Exam client, Monaco editor, language dropdown, local run (C, C++, JS, Python) with limits, exam terminal with package installs (teacher on/off, logged), workspace runs, GUI run mode, interactive console, autosave, offline queue, reconnect, submit, auto-submit | A student completes and submits a full exam, surviving a network drop |
+| **4. Monitoring agent** | Rust service + user-session helper, named-pipe link to the app, app launches, window switches, time outside ExamGuard, screenshots, second monitor, Task Manager, heartbeat + tamper lock, clipboard/paste control, teacher internet toggle (WFP filters) | Opening Chrome or WhatsApp on a student PC creates a logged event with a screenshot |
 | **5. Live dashboard** | Live alert feed, events, risk score, thumbnail grid (paginated), WebRTC live view, teacher actions (warn, lock, extend, end, reset, broadcast) | Teacher watches students live, sees alerts, and acts on them |
 | **6. AI grading & results** | Provider interface + Gemini adapter, grading pipeline, review screen (accept / edit / re-evaluate), history, finalize, CSV export | A finished exam is graded, reviewed, finalized, and exported |
 | **7. Packaging & hardening** | Settings screen, Windows installer, lab-IT README, load test with 200 simulated students, crash-recovery tests, bug fixing | One installer works on a fresh Windows PC; 200-student simulation passes |
 
 **Checkpoint after Phase 4:** review progress against available time. If behind, lower-priority milestones (marked as deferrable in `docs/milestones.md`) move to Stage 2.
 
-**Risky parts to prove early** with small proof-of-concept spikes, before their phase: the Rust service + user-session helper seeing the desktop and taking screenshots; thumbnail streaming for 200 simulated students; WebRTC live view on the LAN.
+**Risky parts to prove early** with small proof-of-concept spikes, before their phase: the Rust service + user-session helper seeing the desktop and taking screenshots; thumbnail streaming for 200 simulated students; WebRTC live view on the LAN; the exam terminal (node-pty under Electron, package managers working without admin rights); blocking internet with WFP filters from the service and always restoring it.
 
 ### Stage 2 — Remaining features (after Stage 1)
 
-- **Java and Python support (first Stage 2 item):** bundle a trimmed JDK and embedded Python, add runner config entries and Monaco language support
+- **Java support:** bundled trimmed JDK, runner config entry, jars from `workspace/lib` on the classpath
 - Code typing replay (built on Stage 1 autosave versions)
 - Similarity / plagiarism check between students' answers
-- **Optional strict mode:** close non-allowed apps automatically, block Alt+Tab / Windows key shortcuts, lock on focus loss (no internet blocking)
+- **Optional strict mode:** close non-allowed apps automatically, block Alt+Tab / Windows key shortcuts, lock on focus loss
+- Per-student internet and terminal toggles; a package cache/mirror on the teacher PC for labs without internet
 - Virtual machine and remote desktop detection; USB storage detection
 - App integrity / tamper checks of the student app
 - PDF reports; releasing results/feedback to students
@@ -292,13 +311,15 @@ Each phase ends with something that **works and can be demonstrated**. Phases ar
 - More AI providers (e.g. OpenAI)
 - Multiple teachers / admin role, bulk management
 - Analytics across exams
-- Interactive terminal for programs with step-by-step input (xterm.js)
 
 ---
 
 ## 11. Known limitations (accepted)
 
-- **Students can reach the internet during the exam.** ExamGuard does not prevent it; it records it (app, window title, screenshot, time spent) and alerts the teacher live. Invigilators and the teacher's judgment act on the evidence.
+- **Students can reach the internet during the exam unless the teacher turns it off.** While it is on, ExamGuard records its use (app, window title, screenshot, time spent) and alerts the teacher live. Invigilators and the teacher's judgment act on the evidence.
+- The internet toggle depends on the agent service and on lab policy: a group policy that forbids local firewall/WFP changes stops it from working (the dashboard shows where it did not take effect). A student's own phone is outside its reach.
+- The exam terminal runs inside ExamGuard, so using it is not a "switch away" event. Commands are logged and the transcript is readable, but what a student reads in the terminal (e.g. output of an AI command-line tool) is only visible in that transcript.
+- Package installs need internet (the teacher keeps it on while students install). Reboot-restore software (e.g. Deep Freeze) wipes installed packages on reboot.
 - Window titles and screenshots show *that* a student used a browser or messaging app, and usually *what* was on screen, but not every keystroke or page visited.
 - Ctrl+Alt+Delete cannot be blocked by any app; it is detected and logged.
 - Phones, paper notes, and talking to neighbors are outside software control; invigilation and (Stage 2) similarity checks address this.
@@ -312,6 +333,7 @@ Each phase ends with something that **works and can be demonstrated**. Phases ar
 - All students on one subnet so mDNS discovery works; manual address entry is the fallback.
 - If lab PCs use reboot-restore software (e.g. Deep Freeze), a reboot wipes the student app's local queue; only work not yet synced to the server is at risk.
 - The teacher PC's Windows network profile is set to **Private** during exams (a Public profile blocks mDNS and inbound connections).
+- Lab policy allows the agent service to add temporary WFP filters, and the lab network allows package downloads (npm, PyPI, MSYS2) while internet is on.
 
 ## 13. Confirmed decisions
 
@@ -322,5 +344,9 @@ Each phase ends with something that **works and can be demonstrated**. Phases ar
 | No lab access until Stage 1 is built; test with dev PC, a second laptop on the same LAN, and the student simulator (no VMs: Windows 11 Home has no Hyper-V) |
 | Unsigned installer in Stage 1; lab-IT README covers SmartScreen and antivirus warnings |
 | Teacher PC may be a laptop on Wi-Fi; manual IP fallback and a fixed IP during exams |
-| No internet blocking; cheating is handled by monitoring, evidence, and the teacher's judgment |
+| ~~No internet blocking~~ (replaced 2026-10-21, below); cheating is handled by monitoring, evidence, and the teacher's judgment |
+| 2026-10-21: Students may choose their own languages (within the teacher's allowed list) and packages, so they install packages themselves in a teacher-controlled **exam terminal**; every command is logged |
+| 2026-10-21: The teacher can turn **student internet off/on** per exam; the agent applies temporary WFP filters that are always restored |
+| 2026-10-21: **Python (with pip)** moves from Stage 2 into Stage 1; **Java stays in Stage 2**; the interactive console moves into Stage 1 |
+| 2026-10-21: Bundle size: MinGW is trimmed to C/C++ only; one installer always contains everything (target download ≤ 450 MB) |
 | Phase-based plan with no fixed deadlines; work proceeds at the developer's pace |

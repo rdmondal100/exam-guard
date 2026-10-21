@@ -7,6 +7,8 @@ import type {
   JoinResult,
   ProbeRequest,
   ProbeResult,
+  RunRequest,
+  RunResult,
   ServerConnection,
   ServerStatus,
   SessionState,
@@ -39,4 +41,8 @@ export interface ExamGuardApi {
   onSessionStatus(listener: (status: SessionStatus) => void): () => void;
   /** Exam state (state, deadline, questions) after each welcome and push. Returns an unsubscribe. */
   onSessionExam(listener: (state: SessionState) => void): () => void;
+  /** Student mode: compile and run code on this PC (one at a time). Resolves when it ends. */
+  runCode(request: RunRequest): Promise<RunResult>;
+  /** Stops the current run, if any. */
+  stopRun(): Promise<void>;
 }

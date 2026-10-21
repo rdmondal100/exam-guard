@@ -32,6 +32,7 @@ const isErrorCode = (code: unknown): code is ErrorCode =>
 interface Session {
   target: PinnedTarget;
   token: string;
+  examStudentId: string;
 }
 
 type Failure = Extract<JoinResult, { ok: false }>;
@@ -75,6 +76,11 @@ export class JoinClient {
     return this.session && { target: this.session.target, token: this.session.token };
   }
 
+  /** This student's row in the hosted exam (names the code-run folder). */
+  examStudentId(): string | null {
+    return this.session?.examStudentId ?? null;
+  }
+
   async join(attempt: JoinAttempt): Promise<JoinResult> {
     this.session = null;
     const target: PinnedTarget = {
@@ -104,8 +110,8 @@ export class JoinClient {
       if (response.status !== 200) return serverFailure(response.body);
       const parsed = JoinResponseSchema.safeParse(JSON.parse(response.body) as unknown);
       if (!parsed.success) return failure('bad_response');
-      this.session = { target, token: parsed.data.token };
       const { examStudentId, name, examTitle } = parsed.data;
+      this.session = { target, token: parsed.data.token, examStudentId };
       return { ok: true, examStudentId, name, examTitle };
     } catch (e) {
       return transportFailure(e);

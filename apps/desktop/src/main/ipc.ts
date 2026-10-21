@@ -16,6 +16,7 @@ import { JoinClient } from './join-client.js';
 import { probeHost } from './probe-host.js';
 import { SessionClient } from './session-client.js';
 import { resolveMode, saveStoredMode } from './mode-store.js';
+import { registerRunnerIpc } from './runner/runner-ipc.js';
 import type { ServerHost } from './server-host.js';
 
 export interface AppState {
@@ -79,6 +80,12 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
       for (const win of BrowserWindow.getAllWindows()) win.webContents.send(IPC.sessionExam, exam);
     },
   });
+  registerRunnerIpc({
+    session,
+    examStudentId: () => joinClient.examStudentId(),
+    requireStudent,
+  });
+
   ipcMain.handle(IPC.startSession, () => {
     requireStudent();
     const credentials = joinClient.credentials();

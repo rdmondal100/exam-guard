@@ -14,4 +14,6 @@ export const IPC = {
   startSession: 'session:start',
   sessionStatus: 'session:status',
   sessionExam: 'session:exam',
+  runCode: 'runner:run',
+  stopRun: 'runner:stop',
 } as const;

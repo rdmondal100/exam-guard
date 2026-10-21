@@ -258,6 +258,7 @@ export class HostingManager {
       live: {
         hub: this.deps.hub,
         students: this.deps.students,
+        events: this.deps.events,
         sessionState: (id) => this.sessionState(id),
         examId: () => (this.active?.examId === examId ? examId : null),
         now: this.now,

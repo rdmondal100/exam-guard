@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { MAX_WS_FRAME_BYTES, PROTOCOL_VERSION, type StudentInfo } from '@examguard/shared';
 import type { ServerCert } from '../tls/cert.js';
 import type { JoinService } from '../join/join-service.js';
+import type { EventRepo } from '../db/event-repo.js';
 import type { ExamStudentRepo } from '../db/exam-student-repo.js';
 import type { SessionHub } from '../ws/session-hub.js';
 import { registerStudentSocket, type StudentSocketDeps } from '../ws/student-socket.js';
@@ -18,6 +19,7 @@ export interface StudentAppDeps {
   live?: {
     hub: SessionHub;
     students: ExamStudentRepo;
+    events: EventRepo;
     examId: () => string | null;
   } & Pick<StudentSocketDeps, 'sessionState' | 'now' | 'helloTimeoutMs' | 'idleMs'>;
 }

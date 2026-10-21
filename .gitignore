@@ -5,6 +5,8 @@ out/
 *.tsbuildinfo
 coverage/
 target/
+# Fetched by `pnpm fetch-toolchains` (MinGW, about 1 GB unpacked)
+apps/desktop/resources/toolchains/
 
 # Env and secrets (API keys live in teacher Settings, never in the repo)
 .env

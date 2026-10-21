@@ -266,6 +266,49 @@ describe('student socket', () => {
   });
 });
 
+describe('app events', () => {
+  const event = (id: string) =>
+    JSON.stringify({
+      t: 'event',
+      id,
+      dedupeKey: id,
+      clientTs: 5,
+      type: 'run_executed',
+      details: { language: 'c', status: 'ok' },
+    });
+  const acks = (c: Client) => c.messages.filter((m) => m.t === 'event.ack').length;
+
+  it('stores an event once and acks every copy', async () => {
+    const token = await joinStudent('1');
+    const c = await studentWs();
+    c.ws.send(hello(token));
+    await c.waitFor(() => has(c, 'welcome'));
+    c.ws.send(event('ev-1'));
+    c.ws.send(event('ev-1'));
+    await c.waitFor(() => acks(c) === 2);
+    const rows = db
+      .prepare('SELECT type, severity, source, client_ts, dedupe_key, details_json FROM events')
+      .all() as Record<string, unknown>[];
+    expect(rows).toEqual([
+      {
+        type: 'run_executed',
+        severity: 'low',
+        source: 'app',
+        client_ts: 5,
+        dedupe_key: 'app:ev-1',
+        details_json: JSON.stringify({ language: 'c', status: 'ok' }),
+      },
+    ]);
+  });
+
+  it('refuses an event before hello', async () => {
+    const c = await studentWs();
+    c.ws.send(event('ev-2'));
+    expect(await c.closed).toBe(4400);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM events').get()).toEqual({ n: 0 });
+  });
+});
+
 describe('teacher socket', () => {
   it('closes a socket with a bad token', async () => {
     const c = await client(`ws://127.0.0.1:${teacherPort}/ws?token=nope`);
