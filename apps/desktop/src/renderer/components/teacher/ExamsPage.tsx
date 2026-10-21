@@ -98,6 +98,16 @@ export function ExamsPage() {
                   Stop hosting
                 </Button>
               )}
+              {exam.state === 'running' && (
+                <Button
+                  onClick={() => {
+                    if (window.confirm(`End "${exam.title}" now for all students?`))
+                      void run(() => api.end(exam.id));
+                  }}
+                >
+                  End exam
+                </Button>
+              )}
               <Button variant="outline" onClick={() => setDetail(exam)}>
                 Open
               </Button>

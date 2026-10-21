@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { SessionState, SessionStatus } from '@examguard/shared';
+import { ExamEndedScreen } from './ExamEndedScreen';
 import { ExamScreen } from './ExamScreen';
 import { LobbyScreen } from './LobbyScreen';
 
@@ -34,6 +35,9 @@ export function SessionScreen({ name, examTitle }: Props) {
         status={status}
       />
     );
+  }
+  if (exam && ['ended', 'grading', 'in_review', 'finalized'].includes(exam.examState)) {
+    return <ExamEndedScreen name={name} examTitle={examTitle} />;
   }
   return <LobbyScreen name={name} examTitle={examTitle} status={status} error={error} />;
 }

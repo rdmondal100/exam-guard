@@ -27,6 +27,8 @@ export interface ExamApi {
   stopHosting(id: string): Promise<void>;
   /** hosting → running. Rejects `invalid_state` or `not_found`. */
   start(id: string): Promise<StartResult>;
+  /** running → ended, at any time. Rejects `invalid_state` or `not_found`. */
+  end(id: string): Promise<void>;
   /** `null` when the exam is not being hosted. */
   hosting(id: string): Promise<HostingInfo | null>;
 }
@@ -42,6 +44,9 @@ export function createExamApi(connection: ServerConnection, fetchFn: FetchFn = f
     backToDraft: (id) => call(connection, fetchFn, `${path(id)}/unready`, ExamSummarySchema, {}),
     host: (id) => call(connection, fetchFn, `${path(id)}/host`, HostingInfoSchema, {}),
     start: (id) => call(connection, fetchFn, `${path(id)}/start`, StartResultSchema, {}),
+    end: async (id) => {
+      await call(connection, fetchFn, `${path(id)}/end`, AuthOkSchema, {});
+    },
     stopHosting: async (id) => {
       await call(connection, fetchFn, `${path(id)}/stop-hosting`, AuthOkSchema, {});
     },

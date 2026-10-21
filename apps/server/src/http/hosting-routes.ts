@@ -12,7 +12,7 @@ function fail(reply: FastifyReply, e: unknown): FastifyReply {
   throw e;
 }
 
-/** `/exams/:id/host`, `/stop-hosting`, `/hosting` and `/start`. Ending the exam comes later. */
+/** `/exams/:id/host`, `/stop-hosting`, `/hosting` and `/start` and `/end`. */
 export function registerHostingRoutes(
   app: FastifyInstance,
   { hosting, requireLogin }: HostingRoutesDeps,
@@ -55,6 +55,15 @@ export function registerHostingRoutes(
       }
     },
   );
+
+  app.post<{ Params: { id: string } }>('/api/v1/exams/:id/end', guarded, async (request, reply) => {
+    try {
+      await hosting.endExam(request.params.id, 'manual');
+      return { ok: true };
+    } catch (e) {
+      return fail(reply, e);
+    }
+  });
 
   app.get<{ Params: { id: string } }>(
     '/api/v1/exams/:id/hosting',
