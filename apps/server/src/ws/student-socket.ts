@@ -7,6 +7,7 @@ import {
   WS_CLOSE,
   isProtocolCompatible,
   type ServerToStudent,
+  type SessionState,
 } from '@examguard/shared';
 import type { ExamStudentRepo } from '../db/exam-student-repo.js';
 import { hashToken } from '../join/join-service.js';
@@ -15,6 +16,8 @@ import type { SessionHub, StudentConn } from './session-hub.js';
 export interface StudentSocketDeps {
   hub: SessionHub;
   students: ExamStudentRepo;
+  /** The state the client should show; also activates a late joiner. */
+  sessionState: (studentId: string) => SessionState;
   /** The hosted exam id, or `null` when nothing is hosted. */
   examId: () => string | null;
   now?: () => number;
@@ -94,18 +97,7 @@ export function registerStudentSocket(app: FastifyInstance, deps: StudentSocketD
       studentId = student.id;
       clearTimeout(helloTimer);
       deps.hub.attach(student.id, conn, WS_CLOSE.replaced);
-      send({
-        t: 'welcome',
-        serverTime: now(),
-        state: {
-          examState: 'hosting',
-          studentState: student.state,
-          deadline: null,
-          saved: [],
-          locked: student.state === 'locked',
-          monitoring: false,
-        },
-      });
+      send({ t: 'welcome', serverTime: now(), state: deps.sessionState(student.id) });
     });
 
     socket.on('close', () => {

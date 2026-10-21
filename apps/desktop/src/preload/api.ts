@@ -9,6 +9,7 @@ import type {
   ProbeResult,
   ServerConnection,
   ServerStatus,
+  SessionState,
   SessionStatus,
 } from '@examguard/shared';
 
@@ -36,4 +37,6 @@ export interface ExamGuardApi {
   startSession(): Promise<void>;
   /** Returns an unsubscribe function. */
   onSessionStatus(listener: (status: SessionStatus) => void): () => void;
+  /** Exam state (state, deadline, questions) after each welcome and push. Returns an unsubscribe. */
+  onSessionExam(listener: (state: SessionState) => void): () => void;
 }

@@ -5,29 +5,32 @@ Read this first every session. Update it at the end of every session.
 ## Current status
 - **Stage:** 1
 - **Phase:** 2 — Exam setup & joining
-- **Current milestone:** M12 done (manual check pending). **Phase 2: built, not accepted** (see "Phase 2 review" below). M13 is next, but not started.
-- **Next step:** (1) ~~fix the two reported Phase 2 bugs~~ done 2026-10-20 (not clicked through), (2) do the M02–M12 manual tests on the laptop (close old dev instances first; the M12 steps are in `milestones.md`), (3) then start M13.
+- **Current milestone:** M13 done and manually tested (M02–M13, 2026-10-21). **Phase 2: accepted** (see "Phase 2 review" below). M14 is next, not started.
+- **Next step:** start M14 (Monaco + per-language code buffers). A plan was drafted in the 2026-10-21 session and is waiting for the user's OK.
 
 ## Completed milestones
 Format: `- M01 Monorepo skeleton — <date> — <one-line note>`
 - M01 Monorepo skeleton — 2026-10-18 — pnpm + Cargo workspaces; build/test/lint/typecheck/clippy all pass; `any` and `unwrap()` are rejected.
-- M02 Electron shell + mode selection — 2026-10-18 — secure window, per-profile mode.json, student install lock; manual check pending.
-- M03 Exam server in a utilityProcess — 2026-10-18 — Fastify loopback `/api/v1/health` with token check, supervised by main with backoff restart, status chip + restart banner; manual UI check pending.
-- M04 SQLite + migrations — 2026-10-18 — better-sqlite3 13, migration runner on `user_version`, `0001_init` (settings, teacher), opened by the server at start; manual check pending.
-- M05 Teacher password and login gate — 2026-10-19 — scrypt password, `/auth/status|setup|login|logout` with lockout, setup/login/shell screens behind a gate; manual check pending.
-- M06 Class list CSV import — 2026-10-19 — `0002_class_lists`, server-side papaparse import with dry-run preview and per-row errors, `/class-lists*` endpoints, Class lists page (TanStack Table); manual check pending.
-- M07 Exam CRUD and settings — 2026-10-19 — `0003_exams`, exam state machine, `/exams*` (create, edit, duplicate, delete), Exams page + settings form; manual check pending.
-- M08 Question editor — 2026-10-19 — `0004_questions`, question repo + routes, `/ready` and `/unready` with reasons, duplicate copies questions, Question editor UI with Monaco; manual check pending.
-- M09 Hosting: TLS, PIN, student listener — 2026-10-20 — self-signed ECDSA cert + 4-char code, `/exams/:id/host|stop-hosting|hosting`, student HTTPS `/info` on 47820 only while hosting, hosting panel, sleep blocker; manual check pending.
-- M10 Discovery + manual IP + cert pinning — 2026-10-20 — server advertises `_examguard._tcp` (TXT v/exam/fp) while hosting, student main browses it and pins the cert by fingerprint, Find exam screen with manual IP + 4-char code; manual check pending.
+- M02 Electron shell + mode selection — 2026-10-18 — secure window, per-profile mode.json, student install lock; manual check passed 2026-10-21.
+- M03 Exam server in a utilityProcess — 2026-10-18 — Fastify loopback `/api/v1/health` with token check, supervised by main with backoff restart, status chip + restart banner; manual check passed 2026-10-21.
+- M04 SQLite + migrations — 2026-10-18 — better-sqlite3 13, migration runner on `user_version`, `0001_init` (settings, teacher), opened by the server at start; manual check passed 2026-10-21.
+- M05 Teacher password and login gate — 2026-10-19 — scrypt password, `/auth/status|setup|login|logout` with lockout, setup/login/shell screens behind a gate; manual check passed 2026-10-21.
+- M06 Class list CSV import — 2026-10-19 — `0002_class_lists`, server-side papaparse import with dry-run preview and per-row errors, `/class-lists*` endpoints, Class lists page (TanStack Table); manual check passed 2026-10-21.
+- M07 Exam CRUD and settings — 2026-10-19 — `0003_exams`, exam state machine, `/exams*` (create, edit, duplicate, delete), Exams page + settings form; manual check passed 2026-10-21.
+- M08 Question editor — 2026-10-19 — `0004_questions`, question repo + routes, `/ready` and `/unready` with reasons, duplicate copies questions, Question editor UI with Monaco; manual check passed 2026-10-21.
+- M09 Hosting: TLS, PIN, student listener — 2026-10-20 — self-signed ECDSA cert + 4-char code, `/exams/:id/host|stop-hosting|hosting`, student HTTPS `/info` on 47820 only while hosting, hosting panel, sleep blocker; manual check passed 2026-10-21.
+- M10 Discovery + manual IP + cert pinning — 2026-10-20 — server advertises `_examguard._tcp` (TXT v/exam/fp) while hosting, student main browses it and pins the cert by fingerprint, Find exam screen with manual IP + 4-char code; manual check passed 2026-10-21.
 
-- M11 Student join + monitoring notice — 2026-10-20 — `0005_exam_students` (+ events, teacher_actions), `/join` + `/join/confirm`, one session per student with duplicate-login rejection, student ID/PIN, name and notice screens; manual check pending.
-- M12 WebSocket session, lobby, student-sim v1 — 2026-10-20 — student `wss /ws` (hello/welcome, ping/pong, 15 s idle drop, connected flag), teacher `ws /ws?token=` roster + counts with 250 ms batching, `SessionHub`, pinned `SessionClient` in student main, lobby screen, live hosting panel, `tools/student-sim`; 200 sim students connect in about 1.4 s; manual check pending.
+- M11 Student join + monitoring notice — 2026-10-20 — `0005_exam_students` (+ events, teacher_actions), `/join` + `/join/confirm`, one session per student with duplicate-login rejection, student ID/PIN, name and notice screens; manual check passed 2026-10-21.
+- M12 WebSocket session, lobby, student-sim v1 — 2026-10-20 — student `wss /ws` (hello/welcome, ping/pong, 15 s idle drop, connected flag), teacher `ws /ws?token=` roster + counts with 250 ms batching, `SessionHub`, pinned `SessionClient` in student main, lobby screen, live hosting panel, `tools/student-sim`; 200 sim students connect in about 1.4 s; manual check passed 2026-10-21.
+- M13 Start + exam client shell — 2026-10-21 — `POST /exams/:id/start` (hosting→running), shared deadline for late joiners, `state` push + welcome with student-safe questions, fullscreen non-closable student window, question nav, written answer box (memory only), server-offset timer; manual check passed 2026-10-21.
+
+**Update 2026-10-21:** the user ran the manual tests for M02–M13 and reports they pass. The "Done when" line below is therefore treated as met, and Phase 2 is accepted. The details of that run (which machines, which steps) were not recorded; the exceptions are listed under Known issues (M10 cert-mismatch by hand, M02 packaged-build checks).
 
 ## Phase 2 review (2026-10-20)
 Checked against requirements.md §10 and the M06–M12 Accept lines. Nothing was fixed in this session and the suite was not re-run (285 tests were green at M12).
 
-**"Done when": a student on another PC joins an exam and waits in the lobby — NOT yet demonstrated.** The whole path is built (discover or manual IP → cert pin → PIN + ID → name → notice → WS lobby → teacher roster), but it has never been run on a second machine. Every milestone from M02 on is still "manual check pending".
+**"Done when": a student on another PC joins an exam and waits in the lobby — NOT yet demonstrated (when written; since met, see the update above).** The whole path is built (discover or manual IP → cert pin → PIN + ID → name → notice → WS lobby → teacher roster), but it has never been run on a second machine. Every milestone from M02 on is still "manual check pending".
 
 | M | Accept line | Verdict |
 |---|---|---|
@@ -165,6 +168,14 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 - 2026-10-20 — `ws` is a desktop devDependency (electron-vite bundles it into main) and a dependency of student-sim; the server has it as a devDependency for tests only (`@fastify/websocket` brings the runtime copy).
 - 2026-10-20 — `tools/student-sim` is a pnpm workspace package built with `tsc`: `pnpm build` then `pnpm sim -- --host <ip[:port]> --pin <6 digits> [--students N] [--csv file] [--ramp-ms 20]`. Without `--csv` it uses the codes 1..N, so the teacher's class list must contain them. One shared keep-alive agent (20 sockets) for the joins; each fake student has its own deviceId. `tools/*` was added to the root vitest projects.
 
+**M13**
+- 2026-10-21 — `deadline = exam.started_at + duration + global_extension + student extension_sec` (`exams/deadline.ts`, pure). A late joiner uses the exam's `started_at`, so everyone shares one end. No migration: the columns existed in 0003/0005.
+- 2026-10-21 — `HostingManager.startExam` does hosting→running (keeps the PIN), activates every `lobby` student, and broadcasts `{t:'state', state}` (the full session state for now) to connected students. The listener stays open so students can still join late. `sessionState(studentId)` builds the welcome/state; a student who connects to a running exam while still in `lobby` is activated there. Exams in `running` also resume after a server restart (`resume()`), and `/info` reports `running`.
+- 2026-10-21 — Questions reach students as `StudentQuestion` (`toStudentQuestion`: no sample answer, criteria or AI notes). Sent in welcome/state only while `running`.
+- 2026-10-21 — `SessionState.examState` is now the `ExamState` enum, not a string; `questions` is optional. `SessionClient` has an `onExam` callback; main forwards the state to the renderer on `session:exam`. The lobby subscription moved into `SessionScreen`, which shows `LobbyScreen` (now presentational) or `ExamScreen`.
+- 2026-10-21 — `ExamLock` (main): while the exam state is `running` the window is fullscreen, `close` and `before-quit` are cancelled, and leaving fullscreen is undone. It is not always-on-top. Dev escape hatch: `EG_ALLOW_CLOSE=1` (ignored in a packaged app).
+- 2026-10-21 — Timer = `deadline - (Date.now() + clockOffsetMs)` ticking every 250 ms (`lib/examClock.ts`). The offset comes from the M12 ping/pong estimate.
+
 ## Known issues / open questions
 - Confirm with lab IT (before a real exam): admin install rights, antivirus/EDR tolerance of the agent and screen capture, reboot-restore software (e.g. Deep Freeze wipes the local queue on reboot), group policies, and whether students are on one subnet.
 - Check Gemini's current data-use terms and use a paid tier for real student data.
@@ -221,7 +232,14 @@ Newest at the bottom. Format: `date — decision — why (doc that owns the deta
 
 - Phase 2 review: two bugs FIXED 2026-10-20, only type-checked, linted and formatted (no UI tests, not clicked through). `JoinForm.tsx` now counts the retry wait down each second, shows "Try again in N s" and disables Join until 0. `ExamsPage.tsx` shows a green "Hosting now" badge, a **Stop hosting** button (with confirm) on the hosted row, and "Questions" is now "Open". Check both in the manual run.
 - Phase 2 review: the M10 manual test "cert regenerated mid-session is refused" can't be done by hand until Settings can regenerate the cert (M43). Until then it is covered only by the `tls-pin` unit tests.
-- Phase 2 review: M13 must not start until the two bugs are fixed and the M02–M12 manual run (with the laptop) has passed.
+- Phase 2 review: the gate "no M13 until the two bugs are fixed and the M02–M12 manual run passed" is cleared as of 2026-10-21 (M13 itself was started a day earlier at the user's request).
+
+- M13: no UI/component tests (node-only vitest). Tested: deadline module, repo/route/socket flow against SQLite and a real loopback student socket (push on start, late joiner with the same deadline, no answer fields leaked, `/info` running, second start 409, resume of a running exam), `SessionClient` state merge, `ExamLock` with a fake window, `examClock`, `examApi.start`, shared schemas. The fullscreen window, Alt+F4 and the timer on screen are the manual test.
+- M13: the window stays locked until the exam leaves `running`. `/end` and submit (M18) are what unlock it. Until then a student whose session fails (replaced, unauthorized) is stuck in the locked window; kill the app from Task Manager, or run dev with `EG_ALLOW_CLOSE=1`. M18 (or an earlier milestone) should add a safe exit for a failed session.
+- M13: answers typed in the box are lost on restart (autosave is M16); code questions show the same plain textarea until M14 adds Monaco. Question text is plain, no markdown rendering.
+- M13: the teacher panel has no countdown or "end exam" yet; the teacher UI shows "Exam running" with the live roster. `Stop hosting` is not offered once running. Extensions (`extension_sec`, `global_extension_sec`) are read in the deadline but nothing sets them yet (M19+).
+- M13: if hosting stops or the teacher server dies while the exam runs, the student's socket reconnects with backoff and the lock stays on, as intended.
+- M13: Windows shutdown/log-off fires `before-quit`, which is cancelled while locked; Windows may still force it. Not handled.
 
 ## Manual recovery checklist (filled in during M48)
 _Empty._
@@ -245,3 +263,5 @@ Format: `date — milestone — what was done — tests run — next`.
 - 2026-10-20 — M12 — shared `ws` schemas, server `ws/` (session-hub, student-socket, teacher-socket), roster repo queries + `GET /exams/:id/roster`, hosting manager wiring, `JoinService.onChange`; desktop `session-client`, IPC/preload `startSession`/`onSessionStatus`, `LobbyScreen` (replaces `WaitingScreen`), `useRoster`/`rosterState`/`RosterList`, live `HostingPanel`; `tools/student-sim` v1 + root `sim` script — full `pnpm test` (285), typecheck, lint, format, build pass; scripted 200-student run OK; app not clicked through — manual test, then M13.
 - 2026-10-20 — Phase 2 review — checked M06–M12 and the Phase 2 "Done when" line against the code and docs, confirmed the 2 reported bugs, logged gaps; only `docs/progress.md` changed — no tests run — fix the 2 bugs, run the manual tests, then M13.
 - 2026-10-20 — Phase 2 fixes — student join retry countdown (`JoinForm`), Exams list "Hosting now" badge + Stop hosting + "Open" label (`ExamsPage`) — desktop typecheck, eslint, prettier pass; not clicked through — manual tests, then M13.
+- 2026-10-21 — M13 — shared `StudentQuestion`, `StateUpdate`, `StartResult`; server `exams/deadline`, `ExamRepo.startRunning/runningExam/timing`, `ExamStudentRepo.activate*`, `HostingManager.startExam/sessionState`, `SessionHub.broadcast/sendTo`, `POST /exams/:id/start`; desktop `ExamLock`, `SessionClient.onExam`, `session:exam` IPC, `SessionScreen`/`ExamScreen`/`ExamTimer`/`QuestionNav`, `examClock`, Start exam button in `HostingPanel` — full `pnpm test` (310), typecheck, lint, prettier, build pass; app not clicked through — manual test, then M14.
+- 2026-10-21 — Manual tests — user ran the M02–M13 manual tests and reported them passing; docs updated (completed list, status, Phase 2 accepted) — no code or tests run — start M14 when the user approves its plan.

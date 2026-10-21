@@ -22,6 +22,12 @@ interface ExamRow {
   updated_at: number;
 }
 
+export interface ExamTiming {
+  startedAt: number | null;
+  durationSec: number;
+  globalExtensionSec: number;
+}
+
 const SELECT = `SELECT e.id, e.title, e.state, e.duration_sec, e.class_list_id,
     l.name AS class_list_name, e.monitoring_json, e.created_at, e.updated_at
   FROM exams e LEFT JOIN class_lists l ON l.id = e.class_list_id`;
@@ -142,9 +148,41 @@ export class ExamRepo {
     return this.get(id);
   }
 
+  /** hosting → running: the PIN stays so late joiners and a restart can still use it. */
+  startRunning(id: string, now: number): ExamSummary | undefined {
+    this.db
+      .prepare("UPDATE exams SET state = 'running', started_at = ?, updated_at = ? WHERE id = ?")
+      .run(now, now, id);
+    return this.get(id);
+  }
+
   /** The exam currently in `hosting`, with its PIN. At most one exists. */
   hostedExam(): { exam: ExamSummary; pin: string } | undefined {
-    const row = this.db.prepare("SELECT id, pin FROM exams WHERE state = 'hosting'").get() as
+    return this.exam('hosting');
+  }
+
+  /** The exam currently in `running`, with its PIN. */
+  runningExam(): { exam: ExamSummary; pin: string } | undefined {
+    return this.exam('running');
+  }
+
+  /** Start time and extension of an exam, for the deadline. */
+  timing(id: string): ExamTiming | undefined {
+    const row = this.db
+      .prepare('SELECT started_at, duration_sec, global_extension_sec FROM exams WHERE id = ?')
+      .get(id) as
+      { started_at: number | null; duration_sec: number; global_extension_sec: number } | undefined;
+    return (
+      row && {
+        startedAt: row.started_at,
+        durationSec: row.duration_sec,
+        globalExtensionSec: row.global_extension_sec,
+      }
+    );
+  }
+
+  private exam(state: 'hosting' | 'running'): { exam: ExamSummary; pin: string } | undefined {
+    const row = this.db.prepare('SELECT id, pin FROM exams WHERE state = ?').get(state) as
       { id: string; pin: string | null } | undefined;
     const exam = row && this.get(row.id);
     return row?.pin && exam ? { exam, pin: row.pin } : undefined;

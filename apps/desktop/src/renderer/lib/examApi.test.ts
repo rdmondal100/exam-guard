@@ -90,6 +90,15 @@ describe('createExamApi', () => {
       );
     });
 
+    it('starts the exam with POST and validates the reply', async () => {
+      const fetchFn = reply(200, { ok: true, startedAt: 1000, deadline: 61000 });
+      const result = await createExamApi(CONNECTION, fetchFn).start('e1');
+      expect(result).toEqual({ ok: true, startedAt: 1000, deadline: 61000 });
+      expect(vi.mocked(fetchFn).mock.calls[0]?.[0]).toBe(
+        'http://127.0.0.1:47821/api/v1/exams/e1/start',
+      );
+    });
+
     it('returns null when the exam is not hosted, and rethrows other errors', async () => {
       const none = reply(404, { error: { code: 'not_hosting', message: 'Not hosting' } });
       expect(await createExamApi(CONNECTION, none).hosting('e1')).toBeNull();

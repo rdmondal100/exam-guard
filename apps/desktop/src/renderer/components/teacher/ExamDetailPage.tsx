@@ -81,6 +81,11 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
       await reloadExams();
     });
 
+  const startExam = async () => {
+    await examApi?.start(exam.id);
+    await reloadExams();
+  };
+
   const stopHosting = async () => {
     await examApi?.stopHosting(exam.id);
     await reloadExams();
@@ -128,8 +133,14 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
             onBackToDraft={backToDraft}
             onHost={host}
           />
-          {exam.state === 'hosting' && examApi && (
-            <HostingPanel examId={exam.id} api={examApi} onStop={stopHosting} />
+          {(exam.state === 'hosting' || exam.state === 'running') && examApi && (
+            <HostingPanel
+              examId={exam.id}
+              api={examApi}
+              running={exam.state === 'running'}
+              onStart={startExam}
+              onStop={stopHosting}
+            />
           )}
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">Questions</h2>

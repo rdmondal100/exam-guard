@@ -171,3 +171,32 @@ describe('reconnectDelay', () => {
     expect(reconnectDelay(2, () => 0.5)).toBe(1500);
   });
 });
+
+describe('SessionClient exam state', () => {
+  it('reports the welcome state and merges later state pushes', async () => {
+    const seen: { examState: string; deadline: number | null; studentState: string }[] = [];
+    client = new SessionClient({
+      onStatus: (s) => statuses.push(s),
+      onExam: (state) => seen.push(state),
+      pingMs: 50,
+      random: () => 0,
+    });
+    client.start(target(), TOKEN);
+    await until(() => seen.length >= 1);
+    expect(seen[0]).toMatchObject({ examState: 'hosting', deadline: null });
+
+    clients[0]?.send(
+      JSON.stringify({
+        t: 'state',
+        state: { examState: 'running', studentState: 'active', deadline: 123_456 },
+      }),
+    );
+    await until(() => seen.length >= 2);
+    expect(seen[1]).toMatchObject({
+      examState: 'running',
+      studentState: 'active',
+      deadline: 123_456,
+      locked: false,
+    });
+  });
+});

@@ -107,6 +107,35 @@ export class ExamStudentRepo {
     return row?.state;
   }
 
+  /** `lobby` → `active` for one student. Returns whether the row changed. */
+  activate(id: string, now: number): boolean {
+    return (
+      this.db
+        .prepare(
+          "UPDATE exam_students SET state = 'active', started_at = ? WHERE id = ? AND state = 'lobby'",
+        )
+        .run(now, id).changes > 0
+    );
+  }
+
+  /** Everyone waiting in the lobby becomes `active`. Returns their ids. */
+  activateAllInLobby(examId: string, now: number): string[] {
+    const ids = (
+      this.db
+        .prepare("SELECT id FROM exam_students WHERE exam_id = ? AND state = 'lobby'")
+        .all(examId) as { id: string }[]
+    ).map((r) => r.id);
+    for (const id of ids) this.activate(id, now);
+    return ids;
+  }
+
+  /** Personal extra time, seconds. */
+  extensionSec(id: string): number {
+    const row = this.db.prepare('SELECT extension_sec FROM exam_students WHERE id = ?').get(id) as
+      { extension_sec: number } | undefined;
+    return row?.extension_sec ?? 0;
+  }
+
   findById(id: string): ExamStudent | undefined {
     const row = this.db.prepare(`${SELECT} WHERE id = ?`).get(id) as Row | undefined;
     return row && toStudent(row);

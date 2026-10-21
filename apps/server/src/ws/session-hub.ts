@@ -60,6 +60,16 @@ export class SessionHub {
     return this.conns.has(id);
   }
 
+  /** Sends to one connected student. */
+  sendTo(id: string, message: ServerToStudent): void {
+    this.conns.get(id)?.send(message);
+  }
+
+  /** Sends to every connected student, building the message per student. */
+  broadcast(build: (id: string) => ServerToStudent): void {
+    for (const [id, conn] of [...this.conns]) conn.send(build(id));
+  }
+
   /** Closes every student socket (hosting stopped). Rows are marked disconnected by `detach`. */
   closeAll(code: number, reason: string): void {
     for (const conn of [...this.conns.values()]) conn.close(code, reason);

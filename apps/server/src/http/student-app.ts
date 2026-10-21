@@ -19,7 +19,7 @@ export interface StudentAppDeps {
     hub: SessionHub;
     students: ExamStudentRepo;
     examId: () => string | null;
-  } & Pick<StudentSocketDeps, 'now' | 'helloTimeoutMs' | 'idleMs'>;
+  } & Pick<StudentSocketDeps, 'sessionState' | 'now' | 'helloTimeoutMs' | 'idleMs'>;
 }
 
 /** Student-facing HTTPS app: `/info`, join and the `/ws` session socket. */

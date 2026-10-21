@@ -67,6 +67,30 @@ export const QuestionSchema = z.object({
 export type Question = z.infer<typeof QuestionSchema>;
 export const QuestionsSchema = z.array(QuestionSchema);
 
+/** What a student may see: never the sample answer, criteria or AI notes. */
+export const StudentQuestionSchema = z.object({
+  id: z.string(),
+  position: z.number().int().min(1),
+  type: QuestionTypeSchema,
+  body: z.string(),
+  marks: z.number(),
+  allowedLanguages: z.array(QuestionLanguageSchema),
+  studentNote: z.string(),
+});
+export type StudentQuestion = z.infer<typeof StudentQuestionSchema>;
+
+export function toStudentQuestion(q: Question): StudentQuestion {
+  return {
+    id: q.id,
+    position: q.position,
+    type: q.type,
+    body: q.body,
+    marks: q.marks,
+    allowedLanguages: q.allowedLanguages,
+    studentNote: q.studentNote,
+  };
+}
+
 export const ReorderBodySchema = z.object({ ids: z.array(z.string()).min(1) });
 export type ReorderBody = z.infer<typeof ReorderBodySchema>;
 

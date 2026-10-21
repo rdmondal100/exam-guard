@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { CriterionSchema, QuestionBodySchema } from './questions.js';
+import {
+  CriterionSchema,
+  QuestionBodySchema,
+  StudentQuestionSchema,
+  toStudentQuestion,
+  type Question,
+} from './questions.js';
 
 const CODE = {
   type: 'code',
@@ -41,5 +47,31 @@ describe('question schemas', () => {
   it('lets an unfinished draft question be saved (empty answer, no criteria)', () => {
     const draft = { ...CODE, sampleAnswer: '', criteria: [], allowedLanguages: [] };
     expect(QuestionBodySchema.safeParse(draft).success).toBe(true);
+  });
+});
+
+describe('toStudentQuestion', () => {
+  const full: Question = {
+    id: 'q1',
+    examId: 'e1',
+    position: 1,
+    type: 'code',
+    body: 'Reverse a string',
+    marks: 2.5,
+    allowedLanguages: ['c', 'js'],
+    studentNote: 'Use stdin',
+    sampleAnswer: 'secret answer',
+    sampleLanguage: 'c',
+    aiNotes: 'secret notes',
+    criteria: [{ name: 'Correct', maxMarks: 2.5 }],
+  };
+
+  it('keeps what a student may see and drops the answer, criteria and AI notes', () => {
+    const out = toStudentQuestion(full);
+    expect(StudentQuestionSchema.safeParse(out).success).toBe(true);
+    expect(JSON.stringify(out)).not.toContain('secret');
+    expect(out).not.toHaveProperty('criteria');
+    expect(out).not.toHaveProperty('examId');
+    expect(out).toMatchObject({ id: 'q1', position: 1, marks: 2.5, studentNote: 'Use stdin' });
   });
 });

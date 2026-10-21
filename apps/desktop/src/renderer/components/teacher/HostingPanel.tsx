@@ -9,11 +9,14 @@ import { RosterList } from './RosterList';
 interface Props {
   examId: string;
   api: ExamApi;
+  /** `running` hides the Start and Stop buttons. */
+  running: boolean;
+  onStart: () => Promise<void>;
   onStop: () => Promise<void>;
 }
 
 /** PIN, addresses and fingerprint code for a hosted exam. Joined students update live. */
-export function HostingPanel({ examId, api, onStop }: Props) {
+export function HostingPanel({ examId, api, running, onStart, onStop }: Props) {
   const [info, setInfo] = useState<HostingInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
@@ -35,14 +38,24 @@ export function HostingPanel({ examId, api, onStop }: Props) {
     };
   }, [api, examId]);
 
-  const stop = async () => {
+  const act = async (action: () => Promise<void>) => {
     setStopping(true);
     try {
-      await onStop();
+      await action();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
       setStopping(false);
     }
+  };
+
+  const start = () => {
+    const inLobby = counts?.inLobby ?? 0;
+    const ok = window.confirm(
+      `Start the exam now? ${inLobby} student${inLobby === 1 ? ' is' : 's are'} in the lobby. ` +
+        'Everyone gets the same end time, including students who join later.',
+    );
+    if (ok) void act(onStart);
   };
 
   return (
@@ -51,10 +64,19 @@ export function HostingPanel({ examId, api, onStop }: Props) {
       className="flex flex-col gap-3 rounded-md border border-border p-4"
     >
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Hosting: waiting for students</h2>
-        <Button variant="outline" disabled={stopping} onClick={() => void stop()}>
-          Stop hosting
-        </Button>
+        <h2 className="text-xl font-semibold">
+          {running ? 'Exam running' : 'Hosting: waiting for students'}
+        </h2>
+        {!running && (
+          <div className="flex gap-2">
+            <Button disabled={stopping} onClick={start}>
+              Start exam
+            </Button>
+            <Button variant="outline" disabled={stopping} onClick={() => void act(onStop)}>
+              Stop hosting
+            </Button>
+          </div>
+        )}
       </div>
       {error && (
         <p role="alert" className="text-red-700">

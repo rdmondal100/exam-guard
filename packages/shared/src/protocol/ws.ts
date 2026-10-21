@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { ProtocolVersionSchema } from './protocol-version.js';
 import { StudentStateSchema } from './join.js';
+import { ExamStateSchema } from './exams.js';
+import { StudentQuestionSchema } from './questions.js';
 
 /** Idle limit on a student socket and the client's ping period (docs/protocol.md §3). */
 export const STUDENT_IDLE_MS = 15_000;
@@ -37,9 +39,11 @@ export type StudentMessage = z.infer<typeof StudentMessageSchema>;
 // ---- server → student ----
 
 export const SessionStateSchema = z.object({
-  examState: z.string(),
+  examState: ExamStateSchema,
   studentState: StudentStateSchema,
   deadline: z.number().nullable(),
+  /** Sent once the exam is running. */
+  questions: z.array(StudentQuestionSchema).optional(),
   saved: z.array(
     z.object({
       questionId: z.string(),
@@ -60,6 +64,13 @@ export const WelcomeSchema = z.object({
 });
 export type Welcome = z.infer<typeof WelcomeSchema>;
 
+/** Pushed on start, extend, lock, end. Carries only the fields that changed. */
+export const StateUpdateSchema = z.object({
+  t: z.literal('state'),
+  state: SessionStateSchema.partial(),
+});
+export type StateUpdate = z.infer<typeof StateUpdateSchema>;
+
 export const PongSchema = z.object({
   t: z.literal('pong'),
   clientSent: z.number(),
@@ -76,6 +87,7 @@ export type WsError = z.infer<typeof WsErrorSchema>;
 
 export const ServerToStudentSchema = z.discriminatedUnion('t', [
   WelcomeSchema,
+  StateUpdateSchema,
   PongSchema,
   WsErrorSchema,
 ]);

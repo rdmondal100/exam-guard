@@ -3,8 +3,8 @@ import type { JoinResult, ProbeResult } from '@examguard/shared';
 import { ConfirmName } from './ConfirmName';
 import { FindExamScreen } from './FindExamScreen';
 import { JoinForm } from './JoinForm';
-import { LobbyScreen } from './LobbyScreen';
 import { MonitoringNotice } from './MonitoringNotice';
+import { SessionScreen } from './SessionScreen';
 
 type Host = Extract<ProbeResult, { ok: true }>;
 type Joined = Extract<JoinResult, { ok: true }>;
@@ -52,6 +52,6 @@ export function StudentFlow() {
         />
       );
     case 'lobby':
-      return <LobbyScreen name={step.joined.name} examTitle={step.joined.examTitle} />;
+      return <SessionScreen name={step.joined.name} examTitle={step.joined.examTitle} />;
   }
 }
