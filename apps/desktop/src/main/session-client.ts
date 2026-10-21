@@ -4,6 +4,7 @@ import {
   STUDENT_PING_MS,
   ServerToStudentSchema,
   WS_CLOSE,
+  type SessionState,
   type SessionStatus,
 } from '@examguard/shared';
 import { PinError, connectPinned, type PinnedTarget } from './tls-pin.js';
@@ -16,6 +17,8 @@ export function reconnectDelay(attempt: number, random: () => number = Math.rand
 
 export interface SessionClientDeps {
   onStatus: (status: SessionStatus) => void;
+  /** The latest exam state: on every welcome and after each `state` push. */
+  onExam?: (state: SessionState) => void;
   pingMs?: number;
   random?: () => number;
 }
@@ -41,6 +44,7 @@ export class SessionClient {
   private offsetMs: number | null = null;
   private bestRtt = Infinity;
   private generation = 0;
+  private exam: SessionState | null = null;
 
   constructor(private readonly deps: SessionClientDeps) {}
 
@@ -52,6 +56,7 @@ export class SessionClient {
     this.attempt = 0;
     this.offsetMs = null;
     this.bestRtt = Infinity;
+    this.exam = null;
     this.emit('connecting');
     void this.connect(this.generation);
   }
@@ -131,9 +136,15 @@ export class SessionClient {
     const message = parsed.data;
     if (message.t === 'welcome') {
       this.attempt = 0;
+      this.exam = message.state;
+      this.deps.onExam?.(message.state);
       this.emit('connected');
       this.pingTimer = setInterval(() => this.ping(ws), this.deps.pingMs ?? STUDENT_PING_MS);
       this.ping(ws);
+    } else if (message.t === 'state') {
+      if (!this.exam) return;
+      this.exam = { ...this.exam, ...message.state };
+      this.deps.onExam?.(this.exam);
     } else if (message.t === 'pong') {
       const received = Date.now();
       const rtt = received - message.clientSent;

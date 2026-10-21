@@ -9,6 +9,7 @@ import {
   ProbeResultSchema,
   ServerConnectionSchema,
   ServerStatusSchema,
+  SessionStateSchema,
   SessionStatusSchema,
   type AppMode,
   type ServerStatus,
@@ -64,6 +65,14 @@ const api: ExamGuardApi = {
     };
     ipcRenderer.on(IPC.sessionStatus, handler);
     return () => ipcRenderer.removeListener(IPC.sessionStatus, handler);
+  },
+  onSessionExam: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown) => {
+      const parsed = SessionStateSchema.safeParse(payload);
+      if (parsed.success) listener(parsed.data);
+    };
+    ipcRenderer.on(IPC.sessionExam, handler);
+    return () => ipcRenderer.removeListener(IPC.sessionExam, handler);
   },
 };
 

@@ -13,4 +13,5 @@ export const IPC = {
   confirmJoin: 'join:confirm',
   startSession: 'session:start',
   sessionStatus: 'session:status',
+  sessionExam: 'session:exam',
 } as const;

@@ -11,6 +11,7 @@ import {
 import { IPC } from '../shared/ipc-channels.js';
 import { readDeviceId } from './device-id.js';
 import { Discovery } from './discovery.js';
+import type { ExamLock } from './exam-lock.js';
 import { JoinClient } from './join-client.js';
 import { probeHost } from './probe-host.js';
 import { SessionClient } from './session-client.js';
@@ -33,7 +34,7 @@ function toInfo(state: AppState): AppInfo {
   };
 }
 
-export function registerIpc(state: AppState, server: ServerHost): void {
+export function registerIpc(state: AppState, server: ServerHost, examLock: ExamLock): void {
   const discovery = new Discovery((hosts) => {
     for (const win of BrowserWindow.getAllWindows())
       win.webContents.send(IPC.discoveryHosts, hosts);
@@ -72,6 +73,10 @@ export function registerIpc(state: AppState, server: ServerHost): void {
     onStatus: (status) => {
       for (const win of BrowserWindow.getAllWindows())
         win.webContents.send(IPC.sessionStatus, status);
+    },
+    onExam: (exam) => {
+      examLock.setActive(exam.examState === 'running');
+      for (const win of BrowserWindow.getAllWindows()) win.webContents.send(IPC.sessionExam, exam);
     },
   });
   ipcMain.handle(IPC.startSession, () => {

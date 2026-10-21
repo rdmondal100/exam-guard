@@ -13,6 +13,14 @@ export const HostingInfoSchema = z.object({
 });
 export type HostingInfo = z.infer<typeof HostingInfoSchema>;
 
+/** `POST /exams/:id/start`: server times in ms since the epoch. */
+export const StartResultSchema = z.object({
+  ok: z.literal(true),
+  startedAt: z.number(),
+  deadline: z.number(),
+});
+export type StartResult = z.infer<typeof StartResultSchema>;
+
 /** Student API `GET /info`: lets a student app show the 4-char code after a manual IP. */
 export const StudentInfoSchema = z.object({
   examTitle: z.string(),

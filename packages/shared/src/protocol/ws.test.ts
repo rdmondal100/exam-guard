@@ -101,3 +101,34 @@ describe('teacher messages', () => {
     ).toBe(false);
   });
 });
+
+describe('state update', () => {
+  it('accepts a partial state with the running exam fields', () => {
+    const update = {
+      t: 'state',
+      state: {
+        examState: 'running',
+        studentState: 'active',
+        deadline: 1_700_000_000_000,
+        questions: [
+          {
+            id: 'q1',
+            position: 1,
+            type: 'written',
+            body: 'Explain',
+            marks: 2,
+            allowedLanguages: [],
+            studentNote: '',
+          },
+        ],
+      },
+    };
+    expect(ServerToStudentSchema.safeParse(update).success).toBe(true);
+  });
+
+  it('rejects an unknown exam state', () => {
+    expect(
+      ServerToStudentSchema.safeParse({ t: 'state', state: { examState: 'paused' } }).success,
+    ).toBe(false);
+  });
+});

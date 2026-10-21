@@ -1,5 +1,13 @@
 import type { FastifyInstance } from 'fastify';
-import { STUDENT_API_PORT, WS_CLOSE, type HostingInfo } from '@examguard/shared';
+import {
+  STUDENT_API_PORT,
+  WS_CLOSE,
+  toStudentQuestion,
+  type HostingInfo,
+  type SessionState,
+  type StartResult,
+} from '@examguard/shared';
+import { computeDeadline } from '../exams/deadline.js';
 import type { EventRepo } from '../db/event-repo.js';
 import type { ExamRepo } from '../db/exam-repo.js';
 import type { ExamStudentRepo } from '../db/exam-student-repo.js';
@@ -72,7 +80,7 @@ export class HostingManager {
     const { exams, questions } = this.deps;
     const exam = exams.get(examId);
     if (!exam) throw new HostingError(404, 'not_found', 'Exam not found');
-    if (this.active || exams.hostedExam()) {
+    if (this.active || exams.hostedExam() || exams.runningExam()) {
       throw new HostingError(409, 'already_hosting', 'An exam is already being hosted');
     }
     if (exam.state !== 'ready') {
@@ -102,14 +110,70 @@ export class HostingManager {
     exams.stopHosting(exam.id, this.now());
   }
 
+  /** hosting → running. Everyone in the lobby becomes active and gets the questions and deadline. */
+  startExam(examId: string): StartResult {
+    const { exams, students, hub } = this.deps;
+    const exam = exams.get(examId);
+    if (!exam) throw new HostingError(404, 'not_found', 'Exam not found');
+    if (exam.state !== 'hosting' || this.active?.examId !== examId) {
+      throw new HostingError(409, 'invalid_state', `A ${exam.state} exam cannot be started`);
+    }
+    assertTransition(exam.state, 'running');
+    const startedAt = this.now();
+    exams.startRunning(examId, startedAt);
+    for (const id of students.activateAllInLobby(examId, startedAt)) hub.changed(id);
+    hub.broadcast((id) => ({ t: 'state', state: this.sessionState(id) }));
+    const deadline = this.deadlineFor(examId, null);
+    if (deadline === null) throw new Error('Running exam has no start time');
+    return { ok: true, startedAt, deadline };
+  }
+
+  /**
+   * What a student's client should show right now. A student still in the lobby of a running
+   * exam (a late joiner) becomes active here.
+   */
+  sessionState(studentId: string): SessionState {
+    const { exams, students, questions, hub } = this.deps;
+    const student = students.findById(studentId);
+    if (!student) throw new Error(`Student ${studentId} not found`);
+    const exam = exams.get(student.examId);
+    const running = exam?.state === 'running';
+    let state = student.state;
+    if (running && state === 'lobby' && students.activate(studentId, this.now())) {
+      state = 'active';
+      hub.changed(studentId);
+    }
+    return {
+      examState: exam?.state ?? 'hosting',
+      studentState: state,
+      deadline: running ? this.deadlineFor(student.examId, studentId) : null,
+      questions: running ? questions.list(student.examId).map(toStudentQuestion) : undefined,
+      saved: [],
+      locked: state === 'locked',
+      monitoring: false,
+    };
+  }
+
   info(examId: string): HostingInfo | null {
     return this.active?.examId === examId ? this.describe(this.active) : null;
   }
 
-  /** After a server restart: reopen the listener for an exam still in `hosting`, same PIN. */
+  /** After a server restart: reopen the listener for an exam still `hosting` or `running`, same PIN. */
   async resume(): Promise<void> {
-    const hosted = this.deps.exams.hostedExam();
+    const { exams } = this.deps;
+    const hosted = exams.hostedExam() ?? exams.runningExam();
     if (hosted && !this.active) await this.open(hosted.exam.id, hosted.pin);
+  }
+
+  private deadlineFor(examId: string, studentId: string | null): number | null {
+    const timing = this.deps.exams.timing(examId);
+    if (!timing || timing.startedAt === null) return null;
+    return computeDeadline({
+      startedAt: timing.startedAt,
+      durationSec: timing.durationSec,
+      globalExtensionSec: timing.globalExtensionSec,
+      studentExtensionSec: studentId ? this.deps.students.extensionSec(studentId) : 0,
+    });
   }
 
   async close(): Promise<void> {
@@ -140,11 +204,13 @@ export class HostingManager {
       join,
       current: () => {
         const exam = this.deps.exams.get(examId);
-        return exam ? { examTitle: exam.title, state: 'hosting' } : null;
+        if (!exam) return null;
+        return { examTitle: exam.title, state: exam.state === 'running' ? 'running' : 'hosting' };
       },
       live: {
         hub: this.deps.hub,
         students: this.deps.students,
+        sessionState: (id) => this.sessionState(id),
         examId: () => (this.active?.examId === examId ? examId : null),
         now: this.now,
         ...this.deps.socketTimings,

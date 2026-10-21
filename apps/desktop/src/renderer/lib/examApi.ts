@@ -3,11 +3,13 @@ import {
   ExamsSchema,
   ExamSummarySchema,
   HostingInfoSchema,
+  StartResultSchema,
   type ExamCreateBody,
   type ExamSummary,
   type ExamUpdateBody,
   type HostingInfo,
   type ServerConnection,
+  type StartResult,
 } from '@examguard/shared';
 import { call, TeacherApiError, type FetchFn } from './teacherApi';
 
@@ -23,6 +25,8 @@ export interface ExamApi {
   /** Opens the student listener. Rejects `not_ready`, `already_hosting` or `port_in_use`. */
   host(id: string): Promise<HostingInfo>;
   stopHosting(id: string): Promise<void>;
+  /** hosting → running. Rejects `invalid_state` or `not_found`. */
+  start(id: string): Promise<StartResult>;
   /** `null` when the exam is not being hosted. */
   hosting(id: string): Promise<HostingInfo | null>;
 }
@@ -37,6 +41,7 @@ export function createExamApi(connection: ServerConnection, fetchFn: FetchFn = f
     markReady: (id) => call(connection, fetchFn, `${path(id)}/ready`, ExamSummarySchema, {}),
     backToDraft: (id) => call(connection, fetchFn, `${path(id)}/unready`, ExamSummarySchema, {}),
     host: (id) => call(connection, fetchFn, `${path(id)}/host`, HostingInfoSchema, {}),
+    start: (id) => call(connection, fetchFn, `${path(id)}/start`, StartResultSchema, {}),
     stopHosting: async (id) => {
       await call(connection, fetchFn, `${path(id)}/stop-hosting`, AuthOkSchema, {});
     },

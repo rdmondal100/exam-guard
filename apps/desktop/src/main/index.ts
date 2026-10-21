@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { app, BrowserWindow } from 'electron';
 import { IPC } from '../shared/ipc-channels.js';
 import { readInstallType } from './install-type.js';
+import { ExamLock } from './exam-lock.js';
 import { registerIpc, type AppState } from './ipc.js';
 import { loadStoredMode, resolveMode } from './mode-store.js';
 import { parseProfile, userDataPathFor } from './profile.js';
@@ -41,10 +42,16 @@ if (!app.requestSingleInstanceLock()) {
         win.webContents.send(IPC.serverStatus, status);
       }
     });
-    app.on('before-quit', () => server.stop());
-    registerIpc(state, server);
+    // EG_ALLOW_CLOSE is a dev escape hatch for the exam lock; a packaged app ignores it.
+    const examLock = new ExamLock(!app.isPackaged && process.env['EG_ALLOW_CLOSE'] === '1');
+    app.on('before-quit', (event) => {
+      if (examLock.shouldBlockClose()) return event.preventDefault();
+      server.stop();
+    });
+    registerIpc(state, server, examLock);
     installCsp();
     window = createMainWindow(`ExamGuard AI (${profile})`);
+    examLock.attach(window);
     if (state.mode === 'teacher') server.start();
   });
 }

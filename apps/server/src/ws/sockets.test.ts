@@ -308,3 +308,92 @@ describe('teacher socket', () => {
     expect(missing.statusCode).toBe(404);
   });
 });
+
+describe('starting the exam', () => {
+  const startExam = () =>
+    app.inject({ method: 'POST', url: `/api/v1/exams/${examId}/start`, headers: HEADERS });
+
+  it('pushes questions and a deadline to lobby students and activates them', async () => {
+    const token = await joinStudent('1');
+    const c = await studentWs();
+    c.ws.send(hello(token));
+    await c.waitFor(() => has(c, 'welcome'));
+    const res = await startExam();
+    expect(res.statusCode).toBe(200);
+    const { startedAt, deadline } = res.json() as { startedAt: number; deadline: number };
+    expect(deadline).toBe(startedAt + 3_600_000);
+    await c.waitFor(() => has(c, 'state'));
+    const pushed = last(c, 'state')?.state as unknown as {
+      examState: string;
+      studentState: string;
+      deadline: number;
+      questions: Record<string, unknown>[];
+    };
+    expect(pushed).toMatchObject({ examState: 'running', studentState: 'active', deadline });
+    expect(pushed.questions).toHaveLength(1);
+    expect(pushed.questions[0]).not.toHaveProperty('sampleAnswer');
+    expect(pushed.questions[0]).not.toHaveProperty('criteria');
+    expect(pushed.questions[0]).not.toHaveProperty('aiNotes');
+  });
+
+  it('gives a late joiner the same deadline and activates them', async () => {
+    const early = await joinStudent('1');
+    const res = await startExam();
+    const { deadline } = res.json() as { deadline: number };
+    await new Promise((r) => setTimeout(r, 30));
+    const late = await joinStudent('2');
+    const c = await studentWs();
+    c.ws.send(hello(late));
+    await c.waitFor(() => has(c, 'welcome'));
+    expect(last(c, 'welcome')?.state).toMatchObject({
+      examState: 'running',
+      studentState: 'active',
+      deadline,
+    });
+    const e = await studentWs();
+    e.ws.send(hello(early));
+    await e.waitFor(() => has(e, 'welcome'));
+    expect(last(e, 'welcome')?.state?.deadline).toBe(deadline);
+  });
+
+  it('reports the running state on /info and refuses a second start', async () => {
+    await startExam();
+    expect((await startExam()).statusCode).toBe(409);
+    const info = await new Promise<{ state: string }>((resolve, reject) => {
+      const req = request(
+        {
+          host: '127.0.0.1',
+          port: studentPort,
+          path: '/api/v1/info',
+          rejectUnauthorized: false,
+        },
+        (res) => {
+          let text = '';
+          res.on('data', (c: Buffer) => (text += c.toString()));
+          res.on('end', () => resolve(JSON.parse(text) as { state: string }));
+        },
+      );
+      req.on('error', reject);
+      req.end();
+    });
+    expect(info.state).toBe('running');
+  });
+
+  it('rejects start for an exam that is not hosted', async () => {
+    await hosting.stop(examId);
+    expect((await startExam()).statusCode).toBe(409);
+    const missing = await app.inject({
+      method: 'POST',
+      url: '/api/v1/exams/nope/start',
+      headers: HEADERS,
+    });
+    expect(missing.statusCode).toBe(404);
+  });
+
+  it('reopens a running exam after a restart', async () => {
+    await startExam();
+    await hosting.close();
+    await hosting.resume();
+    expect(hosting.info(examId)).not.toBeNull();
+  });
+});
