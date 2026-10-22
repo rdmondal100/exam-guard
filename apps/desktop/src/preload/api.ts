@@ -7,8 +7,9 @@ import type {
   JoinResult,
   ProbeRequest,
   ProbeResult,
-  RunRequest,
+  RunRequestInput,
   RunResult,
+  RunSize,
   ServerConnection,
   ServerStatus,
   SessionState,
@@ -46,9 +47,14 @@ export interface ExamGuardApi {
   /** Exam state (state, deadline, questions) after each welcome and push. Returns an unsubscribe. */
   onSessionExam(listener: (state: SessionState) => void): () => void;
   /** Student mode: compile and run code on this PC (one at a time). Resolves when it ends. */
-  runCode(request: RunRequest): Promise<RunResult>;
+  runCode(request: RunRequestInput): Promise<RunResult>;
   /** Stops the current run, if any. */
   stopRun(): Promise<void>;
+  /** Keystrokes for the running program of an interactive run. */
+  runInput(data: string): void;
+  resizeRun(size: RunSize): void;
+  /** Output of an interactive run, as it is produced. Returns an unsubscribe function. */
+  onRunData(listener: (data: string) => void): () => void;
   /** Student mode: may the exam terminal open now, and is one already running. */
   terminalStatus(): Promise<TerminalStatus>;
   /** Starts the exam terminal (or resizes the one already running). */

@@ -1,8 +1,12 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import type { QuestionLanguage, RunResult } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
+import { useAnswerStore } from '@/lib/answerStore';
 import { runKey, useRunStore } from '@/lib/runStore';
 import { errorsText, statusLine, tabAfterRun, type RunTab } from '@/lib/runStatus';
+import { RunFlagsInput } from './RunFlagsInput';
+
+const ProgramConsole = lazy(() => import('./ProgramConsole'));
 
 interface Props {
   questionId: string;
@@ -39,16 +43,17 @@ function useCountdown(until: number): number {
 }
 
 /**
- * Under the editor: stdin, Run/Stop, Output/Errors tabs, exit code and run time. The code runs
- * on this PC only (student main), for the student's own checking.
+ * Under the editor: flags, Run/Stop, the program's console (the student types into it; a window
+ * program opens its own window), the Errors tab, exit code and run time. The code runs on this PC
+ * only (student main), for the student's own checking.
  */
 export function RunPanel({ questionId, language, code }: Props) {
   const key = runKey(questionId, language);
-  const stdin = useRunStore((s) => s.stdin[key] ?? '');
   const result = useRunStore((s) => s.results[key]);
   const running = useRunStore((s) => s.running);
   const cooldownUntil = useRunStore((s) => s.cooldownUntil);
-  const { setStdin, start, finish } = useRunStore.getState();
+  const flags = useAnswerStore((s) => s.flags[questionId]?.[language] ?? '');
+  const { start, finish } = useRunStore.getState();
   const [tab, setTab] = useState<RunTab>('output');
   const wait = useCountdown(cooldownUntil);
   const busyHere = running === key;
@@ -57,7 +62,12 @@ export function RunPanel({ questionId, language, code }: Props) {
     start(key);
     let r: RunResult;
     try {
-      r = await window.examguard.runCode({ questionId, language, code, stdin });
+      r = await window.examguard.runCode({
+        questionId,
+        language,
+        code,
+        flags,
+      });
     } catch (e) {
       r = failure(e instanceof Error ? e.message : 'The run failed.');
     }
@@ -66,20 +76,12 @@ export function RunPanel({ questionId, language, code }: Props) {
   };
 
   const errors = result ? errorsText(result) : '';
-  const shown = tab === 'output' ? (result?.stdout ?? '') : errors;
+  const showConsole = tab === 'output';
   const status = result && statusLine(result);
+  const errorsShown = busyHere ? 'Running…' : errors || (result ? '(nothing)' : 'No errors.');
 
   return (
-    <div className="flex h-60 shrink-0 gap-3">
-      <label className="flex w-64 shrink-0 flex-col gap-1 text-sm font-medium">
-        Input (stdin)
-        <textarea
-          value={stdin}
-          onChange={(e) => setStdin(key, e.target.value)}
-          spellCheck={false}
-          className="min-h-0 flex-1 resize-none rounded-md border p-2 font-mono text-sm font-normal"
-        />
-      </label>
+    <div className="flex h-72 shrink-0 gap-3">
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="flex items-center gap-2">
           <Button onClick={() => void run()} disabled={running !== null || wait > 0}>
@@ -92,7 +94,7 @@ export function RunPanel({ questionId, language, code }: Props) {
           >
             Stop
           </Button>
-          <div role="tablist" className="ml-4 flex gap-1 text-sm">
+          <div role="tablist" className="flex gap-1 text-sm">
             {(['output', 'errors'] as const).map((t) => (
               <button
                 key={t}
@@ -112,11 +114,20 @@ export function RunPanel({ questionId, language, code }: Props) {
             </span>
           )}
         </div>
-        <pre className="min-h-0 flex-1 overflow-auto rounded-md border bg-black/5 p-2 font-mono text-sm whitespace-pre-wrap">
-          {busyHere
-            ? 'Running…'
-            : shown || (result ? '(nothing)' : 'Press Run to compile and run your code.')}
-        </pre>
+        <RunFlagsInput
+          language={language}
+          value={flags}
+          onChange={(v) => useAnswerStore.getState().setFlags(questionId, language, v)}
+          disabled={running !== null}
+        />
+        <Suspense fallback={<p className="p-3 text-sm text-muted">Loading console…</p>}>
+          <ProgramConsole runKey={key} active={busyHere} hidden={!showConsole} />
+        </Suspense>
+        {!showConsole && (
+          <pre className="min-h-0 flex-1 overflow-auto rounded-md border bg-black/5 p-2 font-mono text-sm whitespace-pre-wrap">
+            {errorsShown}
+          </pre>
+        )}
       </div>
     </div>
   );

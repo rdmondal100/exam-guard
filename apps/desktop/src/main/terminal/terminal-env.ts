@@ -36,7 +36,8 @@ const PRIVATE = /^(ELECTRON_|EG_|VITE_)/i;
 /**
  * The shell's environment. PATH puts the shims (node, npm, npx, pacman) first, then gcc, then
  * what the student installed, then the system PATH. gcc reads the include/lib variables, so
- * `gcc cube.c -lfreeglut` works after `pacman -S` without extra flags.
+ * `gcc cube.c -lfreeglut` works after `pacman -S` without extra flags. Code runs (Run button) get
+ * the same environment, so what builds in the terminal builds and runs from Run.
  */
 export function terminalEnv({ base, paths, mingwBin }: TerminalEnvInput): Record<string, string> {
   const env: Record<string, string> = {};
@@ -57,9 +58,13 @@ export function terminalEnv({ base, paths, mingwBin }: TerminalEnvInput): Record
   ]
     .filter((p): p is string => !!p)
     .join(';');
-  env.C_INCLUDE_PATH = join(ucrt, 'include');
-  env.CPLUS_INCLUDE_PATH = join(ucrt, 'include');
-  env.LIBRARY_PATH = join(ucrt, 'lib');
+  // The workspace's own include/lib folders come first (a library the student unpacked there,
+  // e.g. graphics.h and libbgi.a), then what pacman installed. gcc takes ";"-separated lists.
+  const include = [join(paths.workspace, 'include'), join(ucrt, 'include')].join(';');
+  env.C_INCLUDE_PATH = include;
+  env.CPLUS_INCLUDE_PATH = include;
+  env.LIBRARY_PATH = [join(paths.workspace, 'lib'), join(ucrt, 'lib')].join(';');
+  env.NODE_PATH = join(paths.workspace, 'node_modules');
   env.npm_config_update_notifier = 'false';
   env.npm_config_fund = 'false';
   return env;

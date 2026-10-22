@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_RUN_CODE_CHARS, RunRequestSchema, RunResultSchema } from './runner.js';
+import {
+  MAX_RUN_CODE_CHARS,
+  MAX_RUN_FLAGS_CHARS,
+  RunInputSchema,
+  RunRequestSchema,
+  RunResultSchema,
+  RunSizeSchema,
+} from './runner.js';
 
-const request = { questionId: 'q1', language: 'cpp', code: 'int main(){}', stdin: '' };
+const request = { questionId: 'q1', language: 'cpp', code: 'int main(){}' };
 
 describe('RunRequestSchema', () => {
   it('accepts an allowed language', () => {
@@ -12,8 +19,27 @@ describe('RunRequestSchema', () => {
     { ...request, language: 'python' },
     { ...request, questionId: '' },
     { ...request, code: 'x'.repeat(MAX_RUN_CODE_CHARS + 1) },
+    { ...request, flags: 'x'.repeat(MAX_RUN_FLAGS_CHARS + 1) },
   ])('rejects %#', (bad) => {
     expect(RunRequestSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it('defaults to no flags', () => {
+    expect(RunRequestSchema.parse(request)).toMatchObject({ flags: '' });
+  });
+
+  it('keeps the flags the student typed', () => {
+    const parsed = RunRequestSchema.parse({ ...request, flags: '-lfreeglut' });
+    expect(parsed).toMatchObject({ flags: '-lfreeglut' });
+  });
+});
+
+describe('interactive run messages', () => {
+  it('limits keystrokes and the console size', () => {
+    expect(RunInputSchema.safeParse('42\r').success).toBe(true);
+    expect(RunInputSchema.safeParse('x'.repeat(5000)).success).toBe(false);
+    expect(RunSizeSchema.safeParse({ cols: 80, rows: 24 }).success).toBe(true);
+    expect(RunSizeSchema.safeParse({ cols: 1, rows: 24 }).success).toBe(false);
   });
 });
 

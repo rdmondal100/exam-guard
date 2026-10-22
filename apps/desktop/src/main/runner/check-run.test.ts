@@ -35,7 +35,7 @@ const req = (over: Partial<RunRequest> = {}): RunRequest => ({
   questionId: 'q1',
   language: 'c',
   code: '',
-  stdin: '',
+  flags: '',
   ...over,
 });
 
@@ -43,6 +43,7 @@ describe('runRefusal', () => {
   it('allows an allowed language on a code question of a running exam', () => {
     expect(runRefusal(exam, req())).toBeNull();
     expect(runRefusal(exam, req({ language: 'js' }))).toBeNull();
+    expect(runRefusal(exam, req({ flags: '-lm -I"C:\\my libs"' }))).toBeNull();
   });
 
   it.each([
@@ -51,6 +52,7 @@ describe('runRefusal', () => {
     ['unknown question', exam, req({ questionId: 'nope' })],
     ['written question', exam, req({ questionId: 'q2' })],
     ['language not allowed', exam, req({ language: 'cpp' })],
+    ['unclosed quote in the flags', exam, req({ flags: '-I"C:\\libs' })],
   ])('refuses: %s', (_name, state, request) => {
     expect(runRefusal(state, request)).toEqual(expect.any(String));
   });

@@ -1,9 +1,13 @@
 import { z } from 'zod';
 import { QuestionLanguageSchema } from '../protocol/questions.js';
 
-/** Code-run limits, the same for everyone (requirements §8.3, architecture §4). */
+/**
+ * Code-run limits, the same for everyone (requirements §8.3, architecture §4). A run is a console
+ * the student types into, or a program with its own window, so the wall time includes the
+ * student's time and Stop is the normal way out. A teacher setting for it is a later Settings item.
+ */
 export const RUN_LIMITS = {
-  timeMs: 5_000,
+  timeMs: 10 * 60_000,
   memoryMb: 256,
   outputBytes: 64 * 1024,
   processes: 8,
@@ -14,16 +18,29 @@ export const RUN_LIMITS = {
 } as const;
 
 export const MAX_RUN_CODE_CHARS = 200_000;
-export const MAX_RUN_STDIN_CHARS = 64 * 1024;
+export const MAX_RUN_FLAGS_CHARS = 500;
 
 /** Renderer → main `runner:run`. */
 export const RunRequestSchema = z.object({
   questionId: z.string().min(1).max(100),
   language: QuestionLanguageSchema,
   code: z.string().max(MAX_RUN_CODE_CHARS),
-  stdin: z.string().max(MAX_RUN_STDIN_CHARS),
+  /** Extra compiler flags (C/C++) or Node flags (JS), as typed. */
+  flags: z.string().max(MAX_RUN_FLAGS_CHARS).default(''),
 });
 export type RunRequest = z.infer<typeof RunRequestSchema>;
+/** What the renderer sends: `flags` may be left out. */
+export type RunRequestInput = z.input<typeof RunRequestSchema>;
+
+/** Renderer → main `runner:input` (keystrokes for an interactive run). */
+export const RunInputSchema = z.string().max(4096);
+
+/** Renderer → main `runner:resize`. */
+export const RunSizeSchema = z.object({
+  cols: z.number().int().min(2).max(500),
+  rows: z.number().int().min(2).max(200),
+});
+export type RunSize = z.infer<typeof RunSizeSchema>;
 
 /** One compiler message, turned into a Monaco marker. Line and column are 1-based. */
 export const DiagnosticSchema = z.object({

@@ -25,6 +25,17 @@ describe('answer store', () => {
     expect(getAnswer(state().answers, 'q2', 'c')).toBe('b');
   });
 
+  it('keeps flags per question and language, and clears them with the rest', () => {
+    state().setFlags('q1', 'c', '-lm');
+    state().setFlags('q1', 'cpp', '-lfreeglut');
+    state().setFlags('q2', 'c', '-O3');
+    expect(state().flags).toEqual({ q1: { c: '-lm', cpp: '-lfreeglut' }, q2: { c: '-O3' } });
+    state().setFlags('q1', 'c', '');
+    expect(state().flags.q1?.c).toBe('');
+    state().reset();
+    expect(state().flags).toEqual({});
+  });
+
   it('returns an empty string for an unseen buffer', () => {
     expect(getAnswer(state().answers, 'nope', 'c')).toBe('');
   });

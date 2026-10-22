@@ -68,13 +68,43 @@ async function readReport(path: string): Promise<Report | null> {
   }
 }
 
+/**
+ * How a finished eg-runner ended: from its report file, or from its own exit code when the
+ * report can't be read. Without a report path the process's exit code is the program's.
+ */
+export async function resultFromReport(
+  reportPath: string | undefined,
+  code: number | null,
+  base: { stdout: string; stderr: string },
+  elapsedMs: number,
+): Promise<LimitedResult> {
+  if (!reportPath) return { ...base, reason: 'ok', exitCode: code, timeMs: elapsedMs };
+  const report = await readReport(reportPath);
+  if (!report) {
+    const reason = (code !== null && BY_EXIT[code]) || 'failed';
+    const error =
+      reason === 'failed' ? `The code runner stopped unexpectedly (${code}).` : undefined;
+    return { ...base, reason, exitCode: null, timeMs: elapsedMs, ...(error ? { error } : {}) };
+  }
+  return {
+    ...base,
+    reason: report.reason,
+    exitCode: report.exitCode,
+    timeMs: report.timeMs,
+    ...(report.error ? { error: report.error } : {}),
+  };
+}
+
 /** eg-runner's arguments for one limited command. */
 export function runnerArgs(
   limits: { memMb: number; timeMs: number; procs: number },
   reportPath: string,
   argv: string[],
+  /** Interactive runs: Ctrl+C reaches the program and does not end eg-runner. */
+  shell = false,
 ): string[] {
   return [
+    ...(shell ? ['--shell'] : []),
     '--mem',
     String(limits.memMb),
     '--time',
@@ -151,29 +181,7 @@ export function spawnLimited(s: LimitedSpawn): LimitedHandle {
             error: spawnError,
           });
         }
-        if (!s.reportPath) {
-          return resolve({ ...base, reason: 'ok', exitCode: code, timeMs: elapsed });
-        }
-        const report = await readReport(s.reportPath);
-        if (!report) {
-          const reason = (code !== null && BY_EXIT[code]) || 'failed';
-          const error =
-            reason === 'failed' ? `The code runner stopped unexpectedly (${code}).` : undefined;
-          return resolve({
-            ...base,
-            reason,
-            exitCode: null,
-            timeMs: elapsed,
-            ...(error ? { error } : {}),
-          });
-        }
-        resolve({
-          ...base,
-          reason: report.reason,
-          exitCode: report.exitCode,
-          timeMs: report.timeMs,
-          ...(report.error ? { error: report.error } : {}),
-        });
+        resolve(await resultFromReport(s.reportPath, code, base, elapsed));
       })();
     });
   });
