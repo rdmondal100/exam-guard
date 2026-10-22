@@ -16,4 +16,11 @@ export const IPC = {
   sessionExam: 'session:exam',
   runCode: 'runner:run',
   stopRun: 'runner:stop',
+  terminalStatus: 'terminal:status',
+  openTerminal: 'terminal:open',
+  terminalInput: 'terminal:input',
+  resizeTerminal: 'terminal:resize',
+  closeTerminal: 'terminal:close',
+  terminalData: 'terminal:data',
+  terminalExit: 'terminal:exit',
 } as const;

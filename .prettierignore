@@ -5,3 +5,4 @@ target
 coverage
 pnpm-lock.yaml
 *.md
+apps/desktop/resources/toolchains

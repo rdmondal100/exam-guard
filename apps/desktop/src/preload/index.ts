@@ -13,6 +13,12 @@ import {
   ServerStatusSchema,
   SessionStateSchema,
   SessionStatusSchema,
+  TerminalDataSchema,
+  TerminalExitSchema,
+  TerminalInputSchema,
+  TerminalOpenResultSchema,
+  TerminalSizeSchema,
+  TerminalStatusSchema,
   type AppMode,
   type ServerStatus,
 } from '@examguard/shared';
@@ -80,6 +86,33 @@ const api: ExamGuardApi = {
     RunResultSchema.parse(await ipcRenderer.invoke(IPC.runCode, RunRequestSchema.parse(request))),
   stopRun: async () => {
     await ipcRenderer.invoke(IPC.stopRun);
+  },
+  terminalStatus: async () =>
+    TerminalStatusSchema.parse(await ipcRenderer.invoke(IPC.terminalStatus)),
+  openTerminal: async (size) =>
+    TerminalOpenResultSchema.parse(
+      await ipcRenderer.invoke(IPC.openTerminal, TerminalSizeSchema.parse(size)),
+    ),
+  terminalInput: (data) => ipcRenderer.send(IPC.terminalInput, TerminalInputSchema.parse(data)),
+  resizeTerminal: (size) => ipcRenderer.send(IPC.resizeTerminal, TerminalSizeSchema.parse(size)),
+  closeTerminal: async () => {
+    await ipcRenderer.invoke(IPC.closeTerminal);
+  },
+  onTerminalData: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown) => {
+      const parsed = TerminalDataSchema.safeParse(payload);
+      if (parsed.success) listener(parsed.data);
+    };
+    ipcRenderer.on(IPC.terminalData, handler);
+    return () => ipcRenderer.removeListener(IPC.terminalData, handler);
+  },
+  onTerminalExit: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown) => {
+      const parsed = TerminalExitSchema.safeParse(payload);
+      if (parsed.success) listener(parsed.data);
+    };
+    ipcRenderer.on(IPC.terminalExit, handler);
+    return () => ipcRenderer.removeListener(IPC.terminalExit, handler);
   },
 };
 

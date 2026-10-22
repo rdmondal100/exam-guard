@@ -225,7 +225,10 @@ logs/main.log, server.log        rotated, 5 × 5 MB
 %APPDATA%\ExamGuard\                   (Electron userData, student user)
   queue/<examId>.jsonl                 encrypted (safeStorage) pending saves/events
   session/<examId>.json                encrypted: token, server addr, pinned fp, selected languages, buffers
-%LOCALAPPDATA%\ExamGuard\run\...       code-run temp folders (wiped per run and at exam end)
+%LOCALAPPDATA%\ExamGuard\run\<examStudentId>\
+  <questionId>\<lang>\                 code-run folder (wiped per run and at exam end)
+  workspace\                           exam terminal cwd: node_modules, .msys\ (pacman root); kept between runs
+  .examguard\                          bin\ shims, pacman.conf, gnupg\ keyring copy (ExamGuard's, not the student's)
 %ProgramData%\ExamGuard\buffer\<examId>\  agent evidence buffer (SYSTEM-only, AES-GCM)
 %ProgramData%\ExamGuard\agent.log
 ```

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import type { SessionStatus, StudentQuestion } from '@examguard/shared';
 import { ANSWER_TEXT_KEY, answeredIds, getAnswer, useAnswerStore } from '@/lib/answerStore';
 import { pickLanguage } from '@/lib/languages';
@@ -7,6 +7,8 @@ import { ExamTimer } from './ExamTimer';
 import { LINK_TEXT } from './LobbyScreen';
 import { QuestionNav } from './QuestionNav';
 import { WrittenAnswer } from './WrittenAnswer';
+
+const TerminalDock = lazy(() => import('./TerminalDock'));
 
 interface Props {
   name: string;
@@ -37,6 +39,19 @@ export function ExamScreen({ name, examTitle, questions, deadline, status }: Pro
   const answered = answeredIds(answers, keyOf);
   const linkOk = status.link === 'connected';
   const language = question ? languageOf(question) : undefined;
+  const [terminalAvailable, setTerminalAvailable] = useState(false);
+  // Mounted on first open and then only hidden, so the shell output survives toggling.
+  const [terminalMounted, setTerminalMounted] = useState(false);
+  const [terminalShown, setTerminalShown] = useState(false);
+  useEffect(() => {
+    void window.examguard.terminalStatus().then((s) => {
+      setTerminalAvailable(s.available);
+      if (s.open) {
+        setTerminalMounted(true);
+        setTerminalShown(true);
+      }
+    });
+  }, []);
 
   return (
     <div className="flex h-screen flex-col">
@@ -46,6 +61,18 @@ export function ExamScreen({ name, examTitle, questions, deadline, status }: Pro
           <p className="text-sm text-muted">{name}</p>
         </div>
         <div className="flex items-center gap-4">
+          {terminalAvailable && (
+            <button
+              type="button"
+              onClick={() => {
+                setTerminalMounted(true);
+                setTerminalShown((v) => !v);
+              }}
+              className={`rounded-md border px-3 py-1 text-sm ${terminalShown ? 'bg-black/10' : ''}`}
+            >
+              {terminalShown ? 'Hide terminal' : 'Terminal'}
+            </button>
+          )}
           <span className="rounded-md bg-blue-100 px-3 py-1 text-sm text-blue-900">
             Monitoring active
           </span>
@@ -107,6 +134,13 @@ export function ExamScreen({ name, examTitle, questions, deadline, status }: Pro
           <main className="p-6">This exam has no questions.</main>
         )}
       </div>
+      {terminalMounted && (
+        <section className={`h-72 shrink-0 border-t p-3 ${terminalShown ? '' : 'hidden'}`}>
+          <Suspense fallback={<p className="text-sm text-muted">Loading terminal…</p>}>
+            <TerminalDock />
+          </Suspense>
+        </section>
+      )}
     </div>
   );
 }

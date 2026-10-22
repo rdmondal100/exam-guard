@@ -34,6 +34,7 @@ use crate::report::{Reason, Report};
 
 pub struct Limits {
     pub mem_mb: u64,
+    /// Wall time; 0 = none.
     pub time_ms: u64,
     pub procs: u32,
 }
@@ -219,7 +220,7 @@ fn run_inner(command: &[String], limits: &Limits) -> Result<Report, String> {
     let (job, port) = create_job(limits)?;
     let process = spawn_in_job(command, &job)?;
     let started = Instant::now();
-    let deadline = started + Duration::from_millis(limits.time_ms);
+    let deadline = (limits.time_ms > 0).then(|| started + Duration::from_millis(limits.time_ms));
     let mut hits = Hits::default();
     let mut timed_out = false;
     loop {
@@ -232,7 +233,7 @@ fn run_inner(command: &[String], limits: &Limits) -> Result<Report, String> {
         if wait != WAIT_TIMEOUT {
             return Err(last_error("WaitForSingleObject"));
         }
-        if Instant::now() >= deadline {
+        if deadline.is_some_and(|d| Instant::now() >= d) {
             timed_out = true;
             // SAFETY: valid job handle; kills every process in it.
             unsafe {
