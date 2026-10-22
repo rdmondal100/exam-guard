@@ -9,7 +9,8 @@ import { TerminalHost } from './terminal-host.js';
 import { prepareTerminal } from './terminal-launch.js';
 
 // The M15a acceptance run through the real terminal: npm and pacman installs from the internet,
-// then a GLUT program built with plain `gcc` and run for a moment (a window opens briefly).
+// then a GLUT program built with plain `gcc` and run for a moment (a window opens briefly); and
+// (M15d) a pip install that Python finds in the workspace.
 // Opt in with EG_NET_E2E=1 after `pnpm fetch-toolchains` and `cargo build -p eg-runner`.
 const tools = resolveToolchain({
   isPackaged: false,
@@ -23,6 +24,7 @@ const ready =
   !!tools.runner &&
   !!tools.msysRoot &&
   !!tools.npmCli &&
+  !!tools.pythonExe &&
   !!tools.mingwBin;
 const root = mkdtempSync(join(tmpdir(), 'eg-term net-'));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -47,11 +49,12 @@ int main(int argc, char **argv) {
 `;
 
 describe.skipIf(!ready)('exam terminal installs packages (network)', () => {
-  it('npm i, pacman -S, then a GLUT build from the terminal', async () => {
-    let output = '';
+  /** Opens a terminal. `step` types a command and waits for its marker ("<marker>42"). */
+  const open = () => {
+    const out = { text: '' };
     const host = new TerminalHost({
       spawn: spawnPty,
-      onData: (d) => (output += d),
+      onData: (d) => (out.text += d),
       onExit: () => {},
       flushMs: 5,
     });
@@ -59,25 +62,45 @@ describe.skipIf(!ready)('exam terminal installs packages (network)', () => {
       cols: 200,
       rows: 50,
     });
-    writeFileSync(join(root, 'workspace', 'cube.c'), CUBE);
     const step = async (command: string, marker: string, ms: number) => {
       host.write(`${command}; "${marker}" + (6*7)\r`);
       const until = Date.now() + ms;
-      while (!output.includes(`${marker}42`) && Date.now() < until)
+      while (!out.text.includes(`${marker}42`) && Date.now() < until)
         await new Promise((r) => setTimeout(r, 100));
-      expect(output, output.slice(-3000)).toContain(`${marker}42`);
+      expect(out.text, out.text.slice(-3000)).toContain(`${marker}42`);
     };
+    return { host, out, step };
+  };
+
+  it('pip install goes to the workspace and python imports it', async () => {
+    const { host, out, step } = open();
+    try {
+      await step('pip install tabulate', 'pip', 120_000);
+      await step(
+        `python -c "import tabulate; print('tabulate=' + tabulate.__version__)"`,
+        'import',
+        30_000,
+      );
+      expect(out.text).toMatch(/tabulate=\d+\.\d+/);
+    } finally {
+      host.close();
+    }
+  }, 200_000);
+
+  it('npm i, pacman -S, then a GLUT build from the terminal', async () => {
+    const { host, out, step } = open();
+    writeFileSync(join(root, 'workspace', 'cube.c'), CUBE);
     try {
       await step('npm i lodash', 'npm', 120_000);
       await step(`node -e "console.log('lodash=' + require('lodash').VERSION)"`, 'lodash', 20_000);
-      expect(output).toMatch(/lodash=\d+\.\d+\.\d+/);
+      expect(out.text).toMatch(/lodash=\d+\.\d+\.\d+/);
       await step('pacman -S --noconfirm mingw-w64-ucrt-x86_64-freeglut', 'pacman', 180_000);
       await step(
         'gcc cube.c -o cube.exe -lfreeglut -lopengl32 -lglu32; .\\cube.exe',
         'cube',
         60_000,
       );
-      expect(output).toContain('cube-done');
+      expect(out.text).toContain('cube-done');
     } finally {
       host.close();
     }

@@ -32,6 +32,13 @@ describe('question schemas', () => {
     expect(QuestionBodySchema.safeParse(written).success).toBe(true);
   });
 
+  it('takes every runnable language, Python included, and nothing else', () => {
+    const all = { ...CODE, allowedLanguages: ['c', 'cpp', 'js', 'py'] };
+    expect(QuestionBodySchema.safeParse(all).success).toBe(true);
+    const java = { ...CODE, allowedLanguages: ['java'] };
+    expect(QuestionBodySchema.safeParse(java).success).toBe(false);
+  });
+
   it('refuses languages on a written question and duplicate languages or criteria', () => {
     expect(QuestionBodySchema.safeParse({ ...CODE, type: 'written' }).success).toBe(false);
     expect(QuestionBodySchema.safeParse({ ...CODE, allowedLanguages: ['c', 'c'] }).success).toBe(

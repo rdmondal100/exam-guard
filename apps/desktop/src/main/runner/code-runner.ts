@@ -121,6 +121,8 @@ export class CodeRunner {
     if (lang.compile && !tools.mingwBin) {
       return refuse('failed', `The ${lang.label} compiler is not installed on this computer.`);
     }
+    const missing = lang.unavailable?.(tools);
+    if (missing) return refuse('failed', missing);
     const flags = splitFlags(request.flags);
     if (!flags) return refuse('failed', 'These flags cannot be used. Check for a missing quote.');
     const root = this.deps.workRoot();

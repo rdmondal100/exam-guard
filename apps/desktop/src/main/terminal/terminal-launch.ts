@@ -78,6 +78,7 @@ export function prepareTerminal({
     nodeExe: tools.nodeExe,
     npmCli: tools.npmCli,
     msysRoot: tools.msysRoot,
+    pythonExe: tools.pythonExe,
   });
   for (const [name, text] of Object.entries(files)) writeFileSync(join(paths.shims, name), text);
   if (tools.msysRoot) {

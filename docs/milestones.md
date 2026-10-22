@@ -129,7 +129,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 
 ### M15d Python runtime + pip
 - **Goal:** Python 3 as an allowed language with `pip` installs into the workspace.
-- **Touches:** a Python 3 build **with tkinter** (e.g. python-build-standalone, not the embeddable zip) fetched by `fetch-toolchains`, pip bootstrap, `QUESTION_LANGUAGES` + runner config + Monaco, workspace `site-packages` on `PYTHONPATH`, question editor checkbox.
+- **Touches:** a Python 3 build **with tkinter** (python-build-standalone `install_only` 3.13, not the embeddable zip) fetched by `fetch-toolchains`, `QUESTION_LANGUAGES` (`py`) + runner config + Monaco, workspace `site-packages` (`PIP_TARGET` and `PYTHONPATH`), `python`/`pip` shims in the terminal, question editor checkbox (it lists `QUESTION_LANGUAGES`).
 - **Accept:** `pip install numpy` in the terminal, then a NumPy program runs from Run; a matplotlib window opens from Run; Python runs meet the limits.
 - **Manual test:** a Python question with numpy and a matplotlib plot.
 

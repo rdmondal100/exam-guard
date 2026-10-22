@@ -36,7 +36,8 @@ const PRIVATE = /^(ELECTRON_|EG_|VITE_)/i;
 /**
  * The shell's environment. PATH puts the shims (node, npm, npx, pacman) first, then gcc, then
  * what the student installed, then the system PATH. gcc reads the include/lib variables, so
- * `gcc cube.c -lfreeglut` works after `pacman -S` without extra flags. Code runs (Run button) get
+ * `gcc cube.c -lfreeglut` works after `pacman -S` without extra flags; `pip install` goes to
+ * `workspace\site-packages`, which is on PYTHONPATH. Code runs (Run button) get
  * the same environment, so what builds in the terminal builds and runs from Run.
  */
 export function terminalEnv({ base, paths, mingwBin }: TerminalEnvInput): Record<string, string> {
@@ -49,11 +50,13 @@ export function terminalEnv({ base, paths, mingwBin }: TerminalEnvInput): Record
     else env[key] = value;
   }
   const ucrt = join(paths.msysOverlay, 'ucrt64');
+  const sitePackages = join(paths.workspace, 'site-packages');
   env.PATH = [
     paths.shims,
     mingwBin,
     join(ucrt, 'bin'),
     join(paths.workspace, 'node_modules', '.bin'),
+    join(sitePackages, 'bin'),
     systemPath,
   ]
     .filter((p): p is string => !!p)
@@ -65,6 +68,11 @@ export function terminalEnv({ base, paths, mingwBin }: TerminalEnvInput): Record
   env.CPLUS_INCLUDE_PATH = include;
   env.LIBRARY_PATH = [join(paths.workspace, 'lib'), join(ucrt, 'lib')].join(';');
   env.NODE_PATH = join(paths.workspace, 'node_modules');
+  // pip installs straight into the workspace (no flags, no admin rights) and Python finds it there.
+  env.PIP_TARGET = sitePackages;
+  env.PYTHONPATH = sitePackages;
+  env.PIP_DISABLE_PIP_VERSION_CHECK = '1';
+  env.MPLCONFIGDIR = join(paths.workspace, '.mpl');
   env.npm_config_update_notifier = 'false';
   env.npm_config_fund = 'false';
   return env;

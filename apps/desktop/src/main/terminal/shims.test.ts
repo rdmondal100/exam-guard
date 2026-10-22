@@ -8,6 +8,7 @@ const tools = {
   nodeExe: 'C:\\Program Files\\ExamGuard\\ExamGuard.exe',
   npmCli: 'C:\\Program Files\\ExamGuard\\resources\\toolchains\\npm\\bin\\npm-cli.js',
   msysRoot: 'C:\\Program Files\\ExamGuard\\resources\\toolchains\\msys64',
+  pythonExe: 'C:\\Program Files\\ExamGuard\\resources\\toolchains\\python\\python.exe',
 };
 
 describe('toMsysPath', () => {
@@ -33,6 +34,14 @@ describe('shimFiles', () => {
     expect(files['npx.cmd']).toContain('npm\\bin\\npx-cli.js" %*');
   });
 
+  it('runs python and pip from the bundled Python, never another install', () => {
+    const exe = '"C:\\Program Files\\ExamGuard\\resources\\toolchains\\python\\python.exe"';
+    expect(files['python.cmd']).toBe(`@echo off\r\n${exe} %*\r\n`);
+    expect(files['pip.cmd']).toBe(`@echo off\r\n${exe} -m pip %*\r\n`);
+    expect(files['python3.cmd']).toBe('@echo off\r\n"%~dp0python.cmd" %*\r\n');
+    expect(files['pip3.cmd']).toBe('@echo off\r\n"%~dp0pip.cmd" %*\r\n');
+  });
+
   it('points pacman at the workspace with POSIX paths and syncs on first use', () => {
     const pacman = files['pacman.cmd'] ?? '';
     const root = '/c/Users/Ann Lee/run/es1/workspace/.msys';
@@ -48,7 +57,13 @@ describe('shimFiles', () => {
   });
 
   it('escapes % in paths and leaves out tools that are missing', () => {
-    const only = shimFiles({ ...tools, nodeExe: 'C:\\100%\\e.exe', npmCli: null, msysRoot: null });
+    const only = shimFiles({
+      ...tools,
+      nodeExe: 'C:\\100%\\e.exe',
+      npmCli: null,
+      msysRoot: null,
+      pythonExe: null,
+    });
     expect(Object.keys(only)).toEqual(['node.cmd']);
     expect(only['node.cmd']).toContain('"C:\\100%%\\e.exe" %*');
   });

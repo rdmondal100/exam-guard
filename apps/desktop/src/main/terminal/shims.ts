@@ -22,6 +22,8 @@ export interface ShimInput {
   nodeExe: string;
   npmCli: string | null;
   msysRoot: string | null;
+  /** The bundled `python.exe`. */
+  pythonExe: string | null;
 }
 
 /**
@@ -30,13 +32,27 @@ export interface ShimInput {
  * student's workspace with its own database and keyring copy, so the bundled MSYS2 tree (read
  * only once installed) is never written. The first `pacman` call downloads the package list.
  */
-export function shimFiles({ paths, nodeExe, npmCli, msysRoot }: ShimInput): Record<string, string> {
+export function shimFiles({
+  paths,
+  nodeExe,
+  npmCli,
+  msysRoot,
+  pythonExe,
+}: ShimInput): Record<string, string> {
   const files: Record<string, string> = {
     'node.cmd': batch('setlocal', 'set "ELECTRON_RUN_AS_NODE=1"', `${q(nodeExe)} %*`),
   };
   if (npmCli) {
     files['npm.cmd'] = batch(`"%~dp0node.cmd" ${q(npmCli)} %*`);
     files['npx.cmd'] = batch(`"%~dp0node.cmd" ${q(join(npmCli, '..', 'npx-cli.js'))} %*`);
+  }
+  if (pythonExe) {
+    // Ahead of the Windows Store `python` alias on PATH. pip is run as a module of the bundled
+    // Python, so it never picks up another installation.
+    files['python.cmd'] = batch(`${q(pythonExe)} %*`);
+    files['python3.cmd'] = batch('"%~dp0python.cmd" %*');
+    files['pip.cmd'] = batch(`${q(pythonExe)} -m pip %*`);
+    files['pip3.cmd'] = batch('"%~dp0pip.cmd" %*');
   }
   if (msysRoot) {
     const root = toMsysPath(paths.msysOverlay);

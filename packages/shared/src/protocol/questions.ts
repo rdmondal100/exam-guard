@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const QUESTION_LANGUAGES = ['c', 'cpp', 'js'] as const;
+export const QUESTION_LANGUAGES = ['c', 'cpp', 'js', 'py'] as const;
 export const QuestionLanguageSchema = z.enum(QUESTION_LANGUAGES);
 export type QuestionLanguage = z.infer<typeof QuestionLanguageSchema>;
 

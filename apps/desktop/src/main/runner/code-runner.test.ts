@@ -88,6 +88,7 @@ beforeEach(() => {
     nodeExe: 'electron.exe',
     msysRoot: null,
     npmCli: null,
+    pythonExe: 'python.exe',
   };
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
@@ -159,6 +160,28 @@ describe('CodeRunner', () => {
       'main.js',
     ]);
     expect(opened[0]?.[0].env.ELECTRON_RUN_AS_NODE).toBe('1');
+  });
+
+  it('runs Python straight in the console, with the workspace on PYTHONPATH', async () => {
+    const r = await runner().run(req({ language: 'py' }));
+    expect(r.status).toBe('ok');
+    expect(spawned).toHaveLength(0);
+    expect(opened[0]?.[0].args.slice(-2)).toEqual(['python.exe', 'main.py']);
+    const env = opened[0]?.[0].env;
+    expect(env?.PYTHONUTF8).toBe('1');
+    // NumPy would otherwise reserve a buffer per core and hit the memory limit on import.
+    expect(env?.OPENBLAS_NUM_THREADS).toBe('1');
+    expect(env?.PYTHONPATH).toBe(join(root, 'workspace', 'site-packages'));
+    expect(env?.ELECTRON_RUN_AS_NODE).toBeUndefined();
+  });
+
+  it('refuses a Python run when Python is not installed', async () => {
+    tools = { ...tools, pythonExe: null };
+    expect(await runner().run(req({ language: 'py' }))).toMatchObject({
+      status: 'failed',
+      message: 'Python is not installed on this computer.',
+    });
+    expect(opened).toHaveLength(0);
   });
 
   it('stops at a compile error with diagnostics and does not run', async () => {

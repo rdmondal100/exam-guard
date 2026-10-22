@@ -9,6 +9,8 @@ export interface ToolPaths {
   mingwBin: string | null;
   /** The Electron executable, run as Node for JavaScript. */
   nodeExe: string;
+  /** The bundled CPython (`python.exe`), or `null` if it was not found. */
+  pythonExe: string | null;
 }
 
 /**
@@ -26,6 +28,8 @@ export interface LanguageConfig {
   /** `flags` are the student's own, already split: Node flags for JavaScript. */
   run: (tools: ToolPaths, dir: string, flags: string[]) => string[];
   env?: Record<string, string>;
+  /** Why this language cannot run on this computer, or `null` if it can. */
+  unavailable?: (tools: ToolPaths) => string | null;
 }
 
 // The student's flags come after the source, so `-l` libraries link and a `-std=` of theirs wins.
@@ -67,5 +71,22 @@ export const LANGUAGES: Record<QuestionLanguage, LanguageConfig> = {
     files: { [JS_STDIN_FILE]: JS_STDIN },
     run: (tools, _dir, flags) => [tools.nodeExe, '-r', `./${JS_STDIN_FILE}`, ...flags, 'main.js'],
     env: { ELECTRON_RUN_AS_NODE: '1' },
+  },
+  py: {
+    id: 'py',
+    label: 'Python',
+    fileName: 'main.py',
+    unavailable: (tools) => (tools.pythonExe ? null : 'Python is not installed on this computer.'),
+    run: (tools, _dir, flags) => [tools.pythonExe ?? '', ...flags, 'main.py'],
+    // UTF-8 for input() and print() in the console; no .pyc files in the run folder. NumPy's
+    // OpenBLAS reserves a buffer per CPU core at import, which on a 20-core PC alone passes the
+    // 256 MB job limit ("OpenBLAS error: Memory allocation still failed"), so it gets one thread.
+    env: {
+      PYTHONUTF8: '1',
+      PYTHONDONTWRITEBYTECODE: '1',
+      OPENBLAS_NUM_THREADS: '1',
+      OMP_NUM_THREADS: '1',
+      MKL_NUM_THREADS: '1',
+    },
   },
 };

@@ -22,6 +22,7 @@ beforeEach(() => {
     nodeExe: 'C:\\ExamGuard.exe',
     msysRoot,
     npmCli: 'C:\\npm\\bin\\npm-cli.js',
+    pythonExe: 'C:\\py\\python.exe',
   };
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
