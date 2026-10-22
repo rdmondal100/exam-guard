@@ -43,6 +43,7 @@ describe('server messages', () => {
         saved: [],
         locked: false,
         monitoring: false,
+        terminal: { enabled: false, until: null },
       },
     };
     expect(ServerToStudentSchema.safeParse(welcome).success).toBe(true);
@@ -62,6 +63,7 @@ describe('server messages', () => {
         saved: [],
         locked: false,
         monitoring: false,
+        terminal: { enabled: false, until: null },
       },
     };
     expect(ServerToStudentSchema.safeParse(bad).success).toBe(false);

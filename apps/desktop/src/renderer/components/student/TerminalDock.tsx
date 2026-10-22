@@ -2,12 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import type { TerminalExit } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
 
 type Phase = 'idle' | 'opening' | 'open' | 'closed';
 
 const DIM = '\x1b[90m';
 const RESET = '\x1b[0m';
+const EXIT_TEXT: Record<TerminalExit['reason'], string> = {
+  closed: 'Terminal closed',
+  exited: 'Terminal ended',
+  turned_off: 'Terminal turned off by the teacher',
+};
 
 /**
  * The exam terminal (xterm.js). The shell itself runs in student main (node-pty inside a Job
@@ -64,9 +70,7 @@ export default function TerminalDock() {
     const offData = window.examguard.onTerminalData((data) => t.write(data));
     const offExit = window.examguard.onTerminalExit((exit) => {
       const code = exit.exitCode === null ? '' : ` (exit ${exit.exitCode})`;
-      t.write(
-        `\r\n${DIM}[Terminal ${exit.reason === 'closed' ? 'closed' : 'ended'}${code}]${RESET}\r\n`,
-      );
+      t.write(`\r\n${DIM}[${EXIT_TEXT[exit.reason]}${code}]${RESET}\r\n`);
       setPhase('closed');
     });
     // Fit to the box whenever it changes size (including when the dock is first shown).
@@ -94,7 +98,10 @@ export default function TerminalDock() {
     <div className="flex h-full flex-col gap-2">
       <div className="flex items-center gap-3 text-sm">
         <span className="font-medium">Terminal</span>
-        <span className="text-muted">PowerShell in your exam workspace: npm, pacman, gcc</span>
+        <span className="text-muted">
+          PowerShell in your exam workspace: npm, pacman, gcc. Your teacher sees the commands and
+          output.
+        </span>
         <div className="ml-auto flex items-center gap-2">
           {message && <span className="text-red-700">{message}</span>}
           {phase === 'open' ? (

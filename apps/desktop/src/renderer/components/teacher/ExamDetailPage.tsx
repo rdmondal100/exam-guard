@@ -12,10 +12,19 @@ import { useExams } from '@/lib/useExams';
 import { useQuestions } from '@/lib/useQuestions';
 import { QuestionEditor } from './QuestionEditor';
 import { QuestionList } from './QuestionList';
+import { EndedTerminalLogs } from './EndedTerminalLogs';
 import { HostingPanel } from './HostingPanel';
 import { ReadyPanel } from './ReadyPanel';
 
 type Editing = { question?: Question; type?: QuestionType } | null;
+
+/** States after the exam ran: terminal logs stay readable there. */
+const AFTER_EXAM: ReadonlySet<ExamSummary['state']> = new Set([
+  'ended',
+  'grading',
+  'in_review',
+  'finalized',
+]);
 
 interface Props {
   exam: ExamSummary;
@@ -159,6 +168,9 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
             <p role="status" className="rounded-md border border-border p-4">
               This exam has ended. Students can no longer join or submit.
             </p>
+          )}
+          {AFTER_EXAM.has(exam.state) && examApi && (
+            <EndedTerminalLogs examId={exam.id} api={examApi} />
           )}
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">Questions</h2>

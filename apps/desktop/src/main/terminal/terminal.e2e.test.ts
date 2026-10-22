@@ -39,11 +39,13 @@ const alive = (pid: number) =>
   );
 
 let output = '';
+let commands: string[] = [];
 let exits: TerminalExit[] = [];
 let host: TerminalHost;
 
 const start = () => {
   output = '';
+  commands = [];
   // Per host: the previous test's shell reports its exit after this test has started.
   const mine: TerminalExit[] = [];
   exits = mine;
@@ -53,6 +55,9 @@ const start = () => {
       if (exits === mine) output += d;
     },
     onExit: (e) => mine.push(e),
+    onCommand: (line) => {
+      if (exits === mine) commands.push(line);
+    },
     flushMs: 5,
   });
   host.open(() => prepareTerminal({ runRoot: root, tools, baseEnv: process.env, shell }), {
@@ -111,6 +116,47 @@ describe.skipIf(!tools.runner)('exam terminal with node-pty and eg-runner', () =
     while (exits.length === 0 && Date.now() < until + 3_000)
       await new Promise((r) => setTimeout(r, 50));
     expect(exits).toEqual([expect.objectContaining({ reason: 'closed' })]);
+  }, 30_000);
+
+  it('reports each command line once, as completed by Tab and recalled by Up', async () => {
+    start();
+    await run('', 'ready');
+    host.write('Get-ChildI');
+    await waitFor(/Get-ChildI$/);
+    host.write('\t');
+    await waitFor(/Get-ChildItem$/);
+    host.write(' -Name; "tab" + (6*7)\r');
+    await waitFor(/tab42/);
+    host.write('\x1b[A');
+    await waitFor(/Get-ChildItem -Name; "tab" \+ \(6\*7\)$/);
+    host.write('\r');
+    await waitFor(/tab42[\s\S]*tab42/);
+    const until = Date.now() + 5_000;
+    while (commands.length < 3 && Date.now() < until) await new Promise((r) => setTimeout(r, 50));
+    expect(commands).toEqual([
+      '"ready" + (6*7)',
+      'Get-ChildItem -Name; "tab" + (6*7)',
+      'Get-ChildItem -Name; "tab" + (6*7)',
+    ]);
+    // The markers never reach the student's screen.
+    expect(output).not.toContain('\x1b]6973;');
+  }, 30_000);
+
+  it('turning it off mid-command kills the command within a second', async () => {
+    start();
+    await run('', 'ready');
+    host.write(
+      `$p = Start-Process ping -ArgumentList '-t','127.0.0.1' -NoNewWindow -PassThru; "PID=" + ($p.Id + 0) + "!"\r`,
+    );
+    const pid = Number((await waitFor(/PID=(\d+)!/))[1]);
+    const off = Date.now();
+    host.close('turned_off');
+    while (alive(pid) && Date.now() - off < 3_000) await new Promise((r) => setTimeout(r, 50));
+    expect(alive(pid)).toBe(false);
+    expect(Date.now() - off).toBeLessThan(1_000 + 300); // + one tasklist call
+    while (exits.length === 0 && Date.now() - off < 5_000)
+      await new Promise((r) => setTimeout(r, 50));
+    expect(exits).toEqual([expect.objectContaining({ reason: 'turned_off' })]);
   }, 30_000);
 
   it('node and npm run through the shims', async () => {

@@ -15,6 +15,8 @@ interface Props {
   examTitle: string;
   questions: StudentQuestion[];
   deadline: number;
+  /** The teacher's terminal switch; main closes the shell itself when it goes off. */
+  terminalOn: boolean;
   status: SessionStatus;
 }
 
@@ -23,7 +25,7 @@ interface Props {
  * questions, a text box for written ones), the server timer, the connection state and a
  * monitoring badge. Answers are kept in memory only; autosave arrives with M16.
  */
-export function ExamScreen({ name, examTitle, questions, deadline, status }: Props) {
+export function ExamScreen({ name, examTitle, questions, deadline, terminalOn, status }: Props) {
   const [selectedId, setSelectedId] = useState(questions[0]?.id ?? '');
   const answers = useAnswerStore((s) => s.answers);
   const languages = useAnswerStore((s) => s.languages);
@@ -39,13 +41,11 @@ export function ExamScreen({ name, examTitle, questions, deadline, status }: Pro
   const answered = answeredIds(answers, keyOf);
   const linkOk = status.link === 'connected';
   const language = question ? languageOf(question) : undefined;
-  const [terminalAvailable, setTerminalAvailable] = useState(false);
   // Mounted on first open and then only hidden, so the shell output survives toggling.
   const [terminalMounted, setTerminalMounted] = useState(false);
   const [terminalShown, setTerminalShown] = useState(false);
   useEffect(() => {
     void window.examguard.terminalStatus().then((s) => {
-      setTerminalAvailable(s.available);
       if (s.open) {
         setTerminalMounted(true);
         setTerminalShown(true);
@@ -61,7 +61,7 @@ export function ExamScreen({ name, examTitle, questions, deadline, status }: Pro
           <p className="text-sm text-muted">{name}</p>
         </div>
         <div className="flex items-center gap-4">
-          {terminalAvailable && (
+          {(terminalOn || terminalShown) && (
             <button
               type="button"
               onClick={() => {

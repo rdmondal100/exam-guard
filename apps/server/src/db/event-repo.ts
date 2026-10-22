@@ -1,3 +1,4 @@
+import type { TerminalLogEvent } from '@examguard/shared';
 import type { Db } from './connection.js';
 
 export interface NewEvent {
@@ -12,7 +13,7 @@ export interface NewEvent {
   dedupeKey?: string;
 }
 
-/** `events`. Only the insert exists so far; the classifier and queries arrive with monitoring. */
+/** `events`. The classifier and the general queries arrive with monitoring. */
 export class EventRepo {
   constructor(private readonly db: Db) {}
 
@@ -36,5 +37,30 @@ export class EventRepo {
         event.dedupeKey ?? null,
       );
     return result.changes > 0;
+  }
+
+  /** One student's events of the given types, oldest first. */
+  listForStudent(examStudentId: string, types: readonly string[]): TerminalLogEvent[] {
+    if (types.length === 0) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT id, type, server_ts, client_ts, details_json FROM events
+           WHERE exam_student_id = ? AND type IN (${types.map(() => '?').join(', ')})
+           ORDER BY server_ts, id`,
+      )
+      .all(examStudentId, ...types) as {
+      id: number;
+      type: string;
+      server_ts: number;
+      client_ts: number | null;
+      details_json: string;
+    }[];
+    return rows.map((r) => ({
+      id: r.id,
+      type: r.type,
+      serverTs: r.server_ts,
+      clientTs: r.client_ts,
+      details: JSON.parse(r.details_json) as Record<string, unknown>,
+    }));
   }
 }

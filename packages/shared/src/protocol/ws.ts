@@ -3,6 +3,7 @@ import { ProtocolVersionSchema } from './protocol-version.js';
 import { StudentStateSchema } from './join.js';
 import { ExamStateSchema } from './exams.js';
 import { StudentQuestionSchema } from './questions.js';
+import { TerminalStateSchema } from './actions.js';
 
 /** Idle limit on a student socket and the client's ping period (docs/protocol.md §3). */
 export const STUDENT_IDLE_MS = 15_000;
@@ -34,7 +35,13 @@ export const PingSchema = z.object({ t: z.literal('ping'), clientSent: z.number(
 export type Ping = z.infer<typeof PingSchema>;
 
 /** Event types the student app reports itself. Agent evidence types join with monitoring. */
-export const APP_EVENT_TYPES = ['run_executed'] as const;
+export const APP_EVENT_TYPES = [
+  'run_executed',
+  'terminal_opened',
+  'terminal_closed',
+  'terminal_command',
+  'package_installed',
+] as const;
 export const AppEventTypeSchema = z.enum(APP_EVENT_TYPES);
 export type AppEventType = z.infer<typeof AppEventTypeSchema>;
 
@@ -49,10 +56,23 @@ export const EventReportSchema = z.object({
 });
 export type EventReport = z.infer<typeof EventReportSchema>;
 
+/** Largest transcript chunk the client sends (characters). */
+export const MAX_TRANSCRIPT_CHUNK = 16 * 1024;
+
+/** A piece of the exam terminal's output. Stored once per `key`, so a resend is harmless. */
+export const TranscriptChunkSchema = z.object({
+  t: z.literal('transcript'),
+  key: z.string().min(1).max(200),
+  clientTs: z.number(),
+  text: z.string().max(MAX_TRANSCRIPT_CHUNK),
+});
+export type TranscriptChunk = z.infer<typeof TranscriptChunkSchema>;
+
 export const StudentMessageSchema = z.discriminatedUnion('t', [
   HelloSchema,
   PingSchema,
   EventReportSchema,
+  TranscriptChunkSchema,
 ]);
 export type StudentMessage = z.infer<typeof StudentMessageSchema>;
 
@@ -74,6 +94,8 @@ export const SessionStateSchema = z.object({
   ),
   locked: z.boolean(),
   monitoring: z.boolean(),
+  /** The teacher's exam terminal switch (server-authoritative). */
+  terminal: TerminalStateSchema,
 });
 export type SessionState = z.infer<typeof SessionStateSchema>;
 
@@ -109,11 +131,16 @@ export type WsError = z.infer<typeof WsErrorSchema>;
 export const EventAckSchema = z.object({ t: z.literal('event.ack'), id: z.string() });
 export type EventAck = z.infer<typeof EventAckSchema>;
 
+/** The transcript chunk is stored (or was already, or was dropped over the cap). */
+export const TranscriptAckSchema = z.object({ t: z.literal('transcript.ack'), key: z.string() });
+export type TranscriptAck = z.infer<typeof TranscriptAckSchema>;
+
 export const ServerToStudentSchema = z.discriminatedUnion('t', [
   WelcomeSchema,
   StateUpdateSchema,
   PongSchema,
   EventAckSchema,
+  TranscriptAckSchema,
   WsErrorSchema,
 ]);
 export type ServerToStudent = z.infer<typeof ServerToStudentSchema>;

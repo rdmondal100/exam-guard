@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
-import type { HostingInfo } from '@examguard/shared';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { HostingInfo, RosterEntry } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
 import type { ExamApi } from '@/lib/examApi';
 import { sortedStudents } from '@/lib/rosterState';
 import { useRoster } from '@/lib/useRoster';
 import { RosterList } from './RosterList';
+import { TerminalControl } from './TerminalControl';
+import { TerminalLogDialog } from './TerminalLogDialog';
 
 interface Props {
   examId: string;
@@ -22,9 +24,12 @@ export function HostingPanel({ examId, api, running, onStart, onStop, onEnd }: P
   const [info, setInfo] = useState<HostingInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
+  const [logOf, setLogOf] = useState<RosterEntry | null>(null);
   const roster = useRoster(examId);
   const counts = roster.counts;
 
+  const [reloads, setReloads] = useState(0);
+  const reloadInfo = useCallback(() => setReloads((n) => n + 1), []);
   useEffect(() => {
     let cancelled = false;
     api
@@ -38,7 +43,11 @@ export function HostingPanel({ examId, api, running, onStart, onStop, onEnd }: P
     return () => {
       cancelled = true;
     };
-  }, [api, examId]);
+  }, [api, examId, reloads]);
+  const terminal = useMemo(
+    () => info && { terminal: info.terminal, pendingMinutes: info.terminalPendingMinutes },
+    [info],
+  );
 
   const act = async (action: () => Promise<void>) => {
     setStopping(true);
@@ -122,7 +131,18 @@ export function HostingPanel({ examId, api, running, onStart, onStop, onEnd }: P
       ) : (
         !error && <p className="text-sm text-muted">Loading hosting details…</p>
       )}
-      <RosterList students={sortedStudents(roster)} />
+      {terminal && (
+        <TerminalControl examId={examId} api={api} initial={terminal} onExpired={reloadInfo} />
+      )}
+      <RosterList students={sortedStudents(roster)} onTerminalLog={setLogOf} />
+      {logOf && (
+        <TerminalLogDialog
+          examId={examId}
+          student={logOf}
+          api={api}
+          onClose={() => setLogOf(null)}
+        />
+      )}
       <p className="text-sm text-muted">
         Students enter the address, the PIN and their ID. With a typed address, they compare the
         check code on their screen with this one.

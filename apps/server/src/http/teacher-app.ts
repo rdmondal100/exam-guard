@@ -11,7 +11,11 @@ import { ExamRepo } from '../db/exam-repo.js';
 import { ExamStudentRepo } from '../db/exam-student-repo.js';
 import { HostingManager, type HostingManagerDeps } from '../hosting/hosting-manager.js';
 import { QuestionRepo } from '../db/question-repo.js';
+import { TeacherActionRepo } from '../db/teacher-action-repo.js';
+import { TerminalLogRepo } from '../db/terminal-log-repo.js';
+import { TerminalRepo } from '../db/terminal-repo.js';
 import { TeacherRepo } from '../db/teacher-repo.js';
+import { registerActionRoutes } from './action-routes.js';
 import { registerAuthRoutes } from './auth-routes.js';
 import { registerClassListRoutes } from './class-list-routes.js';
 import { sendError } from './errors.js';
@@ -19,6 +23,7 @@ import { registerExamRoutes } from './exam-routes.js';
 import { registerHostingRoutes } from './hosting-routes.js';
 import { registerQuestionRoutes } from './question-routes.js';
 import { registerRosterRoutes } from './roster-routes.js';
+import { registerTerminalLogRoutes } from './terminal-log-routes.js';
 import { SessionHub } from '../ws/session-hub.js';
 import { registerTeacherSocket } from '../ws/teacher-socket.js';
 
@@ -28,7 +33,10 @@ export interface TeacherAppOptions {
   /** Clock for the login rate limiter and the teacher row; tests inject a fake. */
   now?: () => number;
   /** Student listener settings. Without it the hosting routes are not registered. */
-  hosting?: Omit<HostingManagerDeps, 'exams' | 'questions' | 'students' | 'events' | 'hub'>;
+  hosting?: Omit<
+    HostingManagerDeps,
+    'exams' | 'questions' | 'students' | 'events' | 'terminals' | 'terminalLogs' | 'actions' | 'hub'
+  >;
 }
 
 export interface TeacherApp {
@@ -109,21 +117,34 @@ export function buildTeacherApp({
   registerExamRoutes(app, { exams, questions, requireLogin: state.requireLogin, now });
   registerQuestionRoutes(app, { exams, questions, requireLogin: state.requireLogin, now });
 
+  const students = new ExamStudentRepo(db);
+  const events = new EventRepo(db);
+  const terminalLogs = new TerminalLogRepo(db);
+  registerTerminalLogRoutes(app, {
+    students,
+    events,
+    terminalLogs,
+    requireLogin: state.requireLogin,
+  });
+
   let hosting: HostingManager | undefined;
   if (hostingOptions) {
-    const students = new ExamStudentRepo(db);
     const hub = new SessionHub({ students, now });
     hosting = new HostingManager({
       exams,
       questions,
       students,
-      events: new EventRepo(db),
+      events,
+      terminals: new TerminalRepo(db),
+      terminalLogs,
+      actions: new TeacherActionRepo(db),
       hub,
       now,
       ...hostingOptions,
     });
     registerHostingRoutes(app, { hosting, requireLogin: state.requireLogin });
     registerRosterRoutes(app, { exams, students, requireLogin: state.requireLogin });
+    registerActionRoutes(app, { hosting, requireLogin: state.requireLogin });
     void app.register(websocket);
     // Inside a plugin so it loads after the websocket plugin.
     void app.register(async (scope) => {

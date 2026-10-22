@@ -475,3 +475,125 @@ describe('starting the exam', () => {
     expect(hosting.info(examId)).toBeNull();
   });
 });
+
+describe('exam terminal', () => {
+  const action = (payload: object, id = examId) =>
+    app.inject({
+      method: 'POST',
+      url: `/api/v1/exams/${id}/actions`,
+      headers: HEADERS,
+      payload,
+    });
+  const terminalOf = (m: Msg | undefined) =>
+    (m?.state as unknown as { terminal?: { enabled: boolean; until: number | null } })?.terminal;
+  const studentIdOf = (code: string) =>
+    (
+      db
+        .prepare(
+          `SELECT s.id FROM exam_students s JOIN class_students c ON c.id = s.class_student_id
+             WHERE c.student_code = ?`,
+        )
+        .get(code) as { id: string }
+    ).id;
+
+  it('pushes the switch to connected students and gives late joiners the current state', async () => {
+    const token = await joinStudent('1');
+    const c = await studentWs();
+    c.ws.send(hello(token));
+    await c.waitFor(() => has(c, 'welcome'));
+    expect(terminalOf(last(c, 'welcome'))).toEqual({ enabled: false, until: null });
+
+    const res = await action({ type: 'terminal', enabled: true });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ ok: true, terminal: { enabled: true, until: null } });
+    await c.waitFor(() => terminalOf(last(c, 'state'))?.enabled === true);
+
+    const late = await joinStudent('2');
+    const l = await studentWs();
+    l.ws.send(hello(late));
+    await l.waitFor(() => has(l, 'welcome'));
+    expect(terminalOf(last(l, 'welcome'))).toEqual({ enabled: true, until: null });
+
+    const info = await app.inject({
+      method: 'GET',
+      url: `/api/v1/exams/${examId}/hosting`,
+      headers: HEADERS,
+    });
+    expect(info.json()).toMatchObject({
+      terminal: { enabled: true },
+      terminalPendingMinutes: null,
+    });
+    const logged = db.prepare('SELECT action, payload_json FROM teacher_actions').all();
+    expect(logged).toEqual([{ action: 'terminal', payload_json: '{"enabled":true}' }]);
+  });
+
+  it('starts an "N minutes" window at Start', async () => {
+    await action({ type: 'terminal', enabled: true, minutes: 5 });
+    const started = await app.inject({
+      method: 'POST',
+      url: `/api/v1/exams/${examId}/start`,
+      headers: HEADERS,
+    });
+    const { startedAt } = started.json() as { startedAt: number };
+    expect(hosting.terminal.state(examId)).toEqual({
+      enabled: true,
+      until: startedAt + 5 * 60_000,
+    });
+  });
+
+  it('rejects bad bodies, unknown exams and ended exams', async () => {
+    expect((await action({ type: 'terminal' })).statusCode).toBe(400);
+    expect((await action({ type: 'terminal', enabled: false, minutes: 3 })).statusCode).toBe(400);
+    expect((await action({ type: 'terminal', enabled: true }, 'nope')).statusCode).toBe(404);
+    await app.inject({ method: 'POST', url: `/api/v1/exams/${examId}/start`, headers: HEADERS });
+    await app.inject({ method: 'POST', url: `/api/v1/exams/${examId}/end`, headers: HEADERS });
+    const ended = await action({ type: 'terminal', enabled: true });
+    expect(ended.statusCode).toBe(409);
+    expect(ended.json().error.code).toBe('invalid_state');
+  });
+
+  it('stores the transcript once per key and serves it with the terminal events', async () => {
+    const token = await joinStudent('1');
+    const c = await studentWs();
+    c.ws.send(hello(token));
+    await c.waitFor(() => has(c, 'welcome'));
+    const chunk = (key: string, text: string) =>
+      JSON.stringify({ t: 'transcript', key, clientTs: 1, text });
+    c.ws.send(chunk('a:1', 'PS> dir\r\n'));
+    c.ws.send(chunk('a:1', 'PS> dir\r\n'));
+    c.ws.send(chunk('a:2', 'file.txt\r\n'));
+    const report = (id: string, type: string, details: object) =>
+      JSON.stringify({ t: 'event', id, dedupeKey: id, clientTs: 2, type, details });
+    c.ws.send(report('e1', 'terminal_command', { line: 'dir' }));
+    c.ws.send(report('e2', 'run_executed', { status: 'ok' }));
+    await c.waitFor(
+      () =>
+        c.messages.filter((m) => m.t === 'transcript.ack').length === 3 &&
+        c.messages.filter((m) => m.t === 'event.ack').length === 2,
+    );
+
+    const sid = studentIdOf('1');
+    const log = await app.inject({
+      method: 'GET',
+      url: `/api/v1/exams/${examId}/students/${sid}/terminal`,
+      headers: HEADERS,
+    });
+    expect(log.statusCode).toBe(200);
+    const body = log.json() as { events: { type: string }[]; transcript: string };
+    expect(body.transcript).toBe('PS> dir\r\nfile.txt\r\n');
+    expect(body.events.map((e) => e.type)).toEqual(['terminal_command']);
+
+    const wrong = await app.inject({
+      method: 'GET',
+      url: `/api/v1/exams/other/students/${sid}/terminal`,
+      headers: HEADERS,
+    });
+    expect(wrong.statusCode).toBe(404);
+  });
+
+  it('refuses a transcript chunk before hello', async () => {
+    const c = await studentWs();
+    c.ws.send(JSON.stringify({ t: 'transcript', key: 'k', clientTs: 1, text: 'x' }));
+    expect(await c.closed).toBe(4400);
+  });
+});
