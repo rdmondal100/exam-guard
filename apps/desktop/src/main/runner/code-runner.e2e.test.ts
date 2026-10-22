@@ -181,6 +181,53 @@ describe.skipIf(!tools.runner || !tools.mingwBin)(
   },
 );
 
+// The bundled CPython from `pnpm fetch-toolchains`, in the same pseudo-console as the others.
+describe.skipIf(!tools.runner || !tools.pythonExe)('Python in the run console', () => {
+  it('takes typed input with input()', async () => {
+    const running = run('py', 'n = int(input("How many? "))\nprint("double =", n * 2)');
+    await waitFor('How many?');
+    runner.write('21\r');
+    const r = await running;
+    expect(r).toMatchObject({ status: 'ok', exitCode: 0 });
+    expect(r.stdout).toContain('double = 42');
+  }, 30_000);
+
+  it('shows a traceback and the exit code of a failing program', async () => {
+    const r = await run('py', 'print(1 / 0)');
+    expect(r).toMatchObject({ status: 'ok', exitCode: 1 });
+    expect(r.stdout).toContain('ZeroDivisionError');
+  }, 30_000);
+
+  it('imports a package installed in the workspace site-packages', async () => {
+    const dir = join(root, 'workspace', 'site-packages');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'eg_demo.py'), 'def twice(x):\n    return 2 * x\n');
+    const r = await run('py', 'import eg_demo\nprint("twice =", eg_demo.twice(21))');
+    expect(r.status).toBe('ok');
+    expect(r.stdout).toContain('twice = 42');
+  }, 30_000);
+
+  it('can open a tkinter window', async () => {
+    const r = await run(
+      'py',
+      'import tkinter\nroot = tkinter.Tk()\nroot.after(500, root.destroy)\nroot.mainloop()\nprint("window closed")',
+    );
+    expect(r).toMatchObject({ status: 'ok', exitCode: 0 });
+    expect(r.stdout).toContain('window closed');
+  }, 30_000);
+
+  it('ends an endless loop at the wall time (shortened here)', async () => {
+    const r = await run('py', 'while True:\n    pass');
+    expect(r.status).toBe('time_limit');
+  }, 30_000);
+
+  it('refuses a 1 GB allocation', async () => {
+    const r = await run('py', 'x = bytearray(1 << 30)\nprint("allocated")');
+    expect(r.stdout).not.toContain('allocated');
+    expect(r.status).not.toBe('ok');
+  }, 30_000);
+});
+
 // The app runs JavaScript on Electron-as-Node, whose stdin is not a console by itself (js-stdin.ts).
 // Node above can't show that, so this one needs the real Electron executable from node_modules.
 const electronExe = resolve(

@@ -34,6 +34,7 @@ describe('terminalEnv', () => {
       'C:\\tools\\mingw64\\bin',
       join(paths.msysOverlay, 'ucrt64', 'bin'),
       join(paths.workspace, 'node_modules', '.bin'),
+      join(paths.workspace, 'site-packages', 'bin'),
       'C:\\Windows\\system32',
       'C:\\Windows',
     ]);
@@ -52,6 +53,15 @@ describe('terminalEnv', () => {
     expect(env.NODE_PATH).toBe(join(paths.workspace, 'node_modules'));
     expect(env.npm_config_update_notifier).toBe('false');
     expect(env.PATH?.split(';')[1]).toBe(join(paths.msysOverlay, 'ucrt64', 'bin'));
+  });
+
+  it('sends pip and Python to the workspace site-packages', () => {
+    const env = terminalEnv({ base, paths, mingwBin: null });
+    const sitePackages = join(paths.workspace, 'site-packages');
+    expect(env.PIP_TARGET).toBe(sitePackages);
+    expect(env.PYTHONPATH).toBe(sitePackages);
+    expect(env.PIP_DISABLE_PIP_VERSION_CHECK).toBe('1');
+    expect(env.MPLCONFIGDIR).toBe(join(paths.workspace, '.mpl'));
   });
 
   it('keeps the user environment but drops ExamGuard and Electron variables', () => {

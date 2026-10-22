@@ -92,6 +92,7 @@ beforeEach(() => {
     nodeExe: 'electron.exe',
     msysRoot: null,
     npmCli: null,
+    pythonExe: 'python.exe',
   };
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
@@ -122,6 +123,11 @@ describe('student flags', () => {
       '--stack-size=2000',
       'main.js',
     ]);
+  });
+
+  it('gives them to Python before the file', async () => {
+    await runner().run(req({ language: 'py', flags: '-W ignore' }));
+    expect(opened[0]?.[0].args.slice(-4)).toEqual(['python.exe', '-W', 'ignore', 'main.py']);
   });
 
   it('does not run anything for flags with an unclosed quote', async () => {

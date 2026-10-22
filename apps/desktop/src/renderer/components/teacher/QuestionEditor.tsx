@@ -27,7 +27,12 @@ interface Props {
 const FIELD = 'flex flex-col gap-1 text-sm font-medium';
 const AREA =
   'min-h-24 rounded-md border border-border bg-card p-3 text-sm focus-visible:outline-2 focus-visible:outline-primary';
-const LANGUAGE_LABEL: Record<string, string> = { c: 'C', cpp: 'C++', js: 'JavaScript' };
+const LANGUAGE_LABEL: Record<string, string> = {
+  c: 'C',
+  cpp: 'C++',
+  js: 'JavaScript',
+  py: 'Python',
+};
 
 /** One question: statement, languages, marking guide, sample answer, student note, AI notes. */
 export function QuestionEditor({ question, newType = 'code', onSubmit, onCancel }: Props) {

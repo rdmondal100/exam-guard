@@ -38,6 +38,7 @@ export function resolveToolchain(t: ToolchainEnv): Toolchain {
       mingwBin: first([join(mingw, 'gcc.exe')]) && mingw,
       msysRoot: first([join(msys, 'usr', 'bin', 'pacman.exe')]) && msys,
       npmCli: first([join(toolchains, 'npm', 'bin', 'npm-cli.js')]),
+      pythonExe: first([join(toolchains, 'python', 'python.exe')]),
       nodeExe: t.execPath,
     };
   };

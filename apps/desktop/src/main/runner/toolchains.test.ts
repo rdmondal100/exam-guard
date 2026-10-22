@@ -18,6 +18,7 @@ const releaseRunner = resolve('/repo/target/release/eg-runner.exe');
 const devGcc = join(APP, 'resources/toolchains/mingw64/bin/gcc.exe');
 const devPacman = join(APP, 'resources/toolchains/msys64/usr/bin/pacman.exe');
 const devNpm = join(APP, 'resources/toolchains/npm/bin/npm-cli.js');
+const devPython = join(APP, 'resources/toolchains/python/python.exe');
 
 describe('resolveToolchain', () => {
   it('finds the dev runner (release first) and the fetched MinGW', () => {
@@ -27,8 +28,9 @@ describe('resolveToolchain', () => {
     expect(t.nodeExe).toBe('electron.exe');
   });
 
-  it('finds MSYS2 and npm for the terminal', () => {
-    const t = resolveToolchain(base([devPacman, devNpm]));
+  it('finds MSYS2, npm and Python for the terminal and Run', () => {
+    const t = resolveToolchain(base([devPacman, devNpm, devPython]));
+    expect(t.pythonExe).toBe(devPython);
     expect(t.msysRoot).toBe(join(APP, 'resources/toolchains/msys64'));
     expect(t.npmCli).toBe(devNpm);
   });
@@ -39,6 +41,7 @@ describe('resolveToolchain', () => {
       mingwBin: null,
       msysRoot: null,
       npmCli: null,
+      pythonExe: null,
     });
   });
 
