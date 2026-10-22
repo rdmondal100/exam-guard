@@ -33,19 +33,31 @@ class FakePty implements PtyProcess {
   }
 }
 
-const launch: TerminalLaunch = { file: 'eg-runner.exe', args: [], cwd: 'C:\\ws', env: {} };
+const launch: TerminalLaunch = {
+  file: 'eg-runner.exe',
+  args: [],
+  cwd: 'C:\\ws',
+  env: {},
+  nonce: 'n0nce',
+};
+const marker = (line: string, nonce = 'n0nce') =>
+  `\x1b]6973;${nonce};${Buffer.from(line, 'utf8').toString('base64')}\x07`;
 const size = { cols: 100, rows: 30 };
 
 let ptys: FakePty[];
 let data: string[];
 let exits: TerminalExit[];
 let host: TerminalHost;
+let commands: string[];
+let opens: number;
 
 beforeEach(() => {
   vi.useFakeTimers();
   ptys = [];
   data = [];
   exits = [];
+  commands = [];
+  opens = 0;
   host = new TerminalHost({
     spawn: (l, s) => {
       expect(l).toBe(launch);
@@ -56,6 +68,8 @@ beforeEach(() => {
     },
     onData: (d) => data.push(d),
     onExit: (e) => exits.push(e),
+    onCommand: (line) => commands.push(line),
+    onOpen: () => (opens += 1),
     flushMs: 16,
   });
 });
@@ -116,6 +130,22 @@ describe('TerminalHost', () => {
     host.write('x');
     host.resize(size);
     expect(ptys).toHaveLength(0);
+  });
+
+  it('takes command markers out of the output and reports the lines', () => {
+    host.open(() => launch, size);
+    expect(opens).toBe(1);
+    ptys[0]?.emit(`npm i lodash${marker('npm i lodash')}\r\n`);
+    ptys[0]?.emit(marker('dir', 'other'));
+    vi.advanceTimersByTime(16);
+    expect(commands).toEqual(['npm i lodash']);
+    expect(data.join('')).toBe(`npm i lodash\r\n${marker('dir', 'other')}`);
+  });
+
+  it('reports turned_off when the switch closes it', () => {
+    host.open(() => launch, size);
+    host.close('turned_off');
+    expect(exits).toEqual([{ exitCode: 1, reason: 'turned_off' }]);
   });
 
   it('does not keep a half-started shell when preparing fails', () => {

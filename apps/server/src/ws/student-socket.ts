@@ -11,6 +11,7 @@ import {
 } from '@examguard/shared';
 import type { EventRepo } from '../db/event-repo.js';
 import type { ExamStudentRepo } from '../db/exam-student-repo.js';
+import type { TerminalLogRepo } from '../db/terminal-log-repo.js';
 import { hashToken } from '../join/join-service.js';
 import type { SessionHub, StudentConn } from './session-hub.js';
 
@@ -18,6 +19,7 @@ export interface StudentSocketDeps {
   hub: SessionHub;
   students: ExamStudentRepo;
   events: EventRepo;
+  terminalLogs: TerminalLogRepo;
   /** The state the client should show; also activates a late joiner. */
   sessionState: (studentId: string) => SessionState;
   /** The hosted exam id, or `null` when nothing is hosted. */
@@ -99,6 +101,18 @@ export function registerStudentSocket(app: FastifyInstance, deps: StudentSocketD
           dedupeKey: `app:${message.dedupeKey}`,
         });
         return send({ t: 'event.ack', id: message.id });
+      }
+      if (message.t === 'transcript') {
+        if (!studentId) return refuse(WS_CLOSE.badHello, 'hello_first', 'Send hello first');
+        // Acked even when dropped over the cap, so the client stops re-sending it.
+        deps.terminalLogs.append({
+          examStudentId: studentId,
+          key: message.key,
+          text: message.text,
+          serverTs: now(),
+          clientTs: message.clientTs,
+        });
+        return send({ t: 'transcript.ack', key: message.key });
       }
       if (studentId) return refuse(WS_CLOSE.badHello, 'bad_frame', 'Already said hello');
 

@@ -4,12 +4,16 @@ import {
   ExamSummarySchema,
   HostingInfoSchema,
   StartResultSchema,
+  TerminalActionResultSchema,
+  TerminalLogResponseSchema,
   type ExamCreateBody,
   type ExamSummary,
   type ExamUpdateBody,
   type HostingInfo,
   type ServerConnection,
   type StartResult,
+  type TerminalActionResult,
+  type TerminalLogResponse,
 } from '@examguard/shared';
 import { call, TeacherApiError, type FetchFn } from './teacherApi';
 
@@ -31,6 +35,10 @@ export interface ExamApi {
   end(id: string): Promise<void>;
   /** `null` when the exam is not being hosted. */
   hosting(id: string): Promise<HostingInfo | null>;
+  /** The exam terminal switch, hosting or running only. `minutes` only when turning it on. */
+  setTerminal(id: string, enabled: boolean, minutes?: number): Promise<TerminalActionResult>;
+  /** One student's terminal events and transcript, in any exam state. */
+  terminalLog(id: string, studentId: string): Promise<TerminalLogResponse>;
 }
 
 export function createExamApi(connection: ServerConnection, fetchFn: FetchFn = fetch): ExamApi {
@@ -58,6 +66,19 @@ export function createExamApi(connection: ServerConnection, fetchFn: FetchFn = f
         throw e;
       }
     },
+    setTerminal: (id, enabled, minutes) =>
+      call(connection, fetchFn, `${path(id)}/actions`, TerminalActionResultSchema, {
+        type: 'terminal',
+        enabled,
+        ...(minutes === undefined ? {} : { minutes }),
+      }),
+    terminalLog: (id, studentId) =>
+      call(
+        connection,
+        fetchFn,
+        `${path(id)}/students/${encodeURIComponent(studentId)}/terminal`,
+        TerminalLogResponseSchema,
+      ),
     remove: async (id) => {
       await call(connection, fetchFn, path(id), AuthOkSchema, undefined, 'DELETE');
     },

@@ -12,6 +12,9 @@ import type { EventRepo } from '../db/event-repo.js';
 import type { ExamRepo } from '../db/exam-repo.js';
 import type { ExamStudentRepo } from '../db/exam-student-repo.js';
 import type { QuestionRepo } from '../db/question-repo.js';
+import type { TeacherActionRepo } from '../db/teacher-action-repo.js';
+import type { TerminalLogRepo } from '../db/terminal-log-repo.js';
+import type { TerminalRepo } from '../db/terminal-repo.js';
 import { JoinService } from '../join/join-service.js';
 import { assertTransition } from '../exams/exam-state.js';
 import { readyProblems } from '../exams/ready-check.js';
@@ -21,25 +24,19 @@ import { lanAddresses } from '../tls/lan-addresses.js';
 import { advertiseOverMdns, type Advertise } from './mdns-advertiser.js';
 import type { SessionHub } from '../ws/session-hub.js';
 import { generatePin } from './pin.js';
+import { HostingError } from './hosting-error.js';
+import { TerminalSwitch } from './terminal-switch.js';
 
-/** A refusal the routes turn into an HTTP error. */
-export class HostingError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
-    readonly details?: unknown,
-  ) {
-    super(message);
-    this.name = 'HostingError';
-  }
-}
+export { HostingError };
 
 export interface HostingManagerDeps {
   exams: ExamRepo;
   questions: QuestionRepo;
   students: ExamStudentRepo;
   events: EventRepo;
+  terminals: TerminalRepo;
+  terminalLogs: TerminalLogRepo;
+  actions: TeacherActionRepo;
   /** Live student sockets and teacher subscribers. */
   hub: SessionHub;
   dataDir: string;
@@ -71,9 +68,18 @@ export class HostingManager {
   private active: Active | null = null;
   private deadlineTimer: ReturnType<typeof setInterval> | null = null;
   private readonly now: () => number;
+  /** The teacher's exam terminal switch. */
+  readonly terminal: TerminalSwitch;
 
   constructor(private readonly deps: HostingManagerDeps) {
     this.now = deps.now ?? Date.now;
+    this.terminal = new TerminalSwitch({
+      terminals: deps.terminals,
+      actions: deps.actions,
+      hub: deps.hub,
+      examState: (id) => deps.exams.get(id)?.state,
+      now: this.now,
+    });
   }
 
   /** ready → hosting. Re-checks readiness, since questions stay editable in `ready`. */
@@ -122,6 +128,7 @@ export class HostingManager {
     assertTransition(exam.state, 'running');
     const startedAt = this.now();
     exams.startRunning(examId, startedAt);
+    this.terminal.examStarted(examId, startedAt);
     for (const id of students.activateAllInLobby(examId, startedAt)) hub.changed(id);
     hub.broadcast((id) => ({ t: 'state', state: this.sessionState(id) }));
     const deadline = this.deadlineFor(examId, null);
@@ -172,6 +179,7 @@ export class HostingManager {
       saved: [],
       locked: state === 'locked',
       monitoring: false,
+      terminal: this.terminal.state(student.examId),
     };
   }
 
@@ -184,7 +192,10 @@ export class HostingManager {
     const { exams } = this.deps;
     const hosted = exams.hostedExam() ?? exams.runningExam();
     if (hosted && !this.active) await this.open(hosted.exam.id, hosted.pin);
-    if (hosted?.exam.state === 'running') this.watchDeadline(hosted.exam.id);
+    if (hosted?.exam.state === 'running') {
+      this.watchDeadline(hosted.exam.id);
+      this.terminal.arm(hosted.exam.id);
+    }
   }
 
   /** Ends the exam once the latest deadline (extensions included) has passed. */
@@ -193,6 +204,7 @@ export class HostingManager {
     const check = () => {
       const timing = this.deps.exams.timing(examId);
       if (!timing || timing.startedAt === null) return;
+      this.terminal.check(examId);
       const last = computeDeadline({
         startedAt: timing.startedAt,
         durationSec: timing.durationSec,
@@ -226,6 +238,7 @@ export class HostingManager {
   async close(): Promise<void> {
     const active = this.active;
     this.stopWatchingDeadline();
+    this.terminal.disarm();
     if (!active) return;
     this.active = null;
     active.stopAdvertising();
@@ -259,6 +272,7 @@ export class HostingManager {
         hub: this.deps.hub,
         students: this.deps.students,
         events: this.deps.events,
+        terminalLogs: this.deps.terminalLogs,
         sessionState: (id) => this.sessionState(id),
         examId: () => (this.active?.examId === examId ? examId : null),
         now: this.now,
@@ -297,6 +311,13 @@ export class HostingManager {
 
   private describe(active: Active): HostingInfo {
     const addresses = (this.deps.addresses ?? lanAddresses)();
-    return { pin: active.pin, addresses, port: active.port, fpCode: active.fpCode };
+    return {
+      pin: active.pin,
+      addresses,
+      port: active.port,
+      fpCode: active.fpCode,
+      terminal: this.terminal.state(active.examId),
+      terminalPendingMinutes: this.terminal.pendingMinutes(active.examId),
+    };
   }
 }

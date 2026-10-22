@@ -33,6 +33,7 @@ beforeAll(async () => {
         t: string;
         clientSent?: number;
         id?: string;
+        key?: string;
       };
       frames.push(message);
       if (message.t === 'hello') {
@@ -40,6 +41,8 @@ beforeAll(async () => {
         socket.send(JSON.stringify({ t: 'welcome', serverTime: Date.now() + skew, state: STATE }));
       } else if (message.t === 'event' && ackEvents) {
         socket.send(JSON.stringify({ t: 'event.ack', id: message.id }));
+      } else if (message.t === 'transcript' && ackEvents) {
+        socket.send(JSON.stringify({ t: 'transcript.ack', key: message.key }));
       } else if (message.t === 'ping') {
         socket.send(
           JSON.stringify({
@@ -67,6 +70,7 @@ const STATE = {
   saved: [],
   locked: false,
   monitoring: false,
+  terminal: { enabled: false, until: null },
 };
 
 let statuses: SessionStatus[];
@@ -239,5 +243,23 @@ describe('SessionClient events', () => {
     await until(() => events().length === 3);
     expect(events()[2]?.details).toEqual({ n: 2 });
     expect(events()[2]?.id).toBe(events()[1]?.id);
+  });
+});
+
+describe('SessionClient transcript', () => {
+  const chunks = () =>
+    (frames as { t: string; key: string; text: string }[]).filter((f) => f.t === 'transcript');
+
+  it('re-sends an unacked chunk after a reconnect, and not an acked one', async () => {
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    client.sendTranscript('s:1', 'PS> dir');
+    await until(() => chunks().length === 1);
+    ackEvents = false;
+    client.sendTranscript('s:2', 'file.txt');
+    await until(() => chunks().length === 2);
+    for (const c of clients) c.terminate();
+    await until(() => chunks().length === 3);
+    expect(chunks()[2]).toMatchObject({ key: 's:2', text: 'file.txt' });
   });
 });

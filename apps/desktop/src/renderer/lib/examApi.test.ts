@@ -72,7 +72,14 @@ describe('createExamApi', () => {
   });
 
   describe('hosting', () => {
-    const INFO = { pin: '004217', addresses: ['192.168.1.7'], port: 47820, fpCode: '7ACN' };
+    const INFO = {
+      pin: '004217',
+      addresses: ['192.168.1.7'],
+      port: 47820,
+      fpCode: '7ACN',
+      terminal: { enabled: false, until: null },
+      terminalPendingMinutes: null,
+    };
 
     it('hosts with POST and validates the reply', async () => {
       const fetchFn = reply(200, INFO);
@@ -105,6 +112,34 @@ describe('createExamApi', () => {
       const [url, init] = vi.mocked(fetchFn).mock.calls[0] ?? [];
       expect(url).toBe('http://127.0.0.1:47821/api/v1/exams/e1/end');
       expect(init?.method).toBe('POST');
+    });
+
+    it('sets the terminal switch with a terminal action', async () => {
+      const result = { ok: true, terminal: { enabled: true, until: 5000 }, pendingMinutes: null };
+      const fetchFn = reply(200, result);
+      expect(await createExamApi(CONNECTION, fetchFn).setTerminal('e1', true, 30)).toEqual(result);
+      const [url, init] = vi.mocked(fetchFn).mock.calls[0] ?? [];
+      expect(url).toBe('http://127.0.0.1:47821/api/v1/exams/e1/actions');
+      expect(JSON.parse(String(init?.body))).toEqual({
+        type: 'terminal',
+        enabled: true,
+        minutes: 30,
+      });
+      const off = reply(200, { ...result, terminal: { enabled: false, until: null } });
+      await createExamApi(CONNECTION, off).setTerminal('e1', false);
+      expect(JSON.parse(String(vi.mocked(off).mock.calls[0]?.[1]?.body))).toEqual({
+        type: 'terminal',
+        enabled: false,
+      });
+    });
+
+    it('reads a student terminal log', async () => {
+      const log = { events: [], transcript: 'PS> dir', truncated: false };
+      const fetchFn = reply(200, log);
+      expect(await createExamApi(CONNECTION, fetchFn).terminalLog('e1', 's 1')).toEqual(log);
+      expect(vi.mocked(fetchFn).mock.calls[0]?.[0]).toBe(
+        'http://127.0.0.1:47821/api/v1/exams/e1/students/s%201/terminal',
+      );
     });
 
     it('returns null when the exam is not hosted, and rethrows other errors', async () => {

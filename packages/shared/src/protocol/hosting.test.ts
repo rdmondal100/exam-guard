@@ -3,7 +3,14 @@ import { HostingInfoSchema, StudentInfoSchema } from './hosting.js';
 
 describe('HostingInfoSchema', () => {
   it('accepts a 6-digit PIN with leading zeros', () => {
-    const info = { pin: '004217', addresses: ['192.168.1.5'], port: 47820, fpCode: '7K2M' };
+    const info = {
+      pin: '004217',
+      addresses: ['192.168.1.5'],
+      port: 47820,
+      fpCode: '7K2M',
+      terminal: { enabled: false, until: null },
+      terminalPendingMinutes: null,
+    };
     expect(HostingInfoSchema.parse(info)).toEqual(info);
   });
 

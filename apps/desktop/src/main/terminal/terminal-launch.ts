@@ -11,7 +11,10 @@ import { join } from 'node:path';
 import { TERMINAL_LIMITS } from '@examguard/shared';
 import type { Toolchain } from '../runner/toolchains.js';
 import { PACMAN_CONF, shimFiles } from './shims.js';
+import { initCommand, newNonce, shellInitScript } from './shell-init.js';
 import { terminalEnv, terminalPaths } from './terminal-env.js';
+
+const BOM = String.fromCharCode(0xfeff);
 
 /** What the pty spawns. */
 export interface TerminalLaunch {
@@ -19,6 +22,8 @@ export interface TerminalLaunch {
   args: string[];
   cwd: string;
   env: Record<string, string>;
+  /** The command-marker nonce written into this shell's init script. */
+  nonce: string;
 }
 
 export interface LaunchInput {
@@ -27,6 +32,8 @@ export interface LaunchInput {
   baseEnv: NodeJS.ProcessEnv;
   /** `powershell.exe` by full path (System32). */
   shell: string;
+  /** Tests pass a fixed one. */
+  nonce?: string;
 }
 
 /**
@@ -47,7 +54,13 @@ function copyTree(from: string, to: string): void {
  * student started. `--shell` keeps Ctrl+C from ending eg-runner; `--time 0` = no wall time.
  * Throws a student-readable message when eg-runner is missing.
  */
-export function prepareTerminal({ runRoot, tools, baseEnv, shell }: LaunchInput): TerminalLaunch {
+export function prepareTerminal({
+  runRoot,
+  tools,
+  baseEnv,
+  shell,
+  nonce = newNonce(),
+}: LaunchInput): TerminalLaunch {
   if (!tools.runner)
     throw new Error('The terminal is not installed on this PC (eg-runner missing).');
   const paths = terminalPaths(runRoot);
@@ -80,6 +93,10 @@ export function prepareTerminal({ runRoot, tools, baseEnv, shell }: LaunchInput)
       renameSync(partial, gnupg);
     }
   }
+  // Rewritten on every open with a new nonce. UTF-8 with a BOM, or PowerShell 5.1 reads it as
+  // ANSI and a non-ASCII profile path in it would break.
+  const initScript = join(paths.support, 'init.ps1');
+  writeFileSync(initScript, BOM + shellInitScript(nonce, initScript), 'utf8');
   return {
     file: tools.runner,
     args: [
@@ -94,8 +111,12 @@ export function prepareTerminal({ runRoot, tools, baseEnv, shell }: LaunchInput)
       shell,
       '-NoLogo',
       '-NoProfile',
+      '-NoExit',
+      '-Command',
+      initCommand(initScript),
     ],
     cwd: paths.workspace,
     env: terminalEnv({ base: baseEnv, paths, mingwBin: tools.mingwBin }),
+    nonce,
   };
 }

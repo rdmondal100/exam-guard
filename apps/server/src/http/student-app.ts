@@ -5,6 +5,7 @@ import type { ServerCert } from '../tls/cert.js';
 import type { JoinService } from '../join/join-service.js';
 import type { EventRepo } from '../db/event-repo.js';
 import type { ExamStudentRepo } from '../db/exam-student-repo.js';
+import type { TerminalLogRepo } from '../db/terminal-log-repo.js';
 import type { SessionHub } from '../ws/session-hub.js';
 import { registerStudentSocket, type StudentSocketDeps } from '../ws/student-socket.js';
 import { sendError } from './errors.js';
@@ -20,6 +21,7 @@ export interface StudentAppDeps {
     hub: SessionHub;
     students: ExamStudentRepo;
     events: EventRepo;
+    terminalLogs: TerminalLogRepo;
     examId: () => string | null;
   } & Pick<StudentSocketDeps, 'sessionState' | 'now' | 'helloTimeoutMs' | 'idleMs'>;
 }

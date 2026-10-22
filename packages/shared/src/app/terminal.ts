@@ -42,7 +42,10 @@ export const TerminalDataSchema = z.string();
 /** Main → renderer push `terminal:exit`: the shell ended or was closed. */
 export const TerminalExitSchema = z.object({
   exitCode: z.number().int().nullable(),
-  /** `closed`: the student or the app closed it; `exited`: the shell ended by itself. */
-  reason: z.enum(['closed', 'exited']),
+  /**
+   * `closed`: the student or the app closed it; `exited`: the shell ended by itself;
+   * `turned_off`: the teacher turned it off, its time ran out or the exam ended.
+   */
+  reason: z.enum(['closed', 'exited', 'turned_off']),
 });
 export type TerminalExit = z.infer<typeof TerminalExitSchema>;

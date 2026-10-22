@@ -1,17 +1,15 @@
 import type { SessionState } from '@examguard/shared';
 
 /**
- * Until M15b brings the teacher's on/off switch (`state.terminal`), the terminal is a dev-only
- * spike: `EG_TERMINAL=1` in an unpackaged app. A packaged app never opens it.
+ * Why the terminal may not be open now, or `null` if it may. The teacher's switch
+ * (`state.terminal`) is the authority; `serverNow` (local clock + offset) only backs up the
+ * server's own auto-off at `until`.
  */
-export function terminalEnabled(isPackaged: boolean, env: NodeJS.ProcessEnv): boolean {
-  return !isPackaged && env.EG_TERMINAL === '1';
-}
-
-/** Why the terminal may not open now, or `null` if it may. */
-export function terminalRefusal(exam: SessionState | null, enabled: boolean): string | null {
-  if (!enabled) return 'The terminal is turned off for this exam.';
+export function terminalRefusal(exam: SessionState | null, serverNow: number): string | null {
   if (exam?.examState !== 'running')
     return 'The terminal is only available while the exam is running.';
+  const { enabled, until } = exam.terminal;
+  if (!enabled || (until !== null && serverNow >= until))
+    return 'The teacher has turned the terminal off.';
   return null;
 }

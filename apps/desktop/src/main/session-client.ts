@@ -9,10 +9,13 @@ import {
   type EventReport,
   type SessionState,
   type SessionStatus,
+  type TranscriptChunk,
 } from '@examguard/shared';
 
 /** Unacked events kept in memory; the oldest are dropped past this. The disk queue is M17. */
 export const MAX_PENDING_EVENTS = 500;
+/** Unacked transcript chunks kept in memory (16 KB each at most). */
+export const MAX_PENDING_TRANSCRIPT = 128;
 import { PinError, connectPinned, type PinnedTarget } from './tls-pin.js';
 
 /** 0.5 s → 5 s doubling, with jitter so 200 students do not reconnect in step. */
@@ -54,6 +57,8 @@ export class SessionClient {
   private welcomed: WebSocket | null = null;
   /** Sent events waiting for `event.ack`, in send order. */
   private readonly pending = new Map<string, EventReport>();
+  /** Sent transcript chunks waiting for `transcript.ack`, in send order. */
+  private readonly pendingTranscript = new Map<string, TranscriptChunk>();
 
   constructor(private readonly deps: SessionClientDeps) {}
 
@@ -79,6 +84,17 @@ export class SessionClient {
       if (oldest !== undefined) this.pending.delete(oldest);
     }
     if (this.welcomed) this.sendFrame(this.welcomed, event);
+  }
+
+  /** Sends a piece of the terminal transcript; re-sent after reconnects until acked. */
+  sendTranscript(key: string, text: string): void {
+    const chunk: TranscriptChunk = { t: 'transcript', key, clientTs: Date.now(), text };
+    this.pendingTranscript.set(key, chunk);
+    if (this.pendingTranscript.size > MAX_PENDING_TRANSCRIPT) {
+      const oldest = this.pendingTranscript.keys().next().value;
+      if (oldest !== undefined) this.pendingTranscript.delete(oldest);
+    }
+    if (this.welcomed) this.sendFrame(this.welcomed, chunk);
   }
 
   private sendFrame(ws: WebSocket, frame: object): void {
@@ -181,8 +197,11 @@ export class SessionClient {
       this.ping(ws);
       this.welcomed = ws;
       for (const event of this.pending.values()) this.sendFrame(ws, event);
+      for (const chunk of this.pendingTranscript.values()) this.sendFrame(ws, chunk);
     } else if (message.t === 'event.ack') {
       this.pending.delete(message.id);
+    } else if (message.t === 'transcript.ack') {
+      this.pendingTranscript.delete(message.key);
     } else if (message.t === 'state') {
       if (!this.exam) return;
       this.exam = { ...this.exam, ...message.state };

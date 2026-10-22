@@ -1,4 +1,5 @@
 import { TERMINAL_LIMITS, type TerminalExit, type TerminalSize } from '@examguard/shared';
+import { CommandMarkerParser } from './command-marker.js';
 import type { TerminalLaunch } from './terminal-launch.js';
 
 /** The part of a node-pty process the host uses (a fake in tests). */
@@ -14,19 +15,24 @@ export type PtySpawn = (launch: TerminalLaunch, size: TerminalSize) => PtyProces
 
 export interface TerminalHostDeps {
   spawn: PtySpawn;
+  /** Output as the student sees it (command markers removed), batched. */
   onData: (data: string) => void;
   onExit: (exit: TerminalExit) => void;
+  /** A command line the student entered, from the shell's marker. */
+  onCommand?: (line: string) => void;
+  /** A shell started. */
+  onOpen?: () => void;
   flushMs?: number;
 }
 
 /**
  * The one exam terminal of this student (student main). Output is batched before it goes to the
- * renderer. `close()` kills the pty, which ends eg-runner, and its Job Object takes every
- * process the student started with it.
+ * renderer, and the shell's command markers are taken out of it first. `close()` kills the pty,
+ * which ends eg-runner, and its Job Object takes every process the student started with it.
  */
 export class TerminalHost {
   private pty: PtyProcess | null = null;
-  private closing = false;
+  private closeReason: TerminalExit['reason'] | null = null;
   private pending = '';
   private timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -42,16 +48,25 @@ export class TerminalHost {
       this.pty.resize(size.cols, size.rows);
       return;
     }
-    const pty = this.deps.spawn(launch(), size);
+    const spec = launch();
+    const pty = this.deps.spawn(spec, size);
+    const markers = new CommandMarkerParser(spec.nonce);
     this.pty = pty;
-    this.closing = false;
-    pty.onData((data) => this.buffer(data));
+    this.closeReason = null;
+    pty.onData((data) => {
+      const { text, commands } = markers.push(data);
+      if (text) this.buffer(text);
+      for (const line of commands) this.deps.onCommand?.(line);
+    });
     pty.onExit((exitCode) => {
       if (this.pty !== pty) return;
+      const rest = markers.flush();
+      if (rest) this.buffer(rest);
       this.flush();
       this.pty = null;
-      this.deps.onExit({ exitCode, reason: this.closing ? 'closed' : 'exited' });
+      this.deps.onExit({ exitCode, reason: this.closeReason ?? 'exited' });
     });
+    this.deps.onOpen?.();
   }
 
   write(data: string): void {
@@ -62,10 +77,13 @@ export class TerminalHost {
     this.pty?.resize(size.cols, size.rows);
   }
 
-  /** Kills the shell and everything it started. Safe to call when nothing is open. */
-  close(): void {
+  /**
+   * Kills the shell and everything it started. Safe to call when nothing is open. `turned_off`
+   * is for the teacher's switch, the time window and the exam end.
+   */
+  close(reason: 'closed' | 'turned_off' = 'closed'): void {
     if (!this.pty) return;
-    this.closing = true;
+    this.closeReason ??= reason;
     this.pty.kill();
   }
 

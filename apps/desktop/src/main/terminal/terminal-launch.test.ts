@@ -48,8 +48,15 @@ describe('prepareTerminal', () => {
       shell,
       '-NoLogo',
       '-NoProfile',
+      '-NoExit',
+      '-Command',
+      `. '${join(run, '.examguard', 'init.ps1')}'`,
     ]);
     expect(launch.cwd).toBe(join(run, 'workspace'));
+    expect(launch.nonce).toMatch(/^[0-9a-f]{24}$/);
+    const script = readFileSync(join(run, '.examguard', 'init.ps1'), 'utf8');
+    expect(script.charCodeAt(0)).toBe(0xfeff);
+    expect(script).toContain(`]6973;${launch.nonce};`);
     expect(launch.env.PATH?.startsWith(join(run, '.examguard', 'bin'))).toBe(true);
   });
 

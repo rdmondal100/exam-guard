@@ -53,6 +53,9 @@ UNIQUE(class_list_id, student_code)
 | monitoring_json | TEXT | per-exam monitoring settings (screenshot policy, high-severity apps, thresholds) |
 | pin | TEXT | 6 digits, set when hosting starts |
 | global_extension_sec | INTEGER DEFAULT 0 | "extend all" |
+| terminal_enabled | INTEGER DEFAULT 0 | exam terminal switch (M15b, migration 0006); off by default |
+| terminal_minutes | INTEGER | "on for N minutes" chosen before Start, cleared when Start sets `terminal_until` |
+| terminal_until | INTEGER | server time the terminal turns off by itself; NULL = no end |
 | hosting_started_at, started_at, ended_at, finalized_at | INTEGER | nullable |
 | created_at, updated_at | INTEGER | |
 INDEX(state)
@@ -134,7 +137,7 @@ PRIMARY KEY(exam_student_id, question_id)
 | id | INTEGER PK AUTOINCREMENT | |
 | exam_id | TEXT FK | |
 | exam_student_id | TEXT FK, nullable | null = exam-level |
-| type | TEXT | e.g. `focus_lost, focus_returned, title_changed, app_launched, processes_at_start, monitor_changed, secure_desktop, taskmgr_opened, paste_blocked, large_insertion, run_executed, agent_lost, app_relaunched, duplicate_login, network_lost, network_restored, terminal_opened, terminal_closed, terminal_command, package_installed, internet_blocked, internet_allowed, internet_block_failed` (the terminal and internet types arrive with M15b and M21b) |
+| type | TEXT | e.g. `focus_lost, focus_returned, title_changed, app_launched, processes_at_start, monitor_changed, secure_desktop, taskmgr_opened, paste_blocked, large_insertion, run_executed, agent_lost, app_relaunched, duplicate_login, network_lost, network_restored, terminal_opened, terminal_closed, terminal_command, package_installed, internet_blocked, internet_allowed, internet_block_failed` (the terminal types since M15b, the internet types with M21b) |
 | severity | TEXT | `low, medium, high, critical` (set by the server classifier) |
 | server_ts | INTEGER | |
 | client_ts | INTEGER | when it happened on the student PC |
@@ -150,10 +153,20 @@ UNIQUE(dedupe_key); INDEX(exam_id, server_ts); INDEX(exam_student_id, server_ts)
 | id | INTEGER PK AUTOINCREMENT | |
 | exam_id | TEXT FK | |
 | exam_student_id | TEXT FK, nullable | null = global action |
-| action | TEXT | `message, warn, lock, unlock, extend, end, reset_session, broadcast, extend_all, end_all, start, host, stop_hosting, grade_edit, finalize, ...` |
+| action | TEXT | `message, warn, lock, unlock, extend, end, reset_session, broadcast, extend_all, end_all, start, host, stop_hosting, terminal, grade_edit, finalize, ...`. `terminal` (M15b): payload `{enabled, minutes?}`, or `{enabled:false, reason:"time_up"}` when the window ran out (written by the server) |
 | payload_json | TEXT | |
 | ts | INTEGER | |
 INDEX(exam_id, ts)
+
+### terminal_chunks (exam terminal transcripts, M15b)
+| col | type | notes |
+|---|---|---|
+| id | INTEGER PK AUTOINCREMENT | arrival order = transcript order |
+| exam_student_id | TEXT FK → exam_students ON DELETE CASCADE | |
+| chunk_key | TEXT | `<examStudentId>:<client key>`, or `truncated:<examStudentId>` for the one cap marker |
+| server_ts, client_ts | INTEGER | |
+| text | TEXT | terminal output as shown to the student (ANSI kept), ≤16 KB per row |
+UNIQUE(chunk_key); INDEX(exam_student_id, id). At most 1 MB of text per student; later chunks are dropped after one marker.
 
 ### grading_jobs
 | col | type | notes |
@@ -202,7 +215,7 @@ INDEX(exam_student_id, question_id, id DESC); INDEX(job_id)
 INDEX(question_id, status)
 
 ## Relationships (summary)
-`class_lists 1─* class_students`, `exams 1─* questions 1─* marking_criteria`, `exams 1─* exam_students *─1 class_students`, `exam_students 1─* answer_versions`, `exam_students 1─* final_answers 1─1 answer_grades`, `answer_grades → evaluations (current)`, `exams 1─* events / teacher_actions / grading_jobs`.
+`class_lists 1─* class_students`, `exams 1─* questions 1─* marking_criteria`, `exams 1─* exam_students *─1 class_students`, `exam_students 1─* answer_versions`, `exam_students 1─* final_answers 1─1 answer_grades`, `exam_students 1─* terminal_chunks`, `answer_grades → evaluations (current)`, `exams 1─* events / teacher_actions / grading_jobs`.
 
 Deleting an exam cascades to everything under it and deletes its screenshot folder. Class lists that are assigned to an exam can't be deleted.
 

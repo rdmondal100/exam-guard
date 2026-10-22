@@ -9,6 +9,7 @@ const exam: SessionState = {
   saved: [],
   locked: false,
   monitoring: false,
+  terminal: { enabled: false, until: null },
   questions: [
     {
       id: 'q1',
