@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import type { QuestionLanguage } from '@examguard/shared';
 import { GCC_SPECS, GCC_SPECS_FILE } from './gcc-specs.js';
+import { JS_STDIN, JS_STDIN_FILE } from './js-stdin.js';
 
 /** Where the tools live for one run (see `toolchains.ts`). */
 export interface ToolPaths {
@@ -20,21 +21,27 @@ export interface LanguageConfig {
   fileName: string;
   /** Helper files written next to the source before compiling. */
   files?: Record<string, string>;
-  compile?: (tools: ToolPaths) => string[];
-  run: (tools: ToolPaths, dir: string) => string[];
+  /** `flags` are the student's own, already split: extra compiler flags. */
+  compile?: (tools: ToolPaths, flags: string[]) => string[];
+  /** `flags` are the student's own, already split: Node flags for JavaScript. */
+  run: (tools: ToolPaths, dir: string, flags: string[]) => string[];
   env?: Record<string, string>;
 }
 
-const gcc = (tool: 'gcc' | 'g++', std: string, source: string) => (tools: ToolPaths) => [
-  join(tools.mingwBin ?? '', `${tool}.exe`),
-  `-specs=${GCC_SPECS_FILE}`,
-  `-std=${std}`,
-  '-O2',
-  '-Wall',
-  source,
-  '-o',
-  'main.exe',
-];
+// The student's flags come after the source, so `-l` libraries link and a `-std=` of theirs wins.
+// Our `-o` is last, so the run always finds main.exe.
+const gcc =
+  (tool: 'gcc' | 'g++', std: string, source: string) => (tools: ToolPaths, flags: string[]) => [
+    join(tools.mingwBin ?? '', `${tool}.exe`),
+    `-specs=${GCC_SPECS_FILE}`,
+    `-std=${std}`,
+    '-O2',
+    '-Wall',
+    source,
+    ...flags,
+    '-o',
+    'main.exe',
+  ];
 
 export const LANGUAGES: Record<QuestionLanguage, LanguageConfig> = {
   c: {
@@ -57,7 +64,8 @@ export const LANGUAGES: Record<QuestionLanguage, LanguageConfig> = {
     id: 'js',
     label: 'JavaScript',
     fileName: 'main.js',
-    run: (tools) => [tools.nodeExe, 'main.js'],
+    files: { [JS_STDIN_FILE]: JS_STDIN },
+    run: (tools, _dir, flags) => [tools.nodeExe, '-r', `./${JS_STDIN_FILE}`, ...flags, 'main.js'],
     env: { ELECTRON_RUN_AS_NODE: '1' },
   },
 };

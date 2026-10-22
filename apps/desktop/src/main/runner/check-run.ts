@@ -1,4 +1,5 @@
 import type { RunRequest, SessionState } from '@examguard/shared';
+import { splitFlags } from './split-flags.js';
 
 /**
  * Main's own check before running anything: the exam is running and the language is one the
@@ -10,6 +11,9 @@ export function runRefusal(exam: SessionState | null, request: RunRequest): stri
   if (!question || question.type !== 'code') return 'This question has no code to run.';
   if (!question.allowedLanguages.includes(request.language)) {
     return 'That language is not allowed for this question.';
+  }
+  if (splitFlags(request.flags) === null) {
+    return 'These flags cannot be used. Check for a missing closing quote.';
   }
   return null;
 }

@@ -42,9 +42,14 @@ describe('terminalEnv', () => {
 
   it('points gcc at the pacman packages and quiets npm', () => {
     const env = terminalEnv({ base, paths, mingwBin: null });
-    expect(env.C_INCLUDE_PATH).toBe(join(paths.msysOverlay, 'ucrt64', 'include'));
+    expect(env.C_INCLUDE_PATH).toBe(
+      [join(paths.workspace, 'include'), join(paths.msysOverlay, 'ucrt64', 'include')].join(';'),
+    );
     expect(env.CPLUS_INCLUDE_PATH).toBe(env.C_INCLUDE_PATH);
-    expect(env.LIBRARY_PATH).toBe(join(paths.msysOverlay, 'ucrt64', 'lib'));
+    expect(env.LIBRARY_PATH).toBe(
+      [join(paths.workspace, 'lib'), join(paths.msysOverlay, 'ucrt64', 'lib')].join(';'),
+    );
+    expect(env.NODE_PATH).toBe(join(paths.workspace, 'node_modules'));
     expect(env.npm_config_update_notifier).toBe('false');
     expect(env.PATH?.split(';')[1]).toBe(join(paths.msysOverlay, 'ucrt64', 'bin'));
   });

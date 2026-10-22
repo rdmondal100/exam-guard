@@ -7,8 +7,10 @@ import {
   JoinResultSchema,
   ProbeRequestSchema,
   ProbeResultSchema,
+  RunInputSchema,
   RunRequestSchema,
   RunResultSchema,
+  RunSizeSchema,
   ServerConnectionSchema,
   ServerStatusSchema,
   SessionStateSchema,
@@ -86,6 +88,16 @@ const api: ExamGuardApi = {
     RunResultSchema.parse(await ipcRenderer.invoke(IPC.runCode, RunRequestSchema.parse(request))),
   stopRun: async () => {
     await ipcRenderer.invoke(IPC.stopRun);
+  },
+  runInput: (data) => ipcRenderer.send(IPC.runInput, RunInputSchema.parse(data)),
+  resizeRun: (size) => ipcRenderer.send(IPC.runResize, RunSizeSchema.parse(size)),
+  onRunData: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown) => {
+      const parsed = TerminalDataSchema.safeParse(payload);
+      if (parsed.success) listener(parsed.data);
+    };
+    ipcRenderer.on(IPC.runData, handler);
+    return () => ipcRenderer.removeListener(IPC.runData, handler);
   },
   terminalStatus: async () =>
     TerminalStatusSchema.parse(await ipcRenderer.invoke(IPC.terminalStatus)),

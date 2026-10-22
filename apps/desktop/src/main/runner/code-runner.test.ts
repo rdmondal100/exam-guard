@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { RunRequest, RunResult } from '@examguard/shared';
 import { CodeRunner } from './code-runner.js';
+import type { PtyOpen } from '../terminal/pty.js';
 import type { LimitedHandle, LimitedResult, LimitedSpawn } from './spawn-limited.js';
 import type { Toolchain } from './toolchains.js';
 
@@ -12,6 +13,7 @@ const OK: LimitedResult = { reason: 'ok', exitCode: 0, timeMs: 12, stdout: '', s
 let root: string;
 let clock: number;
 let spawned: LimitedSpawn[];
+let opened: Parameters<PtyOpen>[];
 let script: Partial<LimitedResult>[];
 let ran: [RunRequest, RunResult][];
 let tools: Toolchain;
@@ -30,11 +32,36 @@ const fakeSpawn = (s: LimitedSpawn): LimitedHandle => {
   return { done, stop: () => stop() };
 };
 
+/** The program's console: ends as scripted (through the report file, like eg-runner does). */
+const fakePty: PtyOpen = (spec, size) => {
+  opened.push([spec, size]);
+  const result = { ...OK, ...script.shift() };
+  let onData: (d: string) => void = () => {};
+  let onExit: (code: number) => void = () => {};
+  const finish = () => {
+    const report = spec.args[spec.args.indexOf('--report') + 1] ?? '';
+    const { reason, exitCode, timeMs } = result;
+    writeFileSync(report, JSON.stringify({ reason, exitCode, timeMs, error: null }));
+    if (result.stdout) onData(result.stdout);
+    onExit(0);
+  };
+  if (hold) hold = { release: finish };
+  else setTimeout(finish, 0);
+  return {
+    onData: (l) => void (onData = l),
+    onExit: (l) => void (onExit = l),
+    write: () => {},
+    resize: () => {},
+    kill: () => onExit(1),
+  };
+};
+
 const runner = () =>
   new CodeRunner({
     toolchain: () => tools,
     workRoot: () => root,
     spawn: fakeSpawn,
+    openPty: fakePty,
     now: () => clock,
     onRun: (req, res) => ran.push([req, res]),
   });
@@ -43,7 +70,7 @@ const req = (over: Partial<RunRequest> = {}): RunRequest => ({
   questionId: 'q-1',
   language: 'c',
   code: 'int main(){return 0;}',
-  stdin: 'in',
+  flags: '',
   ...over,
 });
 
@@ -51,6 +78,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'eg-runner-'));
   clock = 1_000_000;
   spawned = [];
+  opened = [];
   script = [];
   ran = [];
   hold = null;
@@ -65,7 +93,7 @@ beforeEach(() => {
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
 describe('CodeRunner', () => {
-  it('compiles C with the configured flags, then runs it with stdin and limits', async () => {
+  it('compiles C with the configured flags, then runs it in the console with the limits', async () => {
     script = [{}, { stdout: 'hi', exitCode: 0, timeMs: 30 }];
     const result = await runner().run(req());
     expect(result).toMatchObject({
@@ -77,7 +105,8 @@ describe('CodeRunner', () => {
     });
     const dir = join(root, 'q-1', 'c');
     expect(readFileSync(join(dir, 'main.c'), 'utf8')).toBe('int main(){return 0;}');
-    const [compile, run] = spawned;
+    const [compile] = spawned;
+    const [run] = opened.map(([spec]) => spec);
     expect(compile?.args).toEqual([
       '--mem',
       '1024',
@@ -98,10 +127,19 @@ describe('CodeRunner', () => {
       'main.exe',
     ]);
     expect(existsSync(join(dir, 'eg.specs'))).toBe(true);
-    expect(run?.args.slice(0, 6)).toEqual(['--mem', '256', '--time', '5000', '--procs', '8']);
+    expect(run?.file).toBe('eg-runner.exe');
+    expect(run?.args.slice(0, 7)).toEqual([
+      '--shell',
+      '--mem',
+      '256',
+      '--time',
+      '600000',
+      '--procs',
+      '8',
+    ]);
     expect(run?.args.at(-1)).toBe(join(dir, 'main.exe'));
-    expect(run).toMatchObject({ stdin: 'in', cwd: dir, outputCap: 65536 });
-    expect(run?.env.PATH?.startsWith('C:\\mingw\\bin;')).toBe(true);
+    expect(run?.cwd).toBe(dir);
+    expect(run?.env.PATH?.split(';')).toContain('C:\\mingw\\bin');
     expect(ran).toHaveLength(1);
   });
 
@@ -111,10 +149,16 @@ describe('CodeRunner', () => {
     expect(spawned[0]?.args).toContain(join('C:\\mingw\\bin', 'g++.exe'));
     clock += 5000;
     spawned = [];
+    opened = [];
     await runner().run(req({ language: 'js' }));
-    expect(spawned).toHaveLength(1);
-    expect(spawned[0]?.args.slice(-2)).toEqual(['electron.exe', 'main.js']);
-    expect(spawned[0]?.env.ELECTRON_RUN_AS_NODE).toBe('1');
+    expect(spawned).toHaveLength(0);
+    expect(opened[0]?.[0].args.slice(-4)).toEqual([
+      'electron.exe',
+      '-r',
+      './eg-stdin.cjs',
+      'main.js',
+    ]);
+    expect(opened[0]?.[0].env.ELECTRON_RUN_AS_NODE).toBe('1');
   });
 
   it('stops at a compile error with diagnostics and does not run', async () => {
@@ -126,12 +170,12 @@ describe('CodeRunner', () => {
     ]);
     expect(result.compileOutput).toContain('error');
     expect(spawned).toHaveLength(1);
+    expect(opened).toHaveLength(0);
   });
 
   it.each([
-    ['time_limit', /longer than 5 s/],
+    ['time_limit', /longer than 10 min/],
     ['memory_limit', /256 MB/],
-    ['output_limit', /64 KB/],
     ['process_limit', /too many processes/],
   ] as const)('explains %s', async (reason, message) => {
     script = [{}, { reason }];
@@ -190,5 +234,6 @@ describe('CodeRunner', () => {
       message: /eg-runner/,
     });
     expect(spawned).toHaveLength(0);
+    expect(opened).toHaveLength(0);
   });
 });

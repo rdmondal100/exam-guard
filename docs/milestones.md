@@ -121,16 +121,16 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Accept:** turning it off mid-command closes the terminal and kills its processes within 1 s; the "N minutes" window closes on time; late joiners get the current state; every command line appears as an event.
 - **Manual test:** turn on for 2 minutes from the teacher, run commands on the laptop, watch the events and the auto-off.
 
-### M15c Workspace runs, own flags, GUI mode, interactive console
-- **Goal:** Run builds against what the student installed, accepts their flags, can run window programs, and supports step-by-step input.
-- **Touches:** runner config: workspace include/lib paths, `node_modules`, extra flags per answer (stored with the answer, shown in the run panel), GUI run mode (window allowed, longer configurable limit, Stop), xterm.js program console with interactive stdin, `run_executed` details include mode and flags.
-- **Accept:** an OpenGL/GLUT window program and a graphics.h program run from Run; an interactive `scanf` loop works in the console; console runs still meet the M15 limits.
-- **Manual test:** install freeglut (M15a), run a spinning-cube program in GUI mode and Stop it; run a menu-driven C program interactively.
+### M15c Workspace runs, own flags, one console for every run
+- **Goal:** Run builds against what the student installed, accepts their flags, can run window programs, and supports step-by-step input, all in one console with no mode to choose.
+- **Touches:** runner config: workspace include/lib paths, `node_modules`, extra flags per answer (stored with the answer, shown in the run panel), the program always runs in a pseudo-console (xterm.js) with typed input; window programs open their own window; wall time 10 min with Stop (replaces the 5 s of M15); `run_executed` details include flags.
+- **Accept:** an OpenGL/GLUT window program and a graphics.h program run from Run; an interactive `scanf` loop works in the console; memory, process and output limits are the M15 ones, and the wall time is 10 min.
+- **Manual test:** install freeglut (M15a), run a spinning-cube program and Stop it; run a menu-driven C program and type into it.
 
 ### M15d Python runtime + pip
 - **Goal:** Python 3 as an allowed language with `pip` installs into the workspace.
 - **Touches:** a Python 3 build **with tkinter** (e.g. python-build-standalone, not the embeddable zip) fetched by `fetch-toolchains`, pip bootstrap, `QUESTION_LANGUAGES` + runner config + Monaco, workspace `site-packages` on `PYTHONPATH`, question editor checkbox.
-- **Accept:** `pip install numpy` in the terminal, then a NumPy program runs from Run; a matplotlib window works in GUI mode; Python runs meet the limits.
+- **Accept:** `pip install numpy` in the terminal, then a NumPy program runs from Run; a matplotlib window opens from Run; Python runs meet the limits.
 - **Manual test:** a Python question with numpy and a matplotlib plot.
 
 ### M16 Autosave + versions

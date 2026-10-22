@@ -1,6 +1,6 @@
 # ExamGuard AI — Requirements
 
-Version 1.2 · 2026-10-21 · Source of truth for all design and development decisions.
+Version 1.3 · 2026-10-22 · Source of truth for all design and development decisions.
 If anything in later docs conflicts with this file, this file wins until it is explicitly updated.
 
 ---
@@ -124,7 +124,7 @@ ExamGuard AI is a Windows desktop examination platform for university computer l
 - **Each language keeps its own code** for that question: switching from C++ to JavaScript and back restores the C++ code. Each language's code is autosaved separately.
 - The language **selected at submission** (or at time-up) is the one submitted and graded; the student is shown which language will be submitted.
 - Monaco editor with syntax highlighting, basic autocomplete (no AI suggestions), and error underlines from compiler output.
-- Panel below the editor with an **input box (stdin)** and **Output / Errors** tabs, showing exit code and run time. An **interactive console** (xterm.js) lets programs that prompt for input step by step be used directly.
+- Panel below the editor with a **program console** (xterm.js) and an **Errors** tab, showing exit code and run time. The program always runs in the console: the student types input into it as the program asks (there is no separate input box and no run mode to choose). Programs that open a window (OpenGL, graphics.h, image viewers) just open it.
 - Buttons: **Run**, **Stop**.
 - Run happens **on the student's PC only**. It is for the student's own checking; results are **not** used for grading.
 - Compile and run settings (same for everyone, configurable in one place):
@@ -134,8 +134,7 @@ ExamGuard AI is a Windows desktop examination platform for university computer l
   - Python: bundled Python 3 (with tkinter, so turtle and matplotlib windows work)
   - Stage 2 — Java: bundled JDK (`javac` + `java`); the runner detects the `public class` name and names the file to match; jars from `workspace/lib`
   - Students may add **their own compile/link flags** per answer (e.g. `-lfreeglut -lopengl32`) for the libraries they installed.
-- Limits per run: time limit (default 5 s), output cap (default 64 KB), memory limit (default 256 MB, via a Windows Job Object launcher). Exceeding a limit stops the program with a clear message.
-- **GUI run mode** for programs that open a window (OpenGL, graphics.h, image viewers): the window is allowed, the time limit is longer (configurable), and Stop always works.
+- Limits per run: time limit (default 10 min, because it includes the student's typing and any window time; Stop always works), output cap (default 64 KB), memory limit (default 256 MB, via a Windows Job Object launcher). Exceeding a limit stops the program with a clear message. A program that loops forever therefore runs until the student presses Stop or the time limit passes.
 - Runs happen in the student's **exam workspace**; one run at a time; minimum gap between runs (default 2 s). Runs build against the packages installed in the workspace (include/lib paths, `node_modules`, Python packages).
 - Every run is logged (timestamp, language, exit status) as an event.
 - **No sample tests, expected outputs, or hints are ever shown to students.**
@@ -286,7 +285,7 @@ Each phase ends with something that **works and can be demonstrated**. Phases ar
 |---|---|---|
 | **1. Foundation** | Monorepo skeleton, shared schemas, exam server in the teacher app, SQLite, teacher login, Teacher/Student mode | Teacher app starts, server runs, database created, both modes open |
 | **2. Exam setup & joining** | Class list import, exam and question editor, hosting, PIN, LAN discovery + manual IP, TLS, student login, lobby | A student on another PC joins an exam and waits in the lobby |
-| **3. Taking the exam** | Exam client, Monaco editor, language dropdown, local run (C, C++, JS, Python) with limits, exam terminal with package installs (teacher on/off, logged), workspace runs, GUI run mode, interactive console, autosave, offline queue, reconnect, submit, auto-submit | A student completes and submits a full exam, surviving a network drop |
+| **3. Taking the exam** | Exam client, Monaco editor, language dropdown, local run (C, C++, JS, Python) with limits, exam terminal with package installs (teacher on/off, logged), workspace runs (including window programs), one program console, autosave, offline queue, reconnect, submit, auto-submit | A student completes and submits a full exam, surviving a network drop |
 | **4. Monitoring agent** | Rust service + user-session helper, named-pipe link to the app, app launches, window switches, time outside ExamGuard, screenshots, second monitor, Task Manager, heartbeat + tamper lock, clipboard/paste control, teacher internet toggle (WFP filters) | Opening Chrome or WhatsApp on a student PC creates a logged event with a screenshot |
 | **5. Live dashboard** | Live alert feed, events, risk score, thumbnail grid (paginated), WebRTC live view, teacher actions (warn, lock, extend, end, reset, broadcast) | Teacher watches students live, sees alerts, and acts on them |
 | **6. AI grading & results** | Provider interface + Gemini adapter, grading pipeline, review screen (accept / edit / re-evaluate), history, finalize, CSV export | A finished exam is graded, reviewed, finalized, and exported |
@@ -348,5 +347,6 @@ Each phase ends with something that **works and can be demonstrated**. Phases ar
 | 2026-10-21: Students may choose their own languages (within the teacher's allowed list) and packages, so they install packages themselves in a teacher-controlled **exam terminal**; every command is logged |
 | 2026-10-21: The teacher can turn **student internet off/on** per exam; the agent applies temporary WFP filters that are always restored |
 | 2026-10-21: **Python (with pip)** moves from Stage 2 into Stage 1; **Java stays in Stage 2**; the interactive console moves into Stage 1 |
+| 2026-10-22: **One run mode.** Every run uses the program console (typed input; window programs open their own window), replacing the separate stdin box, interactive console and GUI mode. The run time limit changes from 5 s to 10 min; memory, process and output limits are unchanged |
 | 2026-10-21: Bundle size: MinGW is trimmed to C/C++ only; one installer always contains everything (target download ≤ 450 MB) |
 | Phase-based plan with no fixed deadlines; work proceeds at the developer's pace |

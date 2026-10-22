@@ -5,25 +5,20 @@ import { RUN_LIMITS, type RunResult } from '@examguard/shared';
 export const runKey = (questionId: string, language: string) => `${questionId}.${language}`;
 
 export interface RunState {
-  /** stdin typed for each buffer. */
-  stdin: Record<string, string>;
   /** The last finished run of each buffer. */
   results: Record<string, RunResult>;
   /** The buffer whose run is going, or `null`. Only one run at a time. */
   running: string | null;
   /** No new run before this time (ms, local clock). */
   cooldownUntil: number;
-  setStdin: (key: string, value: string) => void;
   start: (key: string) => void;
   finish: (key: string, result: RunResult, now: number) => void;
 }
 
 export const useRunStore = create<RunState>((set) => ({
-  stdin: {},
   results: {},
   running: null,
   cooldownUntil: 0,
-  setStdin: (key, value) => set((s) => ({ stdin: { ...s.stdin, [key]: value } })),
   // The old result (and its error underlines) goes away when a new run starts.
   start: (key) =>
     set((s) => ({

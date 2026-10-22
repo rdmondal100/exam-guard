@@ -15,16 +15,10 @@ const result = (over: Partial<RunResult> = {}): RunResult => ({
   ...over,
 });
 
-beforeEach(() => useRunStore.setState({ stdin: {}, results: {}, running: null, cooldownUntil: 0 }));
+beforeEach(() => useRunStore.setState({ results: {}, running: null, cooldownUntil: 0 }));
 
 describe('useRunStore', () => {
   const key = runKey('q1', 'c');
-
-  it('keeps stdin per buffer', () => {
-    useRunStore.getState().setStdin(key, '1 2');
-    useRunStore.getState().setStdin(runKey('q1', 'js'), 'x');
-    expect(useRunStore.getState().stdin).toEqual({ 'q1.c': '1 2', 'q1.js': 'x' });
-  });
 
   it('clears the old result on start and sets the cooldown on finish', () => {
     const s = useRunStore.getState();
