@@ -1,10 +1,10 @@
-import { join } from 'node:path';
 import { app, ipcMain } from 'electron';
 import { RunRequestSchema, type RunResult } from '@examguard/shared';
 import { IPC } from '../../shared/ipc-channels.js';
 import type { SessionClient } from '../session-client.js';
 import { runRefusal } from './check-run.js';
 import { CodeRunner } from './code-runner.js';
+import { runRoot } from './run-root.js';
 import { resolveToolchain } from './toolchains.js';
 
 export interface RunnerIpcDeps {
@@ -26,13 +26,7 @@ export function registerRunnerIpc({ session, examStudentId, requireStudent }: Ru
         execPath: process.execPath,
         env: process.env,
       }),
-    workRoot: () =>
-      join(
-        process.env.LOCALAPPDATA ?? app.getPath('temp'),
-        'ExamGuard',
-        'run',
-        (examStudentId() ?? 'unknown').replace(/[^A-Za-z0-9_-]/g, '_'),
-      ),
+    workRoot: () => runRoot(process.env.LOCALAPPDATA ?? app.getPath('temp'), examStudentId()),
     onRun: (request, result) =>
       session.sendEvent('run_executed', {
         questionId: request.questionId,

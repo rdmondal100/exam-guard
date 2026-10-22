@@ -54,7 +54,13 @@ beforeEach(() => {
   script = [];
   ran = [];
   hold = null;
-  tools = { runner: 'eg-runner.exe', mingwBin: 'C:\\mingw\\bin', nodeExe: 'electron.exe' };
+  tools = {
+    runner: 'eg-runner.exe',
+    mingwBin: 'C:\\mingw\\bin',
+    nodeExe: 'electron.exe',
+    msysRoot: null,
+    npmCli: null,
+  };
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 

@@ -16,6 +16,8 @@ const base = (files: string[], over: Partial<ToolchainEnv> = {}): ToolchainEnv =
 const debugRunner = resolve('/repo/target/debug/eg-runner.exe');
 const releaseRunner = resolve('/repo/target/release/eg-runner.exe');
 const devGcc = join(APP, 'resources/toolchains/mingw64/bin/gcc.exe');
+const devPacman = join(APP, 'resources/toolchains/msys64/usr/bin/pacman.exe');
+const devNpm = join(APP, 'resources/toolchains/npm/bin/npm-cli.js');
 
 describe('resolveToolchain', () => {
   it('finds the dev runner (release first) and the fetched MinGW', () => {
@@ -25,8 +27,19 @@ describe('resolveToolchain', () => {
     expect(t.nodeExe).toBe('electron.exe');
   });
 
+  it('finds MSYS2 and npm for the terminal', () => {
+    const t = resolveToolchain(base([devPacman, devNpm]));
+    expect(t.msysRoot).toBe(join(APP, 'resources/toolchains/msys64'));
+    expect(t.npmCli).toBe(devNpm);
+  });
+
   it('reports what is missing as null', () => {
-    expect(resolveToolchain(base([]))).toMatchObject({ runner: null, mingwBin: null });
+    expect(resolveToolchain(base([]))).toMatchObject({
+      runner: null,
+      mingwBin: null,
+      msysRoot: null,
+      npmCli: null,
+    });
   });
 
   it('honours the dev overrides', () => {
@@ -39,9 +52,10 @@ describe('resolveToolchain', () => {
 
   it('ignores the overrides when packaged', () => {
     const runner = join(resolve('/res'), 'eg-runner.exe');
+    const npm = join(resolve('/res'), 'toolchains/npm/bin/npm-cli.js');
     const t = resolveToolchain(
-      base([runner, '/r.exe'], { isPackaged: true, env: { EG_RUNNER_PATH: '/r.exe' } }),
+      base([runner, '/r.exe', npm], { isPackaged: true, env: { EG_RUNNER_PATH: '/r.exe' } }),
     );
-    expect(t).toMatchObject({ runner, mingwBin: null });
+    expect(t).toMatchObject({ runner, mingwBin: null, npmCli: npm });
   });
 });

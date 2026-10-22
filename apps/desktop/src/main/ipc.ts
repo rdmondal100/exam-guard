@@ -7,6 +7,7 @@ import {
   type AppInfo,
   type AppMode,
   type InstallType,
+  type SessionState,
 } from '@examguard/shared';
 import { IPC } from '../shared/ipc-channels.js';
 import { readDeviceId } from './device-id.js';
@@ -18,6 +19,7 @@ import { SessionClient } from './session-client.js';
 import { resolveMode, saveStoredMode } from './mode-store.js';
 import { registerRunnerIpc } from './runner/runner-ipc.js';
 import type { ServerHost } from './server-host.js';
+import { registerTerminalIpc } from './terminal/terminal-ipc.js';
 
 export interface AppState {
   profile: string;
@@ -70,6 +72,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     return joinClient.confirm();
   });
 
+  let onTerminalExam: (exam: SessionState) => void = () => {};
   const session = new SessionClient({
     onStatus: (status) => {
       for (const win of BrowserWindow.getAllWindows())
@@ -77,10 +80,16 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     },
     onExam: (exam) => {
       examLock.setActive(exam.examState === 'running');
+      onTerminalExam(exam);
       for (const win of BrowserWindow.getAllWindows()) win.webContents.send(IPC.sessionExam, exam);
     },
   });
   registerRunnerIpc({
+    session,
+    examStudentId: () => joinClient.examStudentId(),
+    requireStudent,
+  });
+  onTerminalExam = registerTerminalIpc({
     session,
     examStudentId: () => joinClient.examStudentId(),
     requireStudent,

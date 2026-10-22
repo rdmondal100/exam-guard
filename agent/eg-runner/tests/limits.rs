@@ -133,3 +133,17 @@ fn rejects_bad_arguments() {
         .unwrap();
     assert_eq!(out.status.code(), Some(2));
 }
+
+#[test]
+fn time_zero_means_no_wall_time_limit() {
+    // ping -n 3 takes about 2 s; with --time 0 it must finish normally.
+    let r = run(
+        "notime",
+        &["--shell", "--mem", "256", "--time", "0", "--procs", "64"],
+        &["ping", "-n", "3", "127.0.0.1"],
+        "",
+    );
+    assert_eq!(r.out.status.code(), Some(0), "{}", r.report);
+    assert!(r.report.contains(r#""reason":"ok""#), "{}", r.report);
+    assert!(r.report.contains(r#""exitCode":0"#), "{}", r.report);
+}

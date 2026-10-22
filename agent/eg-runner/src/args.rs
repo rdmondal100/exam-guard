@@ -1,4 +1,5 @@
-//! Command line: `eg-runner --mem <MB> --time <ms> [--procs N] [--report <file>] -- <argv…>`.
+//! Command line: `eg-runner --mem <MB> --time <ms> [--procs N] [--report <file>] [--shell] -- <argv…>`.
+//! `--time 0` means no wall-time limit (the exam terminal).
 
 use std::path::PathBuf;
 
@@ -11,6 +12,9 @@ pub struct Args {
     pub time_ms: u64,
     pub procs: u32,
     pub report: Option<PathBuf>,
+    /// Survive Ctrl+C / Ctrl+Break, so the key reaches the shell in a terminal instead of
+    /// ending eg-runner (and with it the job).
+    pub shell: bool,
     /// The program and its arguments, as given after `--`.
     pub command: Vec<String>,
 }
@@ -29,6 +33,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Args, String> {
     let mut time_ms = None;
     let mut procs = DEFAULT_PROCS;
     let mut report = None;
+    let mut shell = false;
     let mut command = Vec::new();
     while let Some(arg) = it.next() {
         match arg.as_str() {
@@ -36,6 +41,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Args, String> {
             "--time" => time_ms = Some(number::<u64>("--time", it.next())?),
             "--procs" => procs = number::<u32>("--procs", it.next())?,
             "--report" => report = Some(PathBuf::from(it.next().ok_or("--report needs a value")?)),
+            "--shell" => shell = true,
             "--" => {
                 command = it.by_ref().collect();
                 break;
@@ -45,8 +51,8 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Args, String> {
     }
     let mem_mb = mem_mb.ok_or("--mem is required")?;
     let time_ms = time_ms.ok_or("--time is required")?;
-    if mem_mb == 0 || time_ms == 0 || procs == 0 {
-        return Err("--mem, --time and --procs must be above 0".into());
+    if mem_mb == 0 || procs == 0 {
+        return Err("--mem and --procs must be above 0".into());
     }
     if command.is_empty() {
         return Err("give the program to run after --".into());
@@ -56,6 +62,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Args, String> {
         time_ms,
         procs,
         report,
+        shell,
         command,
     })
 }
@@ -87,7 +94,19 @@ mod tests {
         let a = p(&["--time", "1", "--mem", "1", "--", "x", "--mem", "9"]).unwrap();
         assert_eq!(a.procs, DEFAULT_PROCS);
         assert_eq!(a.report, None);
+        assert!(!a.shell);
         assert_eq!(a.command, vec!["x", "--mem", "9"]);
+    }
+
+    #[test]
+    fn shell_mode_allows_no_time_limit() {
+        let a = p(&[
+            "--shell", "--mem", "2048", "--time", "0", "--procs", "64", "--", "pwsh",
+        ])
+        .unwrap();
+        assert!(a.shell);
+        assert_eq!(a.time_ms, 0);
+        assert_eq!(a.procs, 64);
     }
 
     #[test]
@@ -96,6 +115,7 @@ mod tests {
         assert!(p(&["--mem", "1", "--time", "1"]).is_err());
         assert!(p(&["--mem", "abc", "--time", "1", "--", "x"]).is_err());
         assert!(p(&["--mem", "0", "--time", "1", "--", "x"]).is_err());
+        assert!(p(&["--mem", "1", "--time", "1", "--procs", "0", "--", "x"]).is_err());
         assert!(p(&["--mem", "1", "--time", "1", "--what", "--", "x"]).is_err());
         assert!(p(&["--mem"]).is_err());
     }
