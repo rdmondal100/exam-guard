@@ -2,7 +2,8 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import type { SessionStatus, StudentQuestion } from '@examguard/shared';
 import { ANSWER_TEXT_KEY, answeredIds, getAnswer, useAnswerStore } from '@/lib/answerStore';
 import { pickLanguage } from '@/lib/languages';
-import { useAnswerStatus, useAutosave } from '@/lib/useAutosave';
+import { isTimeUp, submitAnswers, submitRefusalText } from '@/lib/submit';
+import { saveNow, useAnswerStatus, useAutosave } from '@/lib/useAutosave';
 import { useExamFilesStatus } from '@/lib/useExamFilesStatus';
 import { CodeAnswer } from './CodeAnswer';
 import { ExamFilesNotice } from './ExamFilesNotice';
@@ -10,6 +11,7 @@ import { ExamTimer } from './ExamTimer';
 import { LINK_TEXT } from './LobbyScreen';
 import { QuestionNav } from './QuestionNav';
 import { SaveChip } from './SaveChip';
+import { SubmitDialog } from './SubmitDialog';
 import { WrittenAnswer } from './WrittenAnswer';
 
 const TerminalDock = lazy(() => import('./TerminalDock'));
@@ -65,6 +67,33 @@ export function ExamScreen({
   // Mounted on first open and then only hidden, so the shell output survives toggling.
   const [terminalMounted, setTerminalMounted] = useState(false);
   const [terminalShown, setTerminalShown] = useState(false);
+  // Submit: ask first, then wait for the server (possibly through a dropped connection).
+  const [confirming, setConfirming] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const submit = () => {
+    setSubmitError(null);
+    setSubmitting(true);
+    submitAnswers()
+      .then((outcome) => {
+        // On success the receipt arrives as exam state and this screen is replaced.
+        if (!outcome.ok) setSubmitError(submitRefusalText(outcome.reason));
+      })
+      .catch(() => setSubmitError(submitRefusalText('')))
+      .finally(() => setSubmitting(false));
+  };
+  // At the deadline the editors lock; the server auto-submits after the grace period.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, []);
+  const timeUp = isTimeUp(deadline, now, status.offsetMs);
+  useEffect(() => {
+    if (!timeUp) return;
+    setConfirming(false);
+    void saveNow('interval');
+  }, [timeUp]);
   useEffect(() => {
     void window.examguard.terminalStatus().then((s) => {
       if (s.open) {
@@ -110,6 +139,14 @@ export function ExamScreen({
             Monitoring active
           </span>
           <SaveChip status={saveStatus} online={linkOk} />
+          <button
+            type="button"
+            disabled={timeUp}
+            onClick={() => setConfirming(true)}
+            className="rounded-md bg-black px-3 py-1 text-sm text-white disabled:opacity-50"
+          >
+            Submit
+          </button>
           <span
             role="status"
             className={`rounded-md px-3 py-1 text-sm ${
@@ -122,7 +159,13 @@ export function ExamScreen({
         </div>
       </header>
       <ExamFilesNotice status={examFiles} />
-      <div className="flex min-h-0 flex-1">
+      {timeUp && (
+        <p role="alert" className="bg-amber-100 px-6 py-2 text-sm text-amber-900">
+          Time is up. Your work is being sent. Your receipt appears in a moment; keep this window
+          open.
+        </p>
+      )}
+      <div className="flex min-h-0 flex-1" {...(timeUp ? { inert: '' } : {})}>
         <aside className="w-48 shrink-0 overflow-y-auto border-r p-3">
           <QuestionNav
             questions={questions}
@@ -169,6 +212,18 @@ export function ExamScreen({
           <main className="p-6">This exam has no questions.</main>
         )}
       </div>
+      {confirming && !timeUp && (
+        <SubmitDialog
+          answered={answered.size}
+          total={questions.length}
+          unsent={saveStatus.pending}
+          linkOk={linkOk}
+          busy={submitting}
+          error={submitError}
+          onConfirm={submit}
+          onCancel={() => setConfirming(false)}
+        />
+      )}
       {filesOn && filesMounted && (
         <section className={`h-72 shrink-0 border-t p-3 ${filesShown ? '' : 'hidden'}`}>
           <Suspense fallback={<p className="text-sm text-muted">Loading files…</p>}>

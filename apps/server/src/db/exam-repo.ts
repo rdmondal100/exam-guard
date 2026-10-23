@@ -27,6 +27,8 @@ export interface ExamTiming {
   startedAt: number | null;
   durationSec: number;
   globalExtensionSec: number;
+  /** How long after a deadline queued saves are still accepted (`monitoring.graceSec`). */
+  graceSec: number;
 }
 
 const SELECT = `SELECT e.id, e.title, e.state, e.duration_sec, e.class_list_id,
@@ -182,17 +184,26 @@ export class ExamRepo {
     return this.exam('running');
   }
 
-  /** Start time and extension of an exam, for the deadline. */
+  /** Start time, extension and time-up grace of an exam, for the deadline. */
   timing(id: string): ExamTiming | undefined {
     const row = this.db
-      .prepare('SELECT started_at, duration_sec, global_extension_sec FROM exams WHERE id = ?')
+      .prepare(
+        'SELECT started_at, duration_sec, global_extension_sec, monitoring_json FROM exams WHERE id = ?',
+      )
       .get(id) as
-      { started_at: number | null; duration_sec: number; global_extension_sec: number } | undefined;
+      | {
+          started_at: number | null;
+          duration_sec: number;
+          global_extension_sec: number;
+          monitoring_json: string;
+        }
+      | undefined;
     return (
       row && {
         startedAt: row.started_at,
         durationSec: row.duration_sec,
         globalExtensionSec: row.global_extension_sec,
+        graceSec: MonitoringSettingsSchema.parse(JSON.parse(row.monitoring_json)).graceSec,
       }
     );
   }

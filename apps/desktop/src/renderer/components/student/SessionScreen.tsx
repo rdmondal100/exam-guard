@@ -4,6 +4,7 @@ import { useRestoreAnswers } from '@/lib/restoreAnswers';
 import { ExamEndedScreen } from './ExamEndedScreen';
 import { ExamScreen } from './ExamScreen';
 import { LobbyScreen } from './LobbyScreen';
+import { ReceiptScreen } from './ReceiptScreen';
 import { RestoringScreen } from './RestoringScreen';
 
 interface Props {
@@ -29,7 +30,8 @@ export function SessionScreen({ name, examTitle, onLeave }: Props) {
     };
   }, []);
 
-  const examOpen = exam?.examState === 'running' && !!exam.questions && exam.deadline !== null;
+  const examOpen =
+    exam?.examState === 'running' && !!exam.questions && exam.deadline !== null && !exam.receipt;
   const restore = useRestoreAnswers(examOpen);
 
   if (examOpen && restore.state.name !== 'ready') {
@@ -37,6 +39,18 @@ export function SessionScreen({ name, examTitle, onLeave }: Props) {
       <RestoringScreen
         error={restore.state.name === 'failed' ? restore.state.message : null}
         onRetry={restore.retry}
+      />
+    );
+  }
+  if (exam?.receipt) {
+    return (
+      <ReceiptScreen
+        name={name}
+        examTitle={examTitle}
+        receipt={exam.receipt}
+        questions={exam.questions}
+        examEnded={exam.examState !== 'running'}
+        endedByTeacher={exam.studentState === 'ended_by_teacher'}
       />
     );
   }

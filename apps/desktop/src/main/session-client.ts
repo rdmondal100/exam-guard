@@ -12,6 +12,8 @@ import {
   type EventReport,
   type SessionState,
   type SessionStatus,
+  type Submit,
+  type SubmitOutcome,
   type TranscriptChunk,
 } from '@examguard/shared';
 
@@ -73,6 +75,12 @@ export class SessionClient {
   private queue: OfflineQueue | null = null;
   private watchTimer: NodeJS.Timeout | null = null;
   private lastReceived = 0;
+  /** The Submit the student asked for, until the server answers. */
+  private pendingSubmit: {
+    frame: Submit;
+    promise: Promise<SubmitOutcome>;
+    settle: (outcome: SubmitOutcome) => void;
+  } | null = null;
 
   constructor(private readonly deps: SessionClientDeps) {
     this.answers = new AnswerOutbox(
@@ -141,6 +149,32 @@ export class SessionClient {
     if (this.welcomed) this.sendFrame(this.welcomed, chunk);
   }
 
+  /**
+   * Asks the server to make the answers final. The frame is re-sent after every reconnect, after
+   * the unacked saves, until the server answers; the receipt arrives as `state.receipt` through
+   * `onExam`. A second call while one is pending shares its outcome.
+   */
+  submit(): Promise<SubmitOutcome> {
+    if (this.exam?.receipt) return Promise.resolve({ ok: true });
+    if (this.pendingSubmit) return this.pendingSubmit.promise;
+    const frame: Submit = {
+      t: 'submit',
+      id: randomUUID(),
+      clientTs: Date.now() + (this.offsetMs ?? 0),
+    };
+    let settle: (outcome: SubmitOutcome) => void = () => {};
+    const promise = new Promise<SubmitOutcome>((resolve) => (settle = resolve));
+    this.pendingSubmit = { frame, promise, settle };
+    if (this.welcomed) this.sendFrame(this.welcomed, frame);
+    return promise;
+  }
+
+  private settleSubmit(outcome: SubmitOutcome): void {
+    const pending = this.pendingSubmit;
+    this.pendingSubmit = null;
+    pending?.settle(outcome);
+  }
+
   private sendFrame(ws: WebSocket, frame: object): void {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(frame));
   }
@@ -174,6 +208,7 @@ export class SessionClient {
   }
 
   stop(): void {
+    this.settleSubmit({ ok: false, reason: 'stopped' });
     this.generation += 1;
     this.target = null;
     this.clearTimers();
@@ -264,6 +299,9 @@ export class SessionClient {
       for (const save of this.answers.unacked()) this.sendFrame(ws, save);
       for (const event of this.pending.values()) this.sendFrame(ws, event);
       for (const chunk of this.pendingTranscript.values()) this.sendFrame(ws, chunk);
+      // After the saves on the same ordered socket, so the server sees them first.
+      if (message.state.receipt) this.settleSubmit({ ok: true });
+      else if (this.pendingSubmit) this.sendFrame(ws, this.pendingSubmit.frame);
     } else if (message.t === 'event.ack') {
       this.pending.delete(message.id);
       this.queue?.remove(`e${message.id}`);
@@ -277,6 +315,14 @@ export class SessionClient {
       if (!this.exam) return;
       this.exam = { ...this.exam, ...message.state };
       this.deps.onExam?.(this.exam);
+      if (message.state.receipt) this.settleSubmit({ ok: true });
+    } else if (message.t === 'submit.result') {
+      if (!this.exam) return;
+      this.exam = { ...this.exam, studentState: 'submitted', receipt: message.receipt };
+      this.deps.onExam?.(this.exam);
+      this.settleSubmit({ ok: true });
+    } else if (message.t === 'submit.refused') {
+      this.settleSubmit({ ok: false, reason: message.reason });
     } else if (message.t === 'pong') {
       const received = Date.now();
       const rtt = received - message.clientSent;

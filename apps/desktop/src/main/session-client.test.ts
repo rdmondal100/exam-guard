@@ -23,6 +23,7 @@ let welcomeWith: 'welcome' | { closeCode: number };
 let ackEvents: boolean;
 let welcomeSaved: unknown[];
 let mute: boolean;
+let submitReply: 'result' | 'refused' | 'none';
 
 beforeAll(async () => {
   const pems = await generate([{ name: 'commonName', value: 'ExamGuard' }], {
@@ -62,6 +63,14 @@ beforeAll(async () => {
         );
       } else if (message.t === 'transcript' && ackEvents) {
         socket.send(JSON.stringify({ t: 'transcript.ack', key: message.key }));
+      } else if (message.t === 'submit' && submitReply !== 'none') {
+        socket.send(
+          JSON.stringify(
+            submitReply === 'result'
+              ? { t: 'submit.result', id: message.id, receipt: RECEIPT }
+              : { t: 'submit.refused', id: message.id, reason: 'not_working' },
+          ),
+        );
       } else if (message.t === 'ping') {
         socket.send(
           JSON.stringify({
@@ -82,6 +91,7 @@ afterAll(() => {
   https.close();
 });
 
+const RECEIPT = { hash: 'a'.repeat(64), submittedAt: 99, answers: [] };
 const STATE = {
   examState: 'hosting',
   studentState: 'lobby',
@@ -105,6 +115,7 @@ beforeEach(() => {
   ackEvents = true;
   welcomeSaved = [];
   mute = false;
+  submitReply = 'result';
   statuses = [];
   client = new SessionClient({
     onStatus: (s) => statuses.push(s),
@@ -478,5 +489,106 @@ describe('SessionClient offline queue', () => {
     const kept = queue().load();
     expect(kept).toHaveLength(500);
     expect(kept[0]).toMatchObject({ clientSeq: 3 });
+  });
+});
+
+describe('SessionClient submit', () => {
+  const submits = () => frames.filter((f) => (f as { t: string }).t === 'submit');
+  const watching = () => {
+    const seen: { studentState: string; receipt?: unknown }[] = [];
+    client = new SessionClient({
+      onStatus: (s) => statuses.push(s),
+      onExam: (state) => seen.push(state),
+      pingMs: 50,
+      random: () => 0,
+    });
+    return seen;
+  };
+
+  it('sends the submit after the unacked saves and settles with the receipt in the exam state', async () => {
+    const seen = watching();
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    client.sendAnswer({
+      questionId: 'q1',
+      language: 'text',
+      content: 'essay',
+      selected: true,
+      reason: 'submit',
+    });
+    const outcome = await client.submit();
+    expect(outcome).toEqual({ ok: true });
+    const order = frames.map((f) => (f as { t: string }).t);
+    expect(order.indexOf('answer.save')).toBeLessThan(order.indexOf('submit'));
+    expect(seen.at(-1)).toMatchObject({ studentState: 'submitted', receipt: RECEIPT });
+    expect(client.examState?.receipt).toEqual(RECEIPT);
+  });
+
+  it('keeps asking after a reconnect until the server answers, and then stops', async () => {
+    submitReply = 'none';
+    watching();
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    const outcome = client.submit();
+    await until(() => submits().length === 1);
+    submitReply = 'result';
+    for (const c of clients) c.terminate();
+    await expect(outcome).resolves.toEqual({ ok: true });
+    expect(submits()).toHaveLength(2);
+    expect((submits()[0] as { id: string }).id).toBe((submits()[1] as { id: string }).id);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(submits()).toHaveLength(2);
+  });
+
+  it('waits while the link is down and sends on the next welcome', async () => {
+    const seen = watching();
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    for (const c of clients) c.terminate();
+    await until(() => links().includes('reconnecting'));
+    const outcome = client.submit();
+    await expect(outcome).resolves.toEqual({ ok: true });
+    expect(seen.at(-1)?.studentState).toBe('submitted');
+  });
+
+  it('settles with the reason when the server refuses', async () => {
+    submitReply = 'refused';
+    watching();
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    await expect(client.submit()).resolves.toEqual({ ok: false, reason: 'not_working' });
+    // A new try is possible after a refusal.
+    submitReply = 'result';
+    await expect(client.submit()).resolves.toEqual({ ok: true });
+  });
+
+  it('shares one request between two calls', async () => {
+    submitReply = 'none';
+    watching();
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    const a = client.submit();
+    const b = client.submit();
+    await until(() => submits().length === 1);
+    expect(a).toBe(b);
+    client.stop();
+    await expect(a).resolves.toEqual({ ok: false, reason: 'stopped' });
+  });
+
+  it('is already settled when a pushed state carries the receipt (auto-submit)', async () => {
+    submitReply = 'none';
+    const seen = watching();
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    const outcome = client.submit();
+    clients[0]?.send(
+      JSON.stringify({
+        t: 'state',
+        state: { studentState: 'submitted', receipt: RECEIPT },
+      }),
+    );
+    await expect(outcome).resolves.toEqual({ ok: true });
+    expect(seen.at(-1)?.receipt).toEqual(RECEIPT);
+    await expect(client.submit()).resolves.toEqual({ ok: true });
   });
 });

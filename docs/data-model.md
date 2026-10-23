@@ -101,7 +101,7 @@ UNIQUE(question_id, name)
 | pinned_fp | TEXT | cert fingerprint the student trusted |
 | extension_sec | INTEGER DEFAULT 0 | |
 | joined_at, started_at, submitted_at, last_seen_at | INTEGER | |
-| submission_hash | TEXT | SHA-256 over the canonical JSON of all final answers |
+| submission_hash | TEXT | the receipt hash (M18): SHA-256 of the canonical JSON of `[{questionId, language, sha256}]` sorted by `questionId` (see `final_answers`); set with `submitted_at` when the answers become final, also for `ended_by_teacher` |
 | risk_score | INTEGER DEFAULT 0 | denormalised, updated with each event batch |
 | outside_ms_total | INTEGER DEFAULT 0 | denormalised |
 UNIQUE(exam_id, class_student_id); UNIQUE(token_hash); INDEX(exam_id, state); INDEX(exam_id, risk_score DESC)
@@ -132,7 +132,8 @@ UNIQUE(exam_id, name). The bytes are in `exam-files/<examId>/<id>` (see the fold
 | client_ts, server_ts | INTEGER | |
 UNIQUE(exam_student_id, client_seq); INDEX(exam_student_id, question_id, language, id DESC)
 
-### final_answers (written at submit or auto-submit; immutable)
+### final_answers (written at submit, auto-submit or the teacher's End; immutable; M18, migration 0010)
+One row per question of the exam for every finalized student, in one transaction with the `exam_students` change. A question the student never answered gets an empty `content` and its first allowed language (or `text`). `language` is the language of the newest version saved as selected, else the newest version's language.
 | col | type | notes |
 |---|---|---|
 | exam_student_id | TEXT FK | PK part |
@@ -140,7 +141,7 @@ UNIQUE(exam_student_id, client_seq); INDEX(exam_student_id, question_id, languag
 | language | TEXT | the selected language at submit |
 | content | TEXT | empty string if never answered |
 | version_id | INTEGER FK → answer_versions | nullable |
-| sha256 | TEXT | |
+| sha256 | TEXT | hex SHA-256 of `content` (UTF-8) |
 | submitted_at | INTEGER | |
 PRIMARY KEY(exam_student_id, question_id)
 

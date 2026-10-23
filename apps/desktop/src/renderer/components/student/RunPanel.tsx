@@ -60,7 +60,7 @@ export function RunPanel({ questionId, language, code }: Props) {
   const busyHere = running === key;
 
   const run = async () => {
-    saveNow('run');
+    void saveNow('run');
     start(key);
     let r: RunResult;
     try {

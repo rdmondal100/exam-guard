@@ -9,16 +9,25 @@ export interface SimOptions {
   rampMs: number;
   /** Each student saves an answer this often once the exam runs; 0 = never. */
   autosaveMs: number;
+  /** Each student submits this long after the questions arrive; 0 = wait for the auto-submit. */
+  submitAfterMs: number;
+  /** Each student drops its socket about this often; 0 = never. */
+  disconnectEveryMs: number;
 }
 
 export const USAGE = `Usage: student-sim --host <ip[:port]> --pin <6 digits> [--students 200] [--csv file] [--ramp-ms 20] [--autosave-ms 10000]
+                    [--submit-after-ms 60000] [--disconnect-every-ms 20000]
 
   --host        Teacher address (default port 47820)
   --pin         The 6-digit PIN shown on the hosting screen
   --students    How many fake students to run (1-1000, default 10)
   --csv         Class list CSV (student ID in column 1); default codes 1..N
   --ramp-ms     Pause between starting two students (default 20)
-  --autosave-ms Each student saves an answer this often once the exam runs (0 = never, default 0)`;
+  --autosave-ms Each student saves an answer this often once the exam runs (0 = never, default 0)
+  --submit-after-ms     Each student submits this long after the questions arrive, once its saves are
+                        in (0 = leave them to the auto-submit at time-up, default 0)
+  --disconnect-every-ms Each student drops its connection about this often and reconnects
+                        (0 = never, default 0; at least 1000)`;
 
 const DEFAULT_PORT = 47820;
 
@@ -34,7 +43,16 @@ export function parseArgs(argv: string[]): SimOptions {
     flags.set(flag.slice(2), value);
     i += 1;
   }
-  const known = new Set(['host', 'pin', 'students', 'csv', 'ramp-ms', 'autosave-ms']);
+  const known = new Set([
+    'host',
+    'pin',
+    'students',
+    'csv',
+    'ramp-ms',
+    'autosave-ms',
+    'submit-after-ms',
+    'disconnect-every-ms',
+  ]);
   for (const name of flags.keys()) if (!known.has(name)) throw new Error(`Unknown flag --${name}`);
 
   const hostText = flags.get('host');
@@ -60,5 +78,31 @@ export function parseArgs(argv: string[]): SimOptions {
   if (!Number.isInteger(autosaveMs) || autosaveMs < 0 || (autosaveMs > 0 && autosaveMs < 100)) {
     throw new Error('--autosave-ms must be 0 (off) or a whole number of at least 100');
   }
-  return { host, port, pin, students, csv: flags.get('csv'), rampMs, autosaveMs };
+  const submitAfterMs = Number(flags.get('submit-after-ms') ?? '0');
+  if (
+    !Number.isInteger(submitAfterMs) ||
+    submitAfterMs < 0 ||
+    (submitAfterMs > 0 && submitAfterMs < 100)
+  ) {
+    throw new Error('--submit-after-ms must be 0 (off) or a whole number of at least 100');
+  }
+  const disconnectEveryMs = Number(flags.get('disconnect-every-ms') ?? '0');
+  if (
+    !Number.isInteger(disconnectEveryMs) ||
+    disconnectEveryMs < 0 ||
+    (disconnectEveryMs > 0 && disconnectEveryMs < 1000)
+  ) {
+    throw new Error('--disconnect-every-ms must be 0 (off) or a whole number of at least 1000');
+  }
+  return {
+    host,
+    port,
+    pin,
+    students,
+    csv: flags.get('csv'),
+    rampMs,
+    autosaveMs,
+    submitAfterMs,
+    disconnectEveryMs,
+  };
 }

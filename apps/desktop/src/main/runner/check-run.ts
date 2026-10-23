@@ -1,4 +1,5 @@
 import type { RunRequest, SessionState } from '@examguard/shared';
+import { examWorking } from '../exam-working.js';
 import { splitFlags } from './split-flags.js';
 
 /**
@@ -6,7 +7,7 @@ import { splitFlags } from './split-flags.js';
  * teacher allowed for that code question. Returns the reason to refuse, or `null`.
  */
 export function runRefusal(exam: SessionState | null, request: RunRequest): string | null {
-  if (exam?.examState !== 'running') return 'Code can only be run while the exam is running.';
+  if (!examWorking(exam)) return 'Code can only be run while the exam is running.';
   const question = exam.questions?.find((q) => q.id === request.questionId);
   if (!question || question.type !== 'code') return 'This question has no code to run.';
   if (!question.allowedLanguages.includes(request.language)) {

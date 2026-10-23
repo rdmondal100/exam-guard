@@ -13,6 +13,9 @@ import { EventRepo } from '../db/event-repo.js';
 import { ExamFileRepo } from '../db/exam-file-repo.js';
 import { ExamRepo } from '../db/exam-repo.js';
 import { ExamStudentRepo } from '../db/exam-student-repo.js';
+import { FinalAnswerRepo } from '../db/final-answer-repo.js';
+import { StudentDeadlines } from '../exams/student-deadlines.js';
+import { SubmissionService } from '../submissions/submission-service.js';
 import { ExamFileService } from '../exam-files/exam-file-service.js';
 import { ExamFileStore } from '../exam-files/exam-file-store.js';
 import { ConnectionEvents } from '../hosting/connection-events.js';
@@ -53,6 +56,9 @@ export interface TeacherAppOptions {
     | 'terminalLogs'
     | 'answers'
     | 'answerWriter'
+    | 'finals'
+    | 'deadlines'
+    | 'submissions'
     | 'actions'
     | 'examFiles'
     | 'hub'
@@ -175,6 +181,13 @@ export function buildTeacherApp({
       now,
       onConnection: (id, connected) => connections.onConnection(id, connected),
     });
+    const answerWriter = new AnswerWriter(answers, {
+      onRejected: (row, error) =>
+        console.warn(
+          `answer save ${row.clientSeq} refused: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+    });
+    const finals = new FinalAnswerRepo(db);
     hosting = new HostingManager({
       connections,
       exams,
@@ -184,11 +197,18 @@ export function buildTeacherApp({
       terminals: new TerminalRepo(db),
       terminalLogs,
       answers,
-      answerWriter: new AnswerWriter(answers, {
-        onRejected: (row, error) =>
-          console.warn(
-            `answer save ${row.clientSeq} refused: ${error instanceof Error ? error.message : String(error)}`,
-          ),
+      answerWriter,
+      finals,
+      deadlines: new StudentDeadlines(exams, students),
+      submissions: new SubmissionService({
+        exams,
+        students,
+        questions,
+        answers,
+        finals,
+        writer: answerWriter,
+        hub,
+        now: now ?? Date.now,
       }),
       actions: new TeacherActionRepo(db),
       examFiles,

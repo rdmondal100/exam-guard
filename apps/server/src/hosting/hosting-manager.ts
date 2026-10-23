@@ -7,7 +7,9 @@ import {
   type SessionState,
   type StartResult,
 } from '@examguard/shared';
-import { computeDeadline } from '../exams/deadline.js';
+import type { StudentDeadlines } from '../exams/student-deadlines.js';
+import type { FinalAnswerRepo } from '../db/final-answer-repo.js';
+import type { SubmissionService } from '../submissions/submission-service.js';
 import type { AnswerWriter } from '../answers/answer-writer.js';
 import type { AnswerRepo } from '../db/answer-repo.js';
 import type { EventRepo } from '../db/event-repo.js';
@@ -29,6 +31,7 @@ import type { SessionHub } from '../ws/session-hub.js';
 import type { ConnectionEvents } from './connection-events.js';
 import { generatePin } from './pin.js';
 import { HostingError } from './hosting-error.js';
+import { DeadlineWatcher } from './deadline-watcher.js';
 import { TerminalSwitch } from './terminal-switch.js';
 
 export { HostingError };
@@ -43,6 +46,12 @@ export interface HostingManagerDeps {
   /** Stored versions (the `saved` list in the session state) and the batch writer for new ones. */
   answers: AnswerRepo;
   answerWriter: AnswerWriter;
+  /** Final answers: the receipt in the session state. */
+  finals: FinalAnswerRepo;
+  /** Per-student deadlines and the time-up grace. */
+  deadlines: StudentDeadlines;
+  /** Submit, auto-submit and the teacher's end all go through it. */
+  submissions: SubmissionService;
   actions: TeacherActionRepo;
   /** The teacher's exam files: the manifest in the session state and the download route. */
   examFiles: ExamFileService;
@@ -77,10 +86,10 @@ interface Active {
 /** Owns the student HTTPS listener: open only while an exam is `hosting`. */
 export class HostingManager {
   private active: Active | null = null;
-  private deadlineTimer: ReturnType<typeof setInterval> | null = null;
   private readonly now: () => number;
   /** The teacher's exam terminal switch. */
   readonly terminal: TerminalSwitch;
+  private readonly watcher: DeadlineWatcher;
 
   constructor(private readonly deps: HostingManagerDeps) {
     this.now = deps.now ?? Date.now;
@@ -89,6 +98,13 @@ export class HostingManager {
       actions: deps.actions,
       hub: deps.hub,
       examState: (id) => deps.exams.get(id)?.state,
+      now: this.now,
+    });
+    this.watcher = new DeadlineWatcher({
+      deadlines: deps.deadlines,
+      submissions: deps.submissions,
+      onTick: (examId) => this.terminal.check(examId),
+      endExam: (examId) => this.endExam(examId, 'time_up'),
       now: this.now,
     });
   }
@@ -142,27 +158,28 @@ export class HostingManager {
     this.terminal.examStarted(examId, startedAt);
     for (const id of students.activateAllInLobby(examId, startedAt)) hub.changed(id);
     hub.broadcast((id) => ({ t: 'state', state: this.sessionState(id) }));
-    const deadline = this.deadlineFor(examId, null);
+    const deadline = this.deps.deadlines.forStudent(examId, null);
     if (deadline === null) throw new Error('Running exam has no start time');
-    this.watchDeadline(examId);
+    this.watcher.start(examId);
     return { ok: true, startedAt, deadline };
   }
 
   /**
-   * running → ended, by the teacher (`manual`) or because the last deadline passed. Students get
-   * the `ended` state, then the listener closes. A manual end also marks working students.
+   * running → ended, by the teacher (`manual`) or because the last deadline and its grace passed.
+   * Everyone still working gets their final answers first (`ended_by_teacher` after a manual end),
+   * students get the `ended` state, then the listener closes.
    */
   async endExam(examId: string, reason: 'manual' | 'time_up' = 'manual'): Promise<void> {
-    const { exams, students, hub } = this.deps;
+    const { exams, hub, submissions } = this.deps;
     const exam = exams.get(examId);
     if (!exam) throw new HostingError(404, 'not_found', 'Exam not found');
     if (exam.state !== 'running') {
       throw new HostingError(409, 'invalid_state', `A ${exam.state} exam cannot be ended`);
     }
     assertTransition(exam.state, 'ended');
-    this.stopWatchingDeadline();
+    this.watcher.stop();
+    submissions.finalizeAll(examId, reason === 'manual' ? 'teacher_end' : 'time_up');
     exams.endRunning(examId, this.now());
-    if (reason === 'manual') for (const id of students.endAllWorking(examId)) hub.changed(id);
     hub.broadcast((id) => ({ t: 'state', state: this.sessionState(id) }));
     await this.close();
   }
@@ -185,7 +202,7 @@ export class HostingManager {
     return {
       examState: exam?.state ?? 'hosting',
       studentState: state,
-      deadline: running ? this.deadlineFor(student.examId, studentId) : null,
+      deadline: running ? this.deps.deadlines.forStudent(student.examId, studentId) : null,
       questions: running ? questions.list(student.examId).map(toStudentQuestion) : undefined,
       saved: this.deps.answers.savedFor(studentId),
       locked: state === 'locked',
@@ -193,6 +210,7 @@ export class HostingManager {
       terminal: this.terminal.state(student.examId),
       filesEnabled: exam?.filesEnabled ?? true,
       examFiles: exam?.filesEnabled ? this.deps.examFiles.list(student.examId) : [],
+      receipt: this.deps.finals.receiptFor(studentId),
     };
   }
 
@@ -206,51 +224,14 @@ export class HostingManager {
     const hosted = exams.hostedExam() ?? exams.runningExam();
     if (hosted && !this.active) await this.open(hosted.exam.id, hosted.pin);
     if (hosted?.exam.state === 'running') {
-      this.watchDeadline(hosted.exam.id);
+      this.watcher.start(hosted.exam.id);
       this.terminal.arm(hosted.exam.id);
     }
   }
 
-  /** Ends the exam once the latest deadline (extensions included) has passed. */
-  private watchDeadline(examId: string): void {
-    this.stopWatchingDeadline();
-    const check = () => {
-      const timing = this.deps.exams.timing(examId);
-      if (!timing || timing.startedAt === null) return;
-      this.terminal.check(examId);
-      const last = computeDeadline({
-        startedAt: timing.startedAt,
-        durationSec: timing.durationSec,
-        globalExtensionSec: timing.globalExtensionSec,
-        studentExtensionSec: this.deps.students.maxExtensionSec(examId),
-      });
-      if (this.now() < last) return;
-      this.endExam(examId, 'time_up').catch(() => this.stopWatchingDeadline());
-    };
-    this.deadlineTimer = setInterval(check, 1000);
-    this.deadlineTimer.unref();
-    check();
-  }
-
-  private stopWatchingDeadline(): void {
-    if (this.deadlineTimer) clearInterval(this.deadlineTimer);
-    this.deadlineTimer = null;
-  }
-
-  private deadlineFor(examId: string, studentId: string | null): number | null {
-    const timing = this.deps.exams.timing(examId);
-    if (!timing || timing.startedAt === null) return null;
-    return computeDeadline({
-      startedAt: timing.startedAt,
-      durationSec: timing.durationSec,
-      globalExtensionSec: timing.globalExtensionSec,
-      studentExtensionSec: studentId ? this.deps.students.extensionSec(studentId) : 0,
-    });
-  }
-
   async close(): Promise<void> {
     const active = this.active;
-    this.stopWatchingDeadline();
+    this.watcher.stop();
     this.terminal.disarm();
     // Saves already received are written before the exam can move on.
     this.deps.answerWriter.flush();
@@ -294,13 +275,16 @@ export class HostingManager {
         terminalLogs: this.deps.terminalLogs,
         answers: {
           exams: this.deps.exams,
+          students: this.deps.students,
           questions: this.deps.questions,
+          deadlines: this.deps.deadlines,
           writer: this.deps.answerWriter,
           now: this.now,
           onDropped: (reason, save) =>
             console.warn(`dropped a save of question ${save.questionId}: ${reason}`),
         },
         sessionState: (id) => this.sessionState(id),
+        submissions: this.deps.submissions,
         examId: () => (this.active?.examId === examId ? examId : null),
         now: this.now,
         ...this.deps.socketTimings,

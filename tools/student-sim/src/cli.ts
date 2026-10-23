@@ -34,18 +34,29 @@ function main(): void {
     const saves = options.autosaveMs
       ? ` · saves sent ${s.sent} acked ${s.acked} waiting ${s.pending}`
       : '';
+    const u = run.submits();
+    const submits =
+      options.submitAfterMs || options.disconnectEveryMs || u.receipts > 0
+        ? ` · receipts ${u.receipts} (own ${u.selfSubmitted}, auto ${u.receipts - u.selfSubmitted}) · drops ${u.disconnects} · bad receipts ${u.problems.length}`
+        : '';
     console.log(
-      `connected ${c.connected}/${c.total} · joining ${c.joining} · reconnecting ${c.connecting} · failed ${c.failed}${saves}`,
+      `connected ${c.connected}/${c.total} · joining ${c.joining} · reconnecting ${c.connecting} · failed ${c.failed}${saves}${submits}`,
     );
   };
   const timer = setInterval(report, 5000);
   void run.settled().then(() => {
     report();
     for (const [code, why] of [...run.failures()].slice(0, 5)) console.log(`  ${code}: ${why}`);
+    for (const { code, problem } of run.submits().problems.slice(0, 5)) {
+      console.log(`  ${code}: ${problem}`);
+    }
   });
   const quit = () => {
     clearInterval(timer);
     report();
+    for (const { code, problem } of run.submits().problems.slice(0, 5)) {
+      console.log(`  ${code}: ${problem}`);
+    }
     run.stop();
     console.log('Stopped.');
     process.exit(0);

@@ -18,12 +18,25 @@ export interface SimRun {
   failures(): Map<string, string>;
   /** Autosaves summed over all students. */
   saves(): SaveStats;
+  /** Receipts, submits, drops and receipt problems summed over all students. */
+  submits(): SubmitTotals;
+}
+
+export interface SubmitTotals {
+  /** Students holding a receipt. */
+  receipts: number;
+  /** Of those, the ones that pressed Submit themselves. */
+  selfSubmitted: number;
+  disconnects: number;
+  refused: number;
+  /** Receipts that did not hold up (code and what was wrong). */
+  problems: { code: string; problem: string }[];
 }
 
 /** Starts one fake student per code, `rampMs` apart. */
 export function runSim(
   options: Pick<SimOptions, 'host' | 'port' | 'pin' | 'rampMs'> &
-    Partial<Pick<SimOptions, 'autosaveMs'>>,
+    Partial<Pick<SimOptions, 'autosaveMs' | 'submitAfterMs' | 'disconnectEveryMs'>>,
   codes: string[],
   pingMs?: number,
 ): SimRun {
@@ -51,6 +64,8 @@ export function runSim(
         onState,
         ...(pingMs ? { pingMs } : {}),
         ...(options.autosaveMs ? { autosaveMs: options.autosaveMs } : {}),
+        ...(options.submitAfterMs ? { submitAfterMs: options.submitAfterMs } : {}),
+        ...(options.disconnectEveryMs ? { disconnectEveryMs: options.disconnectEveryMs } : {}),
       }),
   );
   let stopped = false;
@@ -97,6 +112,24 @@ export function runSim(
         total.acked += one.acked;
         total.pending += one.pending;
       }
+      return total;
+    },
+    submits: () => {
+      const total: SubmitTotals = {
+        receipts: 0,
+        selfSubmitted: 0,
+        disconnects: 0,
+        refused: 0,
+        problems: [],
+      };
+      students.forEach((s, i) => {
+        const one = s.submitStats();
+        if (one.receipt) total.receipts += 1;
+        if (one.selfSubmitted) total.selfSubmitted += 1;
+        total.disconnects += one.disconnects;
+        total.refused += one.refused;
+        for (const problem of one.problems) total.problems.push({ code: codes[i] ?? '?', problem });
+      });
       return total;
     },
   };

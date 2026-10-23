@@ -1,4 +1,5 @@
 import type WebSocket from 'ws';
+import type { FinalAnswerInput } from '@examguard/shared';
 
 export interface SaveStats {
   sent: number;
@@ -13,6 +14,8 @@ interface QuestionInfo {
   allowedLanguages: string[];
 }
 
+type Reason = 'interval' | 'run' | 'switch_question' | 'switch_language';
+
 interface Save {
   t: 'answer.save';
   id: string;
@@ -22,24 +25,32 @@ interface Save {
   language: string;
   content: string;
   selected: true;
-  reason: 'interval';
+  reason: Reason;
 }
 
 /** Largest buffer a fake student grows to (characters); real answers are a few KB. */
 const MAX_CONTENT = 4_000;
 
+const languagesOf = (q: QuestionInfo): string[] =>
+  q.type === 'code' && q.allowedLanguages.length > 0 ? q.allowedLanguages : ['text'];
+
 /**
- * What one fake student writes once the exam runs: a buffer in the first question that grows a
- * little with every tick, saved like the real app does (numbered, re-sent until acked).
+ * What one fake student writes once the exam runs: buffers in all questions that grow a little with
+ * every tick, saved like the real app does (numbered, re-sent until acked). A tick picks a question
+ * at random, now and then switches language or "runs" the code, so every save reason shows up.
  */
 export class SimSaves {
-  private question: QuestionInfo | null = null;
+  private questions: QuestionInfo[] = [];
   private nextSeq = 1;
-  private edits = 0;
   private readonly unacked = new Map<number, Save>();
+  private readonly buffers = new Map<string, string>();
+  /** The language each question was last saved in (the one that counts). */
+  private readonly chosen = new Map<string, string>();
+  private lastQuestion: string | null = null;
   private sent = 0;
   private acked = 0;
   private timer: NodeJS.Timeout | null = null;
+  private frozen = false;
 
   constructor(
     private readonly everyMs: number,
@@ -52,8 +63,10 @@ export class SimSaves {
    */
   setQuestions(questions: unknown, saved: unknown): boolean {
     this.continueAfter(saved);
-    if (this.question || !Array.isArray(questions) || questions.length === 0) return false;
-    this.question = questions[0] as QuestionInfo;
+    if (this.questions.length > 0 || !Array.isArray(questions) || questions.length === 0) {
+      return false;
+    }
+    this.questions = questions as QuestionInfo[];
     return true;
   }
 
@@ -67,8 +80,9 @@ export class SimSaves {
   /** Called on every welcome: starts the timer and re-sends what was not acked. */
   attach(ws: WebSocket): void {
     this.detach();
-    if (!this.question) return;
+    if (this.questions.length === 0) return;
     for (const save of this.unacked.values()) this.send(ws, save);
+    if (this.frozen) return;
     // Jittered so 200 students do not save in the same millisecond.
     const first = Math.random() * this.everyMs;
     this.timer = setTimeout(() => {
@@ -85,6 +99,12 @@ export class SimSaves {
     this.timer = null;
   }
 
+  /** No new saves from now on (the student is submitting); unacked ones are still re-sent. */
+  freeze(): void {
+    this.frozen = true;
+    this.detach();
+  }
+
   ack(clientSeq: number): void {
     if (this.unacked.delete(clientSeq)) this.acked += 1;
   }
@@ -93,11 +113,40 @@ export class SimSaves {
     return { sent: this.sent, acked: this.acked, pending: this.unacked.size };
   }
 
+  /** The answers the server should hold for this student after every save arrived. */
+  expectedAnswers(): FinalAnswerInput[] {
+    return this.questions.map((q) => {
+      const language = this.chosen.get(q.id) ?? (languagesOf(q)[0] as string);
+      return {
+        questionId: q.id,
+        language,
+        content: this.buffers.get(`${q.id}\u0000${language}`) ?? '',
+      };
+    });
+  }
+
   private tick(ws: WebSocket): void {
-    const q = this.question;
+    const q = this.questions[Math.floor(Math.random() * this.questions.length)];
     if (!q) return;
-    this.edits += 1;
-    const language = q.type === 'code' && q.allowedLanguages[0] ? q.allowedLanguages[0] : 'text';
+    const languages = languagesOf(q);
+    const before = this.chosen.get(q.id);
+    let language = before ?? (languages[0] as string);
+    let reason: Reason = 'interval';
+    if (languages.length > 1 && Math.random() < 0.15) {
+      language = languages[Math.floor(Math.random() * languages.length)] as string;
+    }
+    if (before !== undefined && language !== before) reason = 'switch_language';
+    else if (this.lastQuestion !== null && this.lastQuestion !== q.id) reason = 'switch_question';
+    else if (q.type === 'code' && Math.random() < 0.1) reason = 'run';
+    this.lastQuestion = q.id;
+    this.chosen.set(q.id, language);
+
+    const key = `${q.id}\u0000${language}`;
+    const content = `${this.buffers.get(key) ?? `// student ${this.code}\n`}x = x + 1;\n`.slice(
+      0,
+      MAX_CONTENT,
+    );
+    this.buffers.set(key, content);
     const save: Save = {
       t: 'answer.save',
       id: `sim-${this.code}-${this.nextSeq}`,
@@ -105,12 +154,9 @@ export class SimSaves {
       clientTs: Date.now(),
       questionId: q.id,
       language,
-      content: `// student ${this.code}\n${'x = x + 1;\n'.repeat(this.edits)}`.slice(
-        0,
-        MAX_CONTENT,
-      ),
+      content,
       selected: true,
-      reason: 'interval',
+      reason,
     };
     this.nextSeq += 1;
     this.unacked.set(save.clientSeq, save);

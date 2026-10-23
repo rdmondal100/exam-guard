@@ -4,6 +4,7 @@ import {
   AnswerSaveRequestSchema,
   RestoreResultSchema,
   AnswerStatusSchema,
+  SubmitOutcomeSchema,
   AppInfoSchema,
   DiscoveredHostSchema,
   ExamFilesStatusSchema,
@@ -107,6 +108,7 @@ const api: ExamGuardApi = {
   saveAnswer: async (request) => {
     await ipcRenderer.invoke(IPC.answerSave, AnswerSaveRequestSchema.parse(request));
   },
+  submitExam: async () => SubmitOutcomeSchema.parse(await ipcRenderer.invoke(IPC.submitExam)),
   onAnswerStatus: (listener) => {
     const handler = (_event: IpcRendererEvent, payload: unknown) => {
       const parsed = AnswerStatusSchema.safeParse(payload);

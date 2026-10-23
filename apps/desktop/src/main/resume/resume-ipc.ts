@@ -89,6 +89,9 @@ export function registerResumeIpc(deps: ResumeIpcDeps): ResumeHooks {
       if (status.link === 'failed' && status.reason === 'unauthorized') store.clear();
     },
     onExam: (exam) => {
+      // Once the answers are final nothing more can be stored, so unsent saves are moot. The
+      // session file stays until the exam ends, so a restart still shows the receipt.
+      if (exam.receipt) queue?.clear();
       if (!ENDED.has(exam.examState)) return;
       store.clear();
       queue?.clear();
