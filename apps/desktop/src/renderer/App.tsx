@@ -8,6 +8,8 @@ import { ModeSelect } from './components/ModeSelect';
 export function App() {
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Until the student reaches the Find screen, the agent gate stays out of the way (resuming).
+  const [inSession, setInSession] = useState(true);
 
   useEffect(() => {
     window.examguard.getInfo().then(setInfo, (e: unknown) => setError(String(e)));
@@ -22,8 +24,8 @@ export function App() {
   if (!info.mode) return <ModeSelect allowed={info.allowedModes} onChoose={choose} />;
   if (info.mode === 'teacher') return <TeacherGate info={info} />;
   return (
-    <AgentGate>
-      <StudentFlow />
+    <AgentGate bypass={inSession}>
+      <StudentFlow onInSession={setInSession} />
     </AgentGate>
   );
 }

@@ -18,12 +18,19 @@ type Step =
   | { name: 'lobby'; joined: Joined };
 
 /**
- * Student screens in order: find a host, ID + PIN, confirm name, notice, lobby. A restarted app
+ * Student screens in order: find a host, ID + PIN, confirm name, notice, lobby (`onInSession` says
+ * when the agent gate may step aside). A restarted app
  * first looks for the session it left (same PC, same sign-in) and goes straight back to it.
  */
-export function StudentFlow() {
+export function StudentFlow({ onInSession }: { onInSession?: (inSession: boolean) => void }) {
   const [step, setStep] = useState<Step>({ name: 'resuming' });
   const toFind = () => setStep({ name: 'find' });
+
+  // Finding a host and typing the ID + PIN need a healthy agent; every step after the join does not.
+  const needsAgent = step.name === 'find' || step.name === 'credentials';
+  useEffect(() => {
+    onInSession?.(!needsAgent);
+  }, [needsAgent, onInSession]);
 
   useEffect(() => {
     let cancelled = false;

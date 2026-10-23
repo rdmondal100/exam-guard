@@ -2,7 +2,7 @@ import { X509Certificate } from 'node:crypto';
 import { createServer, type Server } from 'node:https';
 import { generate } from 'selfsigned';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { JoinAttempt } from '@examguard/shared';
+import type { AgentLinkStatus, JoinAttempt } from '@examguard/shared';
 import { JoinClient } from './join-client.js';
 import { fingerprintOfDer } from './tls-pin.js';
 
@@ -67,11 +67,25 @@ const attempt = (over: Partial<JoinAttempt> = {}): JoinAttempt => ({
   ...over,
 });
 
+const HEALTHY: AgentLinkStatus = {
+  verified: true,
+  ok: true,
+  helper: true,
+  captureOk: true,
+  monitors: 2,
+  problems: [],
+};
+
 let client: JoinClient;
+let link: AgentLinkStatus;
 beforeEach(() => {
   seen = [];
   reply = () => ({ status: 200, body: GOOD });
-  client = new JoinClient(async () => 'device-xyz');
+  link = HEALTHY;
+  client = new JoinClient(
+    async () => 'device-xyz',
+    async () => link,
+  );
 });
 
 describe('JoinClient.join', () => {
@@ -87,9 +101,44 @@ describe('JoinClient.join', () => {
         pin: '123456',
         deviceId: 'device-xyz',
         protocol: { major: 1 },
-        agent: { ok: true },
+        agent: { ok: true, helper: true, captureOk: true, monitors: 2 },
       },
     });
+  });
+
+  it.each([
+    [
+      'the agent is not running',
+      {
+        ...HEALTHY,
+        verified: false,
+        ok: false,
+        problems: ['The monitoring agent is not running.'],
+      },
+    ],
+    [
+      'the helper is missing',
+      { ...HEALTHY, ok: false, helper: false, problems: ['The monitoring helper is not running.'] },
+    ],
+    [
+      'the capture is black',
+      {
+        ...HEALTHY,
+        ok: false,
+        captureOk: false,
+        problems: ['The monitoring agent cannot capture the screen.'],
+      },
+    ],
+  ])('refuses without sending anything when %s', async (_name, status) => {
+    link = status;
+    const result = await client.join(attempt());
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'agent_required',
+      message: status.problems[0],
+    });
+    expect(seen).toHaveLength(0);
+    expect(client.credentials()).toBeNull();
   });
 
   it('refuses a different certificate before sending the PIN', async () => {
@@ -173,7 +222,10 @@ describe('JoinClient snapshot, restore and forget', () => {
       examTitle: 'Mid',
     });
 
-    const restarted = new JoinClient(async () => 'device-xyz');
+    const restarted = new JoinClient(
+      async () => 'device-xyz',
+      async () => link,
+    );
     if (stored) restarted.restore(stored);
     expect(restarted.credentials()).toEqual({
       target: { address: '127.0.0.1', port, expectedFingerprint: fingerprint },

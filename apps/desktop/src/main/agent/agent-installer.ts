@@ -46,9 +46,16 @@ async function runElevated(
   return text === 'ok' ? null : text || 'The setup script failed.';
 }
 
-/** Copies `exe` under Program Files and (re)creates + starts the service. */
-export function installAgent(exe: string, deps: InstallerDeps): Promise<string | null> {
-  return runElevated(INSTALL_SCRIPT, { Source: exe }, deps);
+/**
+ * Copies `exe` under Program Files and (re)creates + starts the service. `appPath` (dev builds) is
+ * the student app's program file, registered so the agent accepts its pipe connection.
+ */
+export function installAgent(
+  exe: string,
+  deps: InstallerDeps,
+  appPath?: string,
+): Promise<string | null> {
+  return runElevated(INSTALL_SCRIPT, { Source: exe, ...(appPath ? { App: appPath } : {}) }, deps);
 }
 
 export function uninstallAgent(deps: InstallerDeps): Promise<string | null> {

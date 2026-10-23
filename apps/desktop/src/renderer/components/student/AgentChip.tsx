@@ -28,7 +28,7 @@ export function AgentChip() {
   }, [open]);
 
   if (!status) return null;
-  const ok = status.state === 'running';
+  const ok = status.link.ok;
 
   const remove = async () => {
     setError(null);
@@ -75,7 +75,9 @@ export function AgentChip() {
         aria-expanded={open}
       >
         <span className={`size-2 rounded-full ${ok ? 'bg-green-600' : 'bg-red-600'}`} aria-hidden />
-        {LABELS[status.state]}
+        {ok || status.state !== 'running'
+          ? LABELS[status.state]
+          : (status.link.problems[0] ?? LABELS.running)}
         {status.fake && ' (fake)'}
       </button>
     </div>

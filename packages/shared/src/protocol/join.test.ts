@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  agentProblem,
   JOIN_CLIENT_ERROR_CODES,
   JOIN_ERROR_CODES,
   JoinAttemptSchema,
@@ -67,5 +68,22 @@ describe('JoinResultSchema', () => {
 
   it('client codes include every server code', () => {
     for (const code of JOIN_ERROR_CODES) expect(JOIN_CLIENT_ERROR_CODES).toContain(code);
+  });
+});
+
+describe('agentProblem', () => {
+  const good = { ok: true, helper: true, captureOk: true, monitors: 1 };
+
+  it('accepts a healthy agent', () => {
+    expect(agentProblem(good)).toBeNull();
+  });
+
+  it.each([
+    [{ helper: false }, /helper/],
+    [{ captureOk: false }, /capture/],
+    [{ monitors: 0 }, /no screen/],
+    [{ ok: false }, /not healthy/],
+  ])('names the problem for %j', (change, words) => {
+    expect(agentProblem({ ...good, ...change })).toMatch(words);
   });
 });

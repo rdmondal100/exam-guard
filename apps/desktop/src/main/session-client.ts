@@ -8,6 +8,7 @@ import {
   type AnswerSave,
   type AnswerSaveRequest,
   type AnswerStatus,
+  type AgentStatus,
   type AppEventType,
   type EventReport,
   type SessionState,
@@ -64,6 +65,8 @@ export class SessionClient {
   private generation = 0;
   private exam: SessionState | null = null;
   private welcomed: WebSocket | null = null;
+  /** The agent's latest health, sent after each welcome and whenever it changes (M21). */
+  private agent: AgentStatus | null = null;
   /** Sent events waiting for `event.ack`, in send order. */
   private readonly pending = new Map<string, EventReport>();
   /** Sent transcript chunks waiting for `transcript.ack`, in send order. */
@@ -88,6 +91,12 @@ export class SessionClient {
       MAX_PENDING_SAVES,
       (dropped) => this.queue?.remove(queueKey(dropped)),
     );
+  }
+
+  /** Tells the server how the agent link looks; it is also re-sent after every welcome. */
+  setAgentStatus(status: AgentStatus): void {
+    this.agent = status;
+    if (this.welcomed) this.sendFrame(this.welcomed, { t: 'agent.status', ...status });
   }
 
   /** Saves one answer buffer. It is re-sent after every reconnect until the server acks it. */
@@ -295,6 +304,7 @@ export class SessionClient {
       this.pingTimer = setInterval(() => this.ping(ws), this.pingMs);
       this.ping(ws);
       this.welcomed = ws;
+      if (this.agent) this.sendFrame(ws, { t: 'agent.status', ...this.agent });
       this.answers.continueAfter(message.state.saved);
       for (const save of this.answers.unacked()) this.sendFrame(ws, save);
       for (const event of this.pending.values()) this.sendFrame(ws, event);

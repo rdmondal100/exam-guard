@@ -9,9 +9,14 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
 use crate::config::{FIRST_RETRY, MAX_RETRY, POLL_INTERVAL, STABLE_AFTER};
+use crate::pipe_security::{SDDL_HELPER_PIPE_CONSOLE, SDDL_HELPER_PIPE_SERVICE};
 use crate::session::{self, Child};
 
 pub struct Platform {
+    /// Who may connect to the helper pipe: the service runs the helper as SYSTEM, `--console` as you.
+    pub helper_pipe_sddl: &'static str,
+    /// `--console` only: the student app may also be named by `EG_ALLOWED_APP`.
+    pub allow_env_app: bool,
     pub active_session: fn() -> Option<u32>,
     pub launch: fn(session: u32, exe: &Path, args: &str) -> Result<Child, String>,
 }
@@ -20,6 +25,8 @@ impl Platform {
     /// The service: the logged-on console session, and a helper with the service's SYSTEM token.
     pub fn service() -> Self {
         Self {
+            helper_pipe_sddl: SDDL_HELPER_PIPE_SERVICE,
+            allow_env_app: false,
             active_session: session::active_user_session,
             launch: session::launch_in_session,
         }
@@ -28,6 +35,8 @@ impl Platform {
     /// `--console`: our own session, and a helper with our own token.
     pub fn console() -> Self {
         Self {
+            helper_pipe_sddl: SDDL_HELPER_PIPE_CONSOLE,
+            allow_env_app: true,
             active_session: session::current_session,
             launch: session::launch_same_user,
         }

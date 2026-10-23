@@ -3,6 +3,8 @@ import { app, ipcMain, shell } from 'electron';
 import type { AgentChangeResult, AgentServiceStatus } from '@examguard/shared';
 import { IPC } from '../../shared/ipc-channels.js';
 import { resolveAgentExe } from './agent-exe.js';
+import type { AgentLink } from './agent-link.js';
+import { isFakeAgent } from './create-agent-link.js';
 import { installAgent, uninstallAgent } from './agent-installer.js';
 import { runCommand } from './run-command.js';
 import { queryAgentService } from './service-state.js';
@@ -10,6 +12,7 @@ import { readReport, spikeDir } from './spike-report.js';
 
 interface Deps {
   userData: string;
+  link: AgentLink;
   requireStudent: () => void;
 }
 
@@ -18,7 +21,11 @@ interface Deps {
  * UAC prompt) from inside the app. `EG_FAKE_AGENT=1` in a dev build skips all of it.
  */
 export function registerAgentIpc(deps: Deps): void {
-  const fake = !app.isPackaged && process.env['EG_FAKE_AGENT'] === '1';
+  const fake = isFakeAgent({
+    isPackaged: app.isPackaged,
+    env: process.env,
+    appVersion: app.getVersion(),
+  });
   const exeEnv = () => ({
     isPackaged: app.isPackaged,
     appPath: app.getAppPath(),
@@ -30,9 +37,11 @@ export function registerAgentIpc(deps: Deps): void {
   const status = async (message?: string): Promise<AgentServiceStatus> => {
     const exeFound = resolveAgentExe(exeEnv()) !== null;
     const canUninstall = !app.isPackaged;
-    if (fake) return { state: 'running', exeFound, fake, canUninstall };
-    const state = await queryAgentService(runCommand);
-    return { state, exeFound, fake, canUninstall, ...(message ? { message } : {}) };
+    const link = deps.link.status();
+    if (fake) return { state: 'running', link, exeFound, fake, canUninstall };
+    // A verified pipe means the service is up; only otherwise is it worth asking the SCM why not.
+    const state = link.verified ? 'running' : await queryAgentService(runCommand);
+    return { state, link, exeFound, fake, canUninstall, ...(message ? { message } : {}) };
   };
   const change = async (error: string | null): Promise<AgentChangeResult> => ({
     ok: error === null,
@@ -51,7 +60,9 @@ export function registerAgentIpc(deps: Deps): void {
     if (!exe) {
       return change('eg-agent.exe was not found. Run "cargo build -p eg-agent --release" first.');
     }
-    return change(await installAgent(exe, installer));
+    return change(
+      await installAgent(exe, installer, app.isPackaged ? undefined : process.execPath),
+    );
   });
   ipcMain.handle(IPC.agentUninstall, async () => {
     deps.requireStudent();

@@ -1,11 +1,14 @@
 import {
+  agentProblem,
   JOIN_CLIENT_ERROR_CODES,
   JoinResponseSchema,
   PROTOCOL_VERSION,
+  type AgentLinkStatus,
   type JoinAttempt,
   type JoinConfirmResult,
   type JoinResult,
 } from '@examguard/shared';
+import { toAgentBlock } from './agent/agent-link.js';
 import type { StoredSession } from './resume/session-store.js';
 import { PinError, pinnedRequest, type PinnedTarget } from './tls-pin.js';
 
@@ -40,11 +43,11 @@ interface Session {
 
 type Failure = Extract<JoinResult, { ok: false }>;
 
-function failure(code: ErrorCode, retryAfterSec?: number): Failure {
+function failure(code: ErrorCode, retryAfterSec?: number, message?: string): Failure {
   return {
     ok: false,
     code,
-    message: MESSAGES[code],
+    message: message ?? MESSAGES[code],
     ...(retryAfterSec ? { retryAfterSec } : {}),
   };
 }
@@ -72,7 +75,11 @@ function transportFailure(e: unknown): Failure {
 export class JoinClient {
   private session: Session | null = null;
 
-  constructor(private readonly deviceId: () => Promise<string>) {}
+  constructor(
+    private readonly deviceId: () => Promise<string>,
+    /** A fresh system check of the monitoring agent; the join is refused unless it is healthy. */
+    private readonly agentCheck: () => Promise<AgentLinkStatus>,
+  ) {}
 
   /** What the live socket needs. Main only: it is never sent to the renderer. */
   credentials(): { target: PinnedTarget; token: string } | null {
@@ -130,6 +137,12 @@ export class JoinClient {
     } catch {
       return failure('bad_response');
     }
+    // Before any byte goes out, so a wrong PIN is not counted against a student who cannot join anyway.
+    const link = await this.agentCheck();
+    const agent = toAgentBlock(link);
+    if (agentProblem(agent) !== null || !agent.ok) {
+      return failure('agent_required', undefined, link.problems[0] ?? MESSAGES.agent_required);
+    }
     try {
       const response = await pinnedRequest(target, {
         method: 'POST',
@@ -139,8 +152,7 @@ export class JoinClient {
           pin: attempt.pin,
           deviceId,
           protocol: PROTOCOL_VERSION,
-          // Stub until the agent exists (M21 enforces it).
-          agent: { ok: true, helper: true, captureOk: true, monitors: 1 },
+          agent,
         },
       });
       if (response.status !== 200) return serverFailure(response.body);

@@ -592,3 +592,29 @@ describe('SessionClient submit', () => {
     await expect(client.submit()).resolves.toEqual({ ok: true });
   });
 });
+
+describe('SessionClient agent status', () => {
+  const GOOD = { ok: true, helper: true, captureOk: true, monitors: 2 };
+  const agentFrames = () =>
+    (frames as { t: string }[]).filter((f) => f.t === 'agent.status') as unknown[];
+
+  it('sends the agent status after the welcome, and again when it changes', async () => {
+    client.setAgentStatus(GOOD);
+    client.start(target(), TOKEN);
+    await until(() => agentFrames().length === 1);
+    expect(agentFrames()[0]).toEqual({ t: 'agent.status', ...GOOD });
+    client.setAgentStatus({ ...GOOD, ok: false, helper: false });
+    await until(() => agentFrames().length === 2);
+    expect(agentFrames()[1]).toMatchObject({ ok: false, helper: false });
+  });
+
+  it('sends nothing before welcome, and the latest status after a reconnect', async () => {
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    client.setAgentStatus({ ...GOOD, captureOk: false });
+    await until(() => agentFrames().length === 1);
+    for (const c of clients) c.terminate();
+    await until(() => agentFrames().length === 2);
+    expect(agentFrames()[1]).toMatchObject({ captureOk: false });
+  });
+});

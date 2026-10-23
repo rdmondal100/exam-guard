@@ -20,6 +20,12 @@ describe('student messages', () => {
     expect(StudentMessageSchema.safeParse({ t: 'ping', clientSent: 5 }).success).toBe(true);
   });
 
+  it('accepts an agent.status frame and rejects one with a missing field', () => {
+    const status = { t: 'agent.status', ok: true, helper: true, captureOk: true, monitors: 2 };
+    expect(StudentMessageSchema.safeParse(status).success).toBe(true);
+    expect(StudentMessageSchema.safeParse({ ...status, monitors: undefined }).success).toBe(false);
+  });
+
   it.each([
     { ...hello, token: 'short' },
     { ...hello, resume: { lastServerSeq: -1 } },

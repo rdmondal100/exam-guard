@@ -11,9 +11,25 @@ mod console;
 #[cfg(windows)]
 mod helper;
 #[cfg(windows)]
+mod helper_client;
+#[cfg(windows)]
+mod helper_link;
+#[cfg(windows)]
 mod install;
 #[cfg(windows)]
+mod link;
+#[cfg(windows)]
 mod log;
+#[cfg(windows)]
+mod pipe_conn;
+#[cfg(windows)]
+mod pipe_frame;
+#[cfg(windows)]
+mod pipe_msg;
+#[cfg(windows)]
+mod pipe_security;
+#[cfg(windows)]
+mod pipe_server;
 #[cfg(windows)]
 mod service;
 #[cfg(windows)]
@@ -22,6 +38,8 @@ mod session;
 mod shots;
 #[cfg(windows)]
 mod supervisor;
+#[cfg(windows)]
+mod system_check;
 #[cfg(windows)]
 mod win;
 #[cfg(windows)]

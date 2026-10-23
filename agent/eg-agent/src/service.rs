@@ -60,7 +60,8 @@ fn run_service() -> windows_service::Result<()> {
     handle.set_service_status(status(ServiceState::Running, accepted, 0))?;
     tracing::info!(version = env!("CARGO_PKG_VERSION"), "service running");
 
-    let outcome = supervisor::run(&stop_rx, &Platform::service());
+    let platform = Platform::service();
+    let outcome = crate::link::run_with_link(&platform, || supervisor::run(&stop_rx, &platform));
     if let Err(error) = &outcome {
         tracing::error!(%error, "supervision ended with an error");
     }

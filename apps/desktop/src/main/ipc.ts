@@ -19,6 +19,9 @@ import { probeHost } from './probe-host.js';
 import { SessionClient } from './session-client.js';
 import { resolveMode, saveStoredMode } from './mode-store.js';
 import { registerAgentIpc } from './agent/agent-ipc.js';
+import { toAgentBlock } from './agent/agent-link.js';
+import { createAgentLink } from './agent/create-agent-link.js';
+import { runCommand } from './agent/run-command.js';
 import { registerExamFilesIpc } from './exam-files/exam-files-ipc.js';
 import { registerFilesIpc } from './files/files-ipc.js';
 import { registerAnswersIpc } from './answers/answers-ipc.js';
@@ -52,7 +55,13 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
   const requireStudent = () => {
     if (state.mode !== 'student') throw new Error('Discovery is for Student mode');
   };
-  registerAgentIpc({ userData: state.userData, requireStudent });
+  const agentLink = createAgentLink(
+    { isPackaged: app.isPackaged, env: process.env, appVersion: app.getVersion() },
+    runCommand,
+  );
+  if (state.mode === 'student') agentLink.start();
+  app.once('will-quit', () => agentLink.stop());
+  registerAgentIpc({ userData: state.userData, link: agentLink, requireStudent });
   ipcMain.handle(IPC.getInfo, () => toInfo(state));
   ipcMain.handle(IPC.getServerConnection, () => server.getConnection());
   ipcMain.handle(IPC.getServerStatus, () => server.getStatus());
@@ -68,8 +77,9 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     return probeHost(ProbeRequestSchema.parse(payload));
   });
 
-  const joinClient = new JoinClient(() =>
-    readDeviceId({ override: process.env.EG_DEVICE_ID, isPackaged: app.isPackaged }),
+  const joinClient = new JoinClient(
+    () => readDeviceId({ override: process.env.EG_DEVICE_ID, isPackaged: app.isPackaged }),
+    () => agentLink.check(),
   );
   ipcMain.handle(IPC.joinExam, (_event, payload: unknown) => {
     requireStudent();
@@ -107,6 +117,9 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
       for (const win of BrowserWindow.getAllWindows()) win.webContents.send(IPC.sessionExam, exam);
     },
   });
+  // The server learns how the agent link looks after each welcome and whenever it changes.
+  session.setAgentStatus(toAgentBlock(agentLink.status()));
+  agentLink.onChange((link) => session.setAgentStatus(toAgentBlock(link)));
   registerAnswersIpc({ session, requireStudent });
   resume.hooks = registerResumeIpc({
     userData: state.userData,
@@ -146,6 +159,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     await saveStoredMode(state.userData, request.mode);
     state.mode = resolveMode(state.installType, request.mode);
     if (state.mode === 'teacher') server.start();
+    if (state.mode === 'student') agentLink.start();
     return toInfo(state);
   });
 }

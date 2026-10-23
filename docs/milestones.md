@@ -186,6 +186,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** `agent/.../pipe.rs` (peer verification), shared pipe schemas, `apps/desktop/main/agent-client.ts` + fake agent (`EG_FAKE_AGENT=1`), system-check screen, `/join` enforcement, `agent.status` WS message.
 - **Accept:** join is refused with the agent stopped (admin-stopped) or the helper missing. A fake client process (e.g. PowerShell pipe client) is rejected.
 - **Manual test:** on the laptop, stop the service as admin → the join screen shows "Monitoring agent not running". Start it → join works.
+- **Built (2026-10-24):** Rust `pipe_frame` / `pipe_msg` / `pipe_conn` / `pipe_security` / `pipe_server` / `system_check` / `helper_link` / `helper_client` / `link`; shared `protocol/agent-pipe.ts`, `agentProblem`, WS `agent.status`; desktop `main/agent/{agent-client,agent-verify,pipe-frames,agent-link,fake-agent,create-agent-link}`; `JoinClient` takes a fresh check; server `JoinService` enforcement and the hub's `agentOk`; the `AgentGate` now blocks only before joining. Manual steps are in progress.md.
 
 ### M21a SPIKE — Internet block with WFP (laptop only)
 - **Goal:** the agent service blocks outbound internet while keeping the teacher PC reachable, and can never leave the PC offline.
