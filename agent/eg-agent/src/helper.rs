@@ -168,6 +168,8 @@ pub fn run() -> Result<(), String> {
     SHOTS.with(|t| t.borrow_mut().ready(Instant::now()));
     take_shot("start");
 
+    crate::helper_client::spawn();
+
     // Out-of-context: the callback runs on this thread inside the message loop below.
     // SAFETY: `on_foreground` has the WINEVENTPROC signature and lives for the whole process.
     let hook = unsafe {

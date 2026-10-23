@@ -6,6 +6,7 @@ $ErrorActionPreference = 'Stop'
 
 $name = 'ExamGuardAgent'
 $dir = Join-Path $env:ProgramFiles 'ExamGuard\agent'
+$regKey = 'HKLM:\SOFTWARE\ExamGuard'
 
 $admin = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
 if (-not $admin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -21,5 +22,6 @@ if (Get-Service $name -ErrorAction SilentlyContinue) {
 }
 Get-Process eg-agent -ErrorAction SilentlyContinue | Stop-Process -Force
 Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path $regKey -Name AppPath -ErrorAction SilentlyContinue
 
 Write-Host "Removed $name"

@@ -92,6 +92,21 @@ describe('JoinService.join', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM exam_students').get()).toEqual({ n: 0 });
   });
 
+  it.each([
+    ['the agent is not ok', { ok: false, helper: true, captureOk: true, monitors: 1 }],
+    ['the helper is missing', { ok: true, helper: false, captureOk: true, monitors: 1 }],
+    ['the screen capture is black', { ok: true, helper: true, captureOk: false, monitors: 1 }],
+    ['no monitor is seen', { ok: true, helper: true, captureOk: true, monitors: 0 }],
+  ])('refuses to join when %s, without creating a row or counting a failed try', (_name, agent) => {
+    for (let i = 0; i < 8; i++) {
+      const e = refusal(() => service.join(request({ agent }), '10.0.0.1'));
+      expect([e.status, e.code]).toEqual([403, 'agent_required']);
+    }
+    expect(db.prepare('SELECT COUNT(*) AS n FROM exam_students').get()).toEqual({ n: 0 });
+    // The limiter was not touched: a healthy agent joins at once from the same address.
+    expect(service.join(request(), '10.0.0.1').name).toBe('Ada');
+  });
+
   it('rejects another protocol major and a host that is not hosting', () => {
     const mismatch = refusal(() =>
       service.join(request({ protocol: { major: 2, minor: 0 } }), '10.0.0.1'),

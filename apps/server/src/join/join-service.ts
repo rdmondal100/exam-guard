@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import {
+  agentProblem,
   isProtocolCompatible,
   type JoinRequest,
   type JoinResponse,
@@ -91,7 +92,9 @@ export class JoinService {
       this.limiter.recordFailure(ip);
       throw new JoinError(403, 'not_on_list', 'That student ID is not on the class list');
     }
-    // Agent status is accepted but not enforced until M21.
+    // The app reports its agent's system check; a student whose monitoring is not healthy cannot join.
+    const agentIssue = agentProblem(request.agent);
+    if (agentIssue) throw new JoinError(403, 'agent_required', agentIssue);
 
     const now = this.now();
     const existing = students.find(exam.id, onList.id);

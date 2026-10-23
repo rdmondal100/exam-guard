@@ -15,7 +15,7 @@ Each shape here has a Zod schema in `packages/shared/src/protocol/` with the sam
 | Method & path | Auth | Body → Response |
 |---|---|---|
 | GET `/info` | none | → `{ examTitle, protocol, state: 'hosting'|'running', fpCode }` (used after manual IP to show the 4-char code) |
-| POST `/join` | none (rate-limited) | `{ studentCode, pin, deviceId, protocol, agent: AgentStatus }` → `{ token, examStudentId, name, examTitle, state }` or error `bad_pin` (401), `not_on_list` (403), `already_active_elsewhere` (409, also writes a critical `duplicate_login` event), `not_hosting` (503), `agent_required`, `protocol_mismatch` (426), `rate_limited` (429, `details.retryAfterSec`), `invalid_body` (400). The row is created at join (state `not_joined`); the same device joining again gets a new token (the old one stops working). `agent` is accepted but not enforced before M21 |
+| POST `/join` | none (rate-limited) | `{ studentCode, pin, deviceId, protocol, agent: AgentStatus }` → `{ token, examStudentId, name, examTitle, state }` or error `bad_pin` (401), `not_on_list` (403), `already_active_elsewhere` (409, also writes a critical `duplicate_login` event), `not_hosting` (503), `agent_required`, `protocol_mismatch` (426), `rate_limited` (429, `details.retryAfterSec`), `invalid_body` (400). The row is created at join (state `not_joined`); the same device joining again gets a new token (the old one stops working). `agent` must be healthy (`agentProblem` in `packages/shared`: helper present, test capture not black, at least one monitor, `ok`) or the join is refused with 403 `agent_required` before the row is created (M21) |
 | POST `/join/confirm` | Bearer token | `{ noticeAccepted: true }` → `{ ok, state }` (`not_joined` → `lobby`, idempotent; 401 `unauthorized` for an unknown token, 400 `invalid_body` if the notice was not accepted) |
 | GET `/answers/latest` (M17) | Bearer token | → `{ buffers: [{questionId, language, content, flags|null, clientSeq}], selected: [{questionId, language, clientSeq}] }`: the newest stored version of each buffer and, per question, the language of the newest version saved with `selected: true`. A restarted student app uses it to refill the editors. It is HTTP and not part of `welcome` because the client caps a WS frame at 512 KB and one buffer can be 128 K characters. 401 `unauthorized` for an unknown token |
 
@@ -52,7 +52,7 @@ type EventReport  = { t:'event'; id:string; dedupeKey:string; clientTs:number; t
                       details:Record<string,unknown>; screenshotRef?:string }   // ref matches a binary kind-2 upload
 type Transcript   = { t:'transcript'; key:string; clientTs:number; text:string }   // terminal output, ≤16 KB per chunk (M15b)
 type Submit       = { t:'submit'; id:string; clientTs:number }
-type AgentStatus  = { t:'agent.status'; ok:boolean; helper:boolean; captureOk:boolean; monitors:number }
+type AgentStatus  = { t:'agent.status'; ok:boolean; helper:boolean; captureOk:boolean; monitors:number }   // M21: sent after every welcome and whenever the app's agent link changes; the server keeps the latest verdict in memory and shows it as the roster's agentOk
 type RtcSignal    = { t:'rtc.signal'; sessionId:string; data:RTCSessionDescriptionInit|RTCIceCandidateInit }
 type Ack          = { t:'ack'; id:string }   // ack of a server command
 
@@ -139,8 +139,8 @@ type AEvidenceAck  = { t:'evidence.ack'; seq:number; upTo:number }   // server h
 type AExamWindow   = { t:'exam.window'; seq:number; hwnd:number; pid:number }  // tells the helper which window is "inside"
 
 // agent → app
-type GHello        = { t:'hello'; seq:number; pipeVersion:1; agentVersion:string; helper:boolean }
-type GSystemCheck  = { t:'system.check.result'; seq:number; ok:boolean; helper:boolean; captureOk:boolean;
+type GHello        = { t:'hello'; seq:number; pipeVersion:1; agentVersion:string; pid:number; helper:boolean }   // pid = the service's process id; the app compares it with the SCM's (architecture §3)
+type GSystemCheck  = { t:'system.check.result'; seq:number; reqSeq:number /* seq of the system.check */; ok:boolean; helper:boolean; captureOk:boolean;
                        monitors:number; problems:string[] }
 type GHeartbeat    = { t:'heartbeat'; seq:number; hbSeq:number; helper:boolean; monitoring:boolean }
 type GEvidence     = { t:'evidence'; seq:number; evidenceSeq:number; ts:number;
@@ -151,6 +151,8 @@ type GEvidence     = { t:'evidence'; seq:number; evidenceSeq:number; ts:number;
                        screenshot?:{ jpegBase64:string; width:number; height:number } }
 type GError        = { t:'error'; seq:number; code:string; message:string }
 ```
+- **M21 behaviour.** The agent sends `hello` as soon as it has verified the peer (architecture §3); the app answers with its own `hello`. Until then the agent accepts nothing: a first message other than `hello` gets `error no_hello`, another `pipeVersion` gets `error pipe_version` and the connection is closed, text that is not a known message gets `error bad_message`. A connected app that sends no `hello` for 5 s is dropped. After `hello` the agent sends `heartbeat` every 2 s (`HEARTBEAT_MS`) and drops the connection when no `heartbeat.ack` came for 6 s (`HEARTBEAT_LOST_MS`); the app treats 6 s without a heartbeat as a lost link, closes the pipe and reconnects. `system.check` asks the helper (below) for a fresh test capture and takes up to about 2.5 s. `monitoring` in `heartbeat` is false until M22. Schemas: `packages/shared/src/protocol/agent-pipe.ts`; the Rust side is `agent/eg-agent/src/pipe_msg.rs`.
+- **Helper pipe `\\.\pipe\examguard-helper`** (internal to `eg-agent`, same framing): the helper connects to the service; the service sends `{t:"check",seq}` and the helper answers `{t:"check.result",seq,captureOk,monitors}` (a small test capture checked for black, and the number of monitors Windows reports).
 - The agent replays all un-acked evidence (in `evidenceSeq` order) after every `hello` while monitoring is active. The app turns each item into an `event` WS message with `dedupeKey = deviceId:evidenceSeq`.
 
 ### Planned additions (2026-10-21; schemas are written in their milestones)

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ProtocolVersionSchema } from './protocol-version.js';
 
-/** What the student's agent reports. Stubbed as `ok: true` until M21 enforces it. */
+/** What the student's agent reports through its system check (M21). */
 export const AgentStatusSchema = z.object({
   ok: z.boolean(),
   helper: z.boolean(),
@@ -9,6 +9,18 @@ export const AgentStatusSchema = z.object({
   monitors: z.number().int().nonnegative(),
 });
 export type AgentStatus = z.infer<typeof AgentStatusSchema>;
+
+/**
+ * Why an agent block is not good enough to join an exam, or null when it is. One rule for the
+ * student app (which refuses locally) and the server (which refuses the request).
+ */
+export function agentProblem(agent: AgentStatus): string | null {
+  if (!agent.helper) return 'The monitoring helper is not running.';
+  if (!agent.captureOk) return 'The monitoring agent cannot capture the screen.';
+  if (agent.monitors < 1) return 'The monitoring agent sees no screen.';
+  if (!agent.ok) return 'The monitoring agent is not healthy.';
+  return null;
+}
 
 /** Student API `POST /join`. */
 export const JoinRequestSchema = z.object({

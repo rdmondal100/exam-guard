@@ -1,4 +1,10 @@
-import type { ServerToStudent, ServerToTeacher } from '@examguard/shared';
+import {
+  agentProblem,
+  type AgentStatus,
+  type RosterEntry,
+  type ServerToStudent,
+  type ServerToTeacher,
+} from '@examguard/shared';
 import type { ExamStudentRepo } from '../db/exam-student-repo.js';
 
 /** A live student socket, as the hub sees it. */
@@ -30,6 +36,9 @@ export class SessionHub {
   private readonly conns = new Map<string, StudentConn>();
   private readonly subs = new Set<TeacherSub>();
   private readonly dirty = new Set<string>();
+  /** Whether each student's monitoring agent was healthy at their last report. Not stored: a
+   * restarted server hears it again from each student's welcome. */
+  private readonly agentOk = new Map<string, boolean>();
   private timer: NodeJS.Timeout | null = null;
   private disposed = false;
   private readonly now: () => number;
@@ -58,6 +67,18 @@ export class SessionHub {
     this.deps.students.setConnected(id, false, this.now());
     this.deps.onConnection?.(id, false);
     this.changed(id);
+  }
+
+  /** What the student's app says about its agent (`agent.status`); the roster shows it. */
+  setAgent(id: string, status: AgentStatus): void {
+    const ok = agentProblem(status) === null;
+    if (this.agentOk.get(id) === ok) return;
+    this.agentOk.set(id, ok);
+    this.changed(id);
+  }
+
+  private withAgent(entry: RosterEntry): RosterEntry {
+    return { ...entry, agentOk: this.agentOk.get(entry.id) ?? true };
   }
 
   isConnected(id: string): boolean {
@@ -90,7 +111,7 @@ export class SessionHub {
   subscribe(sub: TeacherSub): () => void {
     this.subs.add(sub);
     const { students } = this.deps;
-    sub.send({ t: 'roster', students: students.roster(sub.examId) });
+    sub.send({ t: 'roster', students: students.roster(sub.examId).map((e) => this.withAgent(e)) });
     sub.send({ t: 'hosting', ...students.counts(sub.examId) });
     return () => {
       this.subs.delete(sub);
@@ -124,7 +145,7 @@ export class SessionHub {
     for (const [examId, rows] of changed) {
       const targets = [...this.subs].filter((s) => s.examId === examId);
       if (targets.length === 0) continue;
-      const students = rows.flatMap((r) => (r ? [r.entry] : []));
+      const students = rows.flatMap((r) => (r ? [this.withAgent(r.entry)] : []));
       const counts = this.deps.students.counts(examId);
       for (const sub of targets) {
         sub.send({ t: 'roster', students });

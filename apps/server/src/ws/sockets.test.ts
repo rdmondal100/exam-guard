@@ -19,6 +19,7 @@ interface Entry {
   name: string;
   state: string;
   connected: boolean;
+  agentOk?: boolean;
 }
 interface Msg {
   t: string;
@@ -306,6 +307,44 @@ describe('app events', () => {
     c.ws.send(event('ev-2'));
     expect(await c.closed).toBe(4400);
     expect(db.prepare('SELECT COUNT(*) AS n FROM events').get()).toEqual({ n: 0 });
+  });
+});
+
+describe('agent status', () => {
+  const status = (over: object = {}) =>
+    JSON.stringify({
+      t: 'agent.status',
+      ok: true,
+      helper: true,
+      captureOk: true,
+      monitors: 1,
+      ...over,
+    });
+
+  it('turns the roster flag off when the app reports a broken agent, and on again', async () => {
+    const token = await joinStudent('1');
+    const teacher = await teacherWs();
+    const c = await studentWs();
+    c.ws.send(hello(token));
+    await teacher.waitFor(() => entry(teacher, '1')?.connected === true);
+    expect(entry(teacher, '1')?.agentOk).toBe(true);
+
+    c.ws.send(status({ helper: false }));
+    await teacher.waitFor(() => entry(teacher, '1')?.agentOk === false);
+    c.ws.send(status());
+    await teacher.waitFor(() => entry(teacher, '1')?.agentOk === true);
+  });
+
+  it('refuses an agent.status before hello and a malformed one', async () => {
+    const early = await studentWs();
+    early.ws.send(status());
+    expect(await early.closed).toBe(4400);
+    const token = await joinStudent('2');
+    const c = await studentWs();
+    c.ws.send(hello(token));
+    await c.waitFor(() => has(c, 'welcome'));
+    c.ws.send(JSON.stringify({ t: 'agent.status', ok: true }));
+    expect(await c.closed).toBe(4400);
   });
 });
 

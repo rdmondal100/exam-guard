@@ -67,6 +67,35 @@ describe('SessionHub', () => {
     expect(hub.isConnected('a')).toBe(false);
   });
 
+  it('shows what the student app says about its agent in the roster', () => {
+    const { repo } = fakeRepo();
+    const hub = new SessionHub({ students: repo, batchMs: 250 });
+    const sent: ServerToTeacher[] = [];
+    hub.subscribe({ examId: 'e1', send: (m) => sent.push(m) });
+    sent.length = 0;
+    const ok = (s: ServerToTeacher[]) =>
+      s.flatMap((m) => (m.t === 'roster' ? m.students : [])).map((e) => e.agentOk);
+
+    hub.attach('a', conn(), 4409);
+    vi.advanceTimersByTime(250);
+    expect(ok(sent)).toEqual([true]);
+
+    sent.length = 0;
+    hub.setAgent('a', { ok: true, helper: false, captureOk: true, monitors: 1 });
+    vi.advanceTimersByTime(250);
+    expect(ok(sent)).toEqual([false]);
+
+    // The same report again changes nothing, so nothing is pushed.
+    sent.length = 0;
+    hub.setAgent('a', { ok: true, helper: false, captureOk: false, monitors: 1 });
+    vi.advanceTimersByTime(250);
+    expect(sent).toHaveLength(0);
+
+    hub.setAgent('a', { ok: true, helper: true, captureOk: true, monitors: 2 });
+    vi.advanceTimersByTime(250);
+    expect(ok(sent)).toEqual([true]);
+  });
+
   it('only pushes to subscribers of that exam', () => {
     const { repo } = fakeRepo();
     const hub = new SessionHub({ students: repo });

@@ -13,3 +13,4 @@ export * from './submission.js';
 export * from './ws.js';
 export * from './file-name.js';
 export * from './exam-files.js';
+export * from './agent-pipe.js';

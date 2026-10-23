@@ -108,6 +108,10 @@ export function registerStudentSocket(app: FastifyInstance, deps: StudentSocketD
         });
         return send({ t: 'event.ack', id: message.id });
       }
+      if (message.t === 'agent.status') {
+        if (!studentId) return refuse(WS_CLOSE.badHello, 'hello_first', 'Send hello first');
+        return deps.hub.setAgent(studentId, message);
+      }
       if (message.t === 'transcript') {
         if (!studentId) return refuse(WS_CLOSE.badHello, 'hello_first', 'Send hello first');
         // Acked even when dropped over the cap, so the client stops re-sending it.

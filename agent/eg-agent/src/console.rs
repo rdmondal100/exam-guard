@@ -32,8 +32,12 @@ pub fn run() -> Result<(), String> {
         unsafe { SetConsoleCtrlHandler(Some(on_ctrl), 1) },
         "SetConsoleCtrlHandler",
     )?;
-    tracing::info!(version = env!("CARGO_PKG_VERSION"), "console supervisor running");
-    let outcome = supervisor::run(&rx, &Platform::console());
+    tracing::info!(
+        version = env!("CARGO_PKG_VERSION"),
+        "console supervisor running"
+    );
+    let platform = Platform::console();
+    let outcome = crate::link::run_with_link(&platform, || supervisor::run(&rx, &platform));
     tracing::info!("console supervisor stopped");
     outcome
 }

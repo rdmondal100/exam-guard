@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ProtocolVersionSchema } from './protocol-version.js';
-import { StudentStateSchema } from './join.js';
+import { AgentStatusSchema, StudentStateSchema } from './join.js';
 import { ExamStateSchema } from './exams.js';
 import { StudentQuestionSchema } from './questions.js';
 import { TerminalStateSchema } from './actions.js';
@@ -76,6 +76,10 @@ export const TranscriptChunkSchema = z.object({
 });
 export type TranscriptChunk = z.infer<typeof TranscriptChunkSchema>;
 
+/** The student app's view of its agent link, sent after each welcome and whenever it changes (M21). */
+export const AgentStatusMessageSchema = AgentStatusSchema.extend({ t: z.literal('agent.status') });
+export type AgentStatusMessage = z.infer<typeof AgentStatusMessageSchema>;
+
 export const StudentMessageSchema = z.discriminatedUnion('t', [
   HelloSchema,
   PingSchema,
@@ -83,6 +87,7 @@ export const StudentMessageSchema = z.discriminatedUnion('t', [
   TranscriptChunkSchema,
   AnswerSaveSchema,
   SubmitSchema,
+  AgentStatusMessageSchema,
 ]);
 export type StudentMessage = z.infer<typeof StudentMessageSchema>;
 

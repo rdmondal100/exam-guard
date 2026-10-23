@@ -240,6 +240,6 @@ const toEntry = (row: RosterRow): RosterEntry => ({
   riskScore: row.risk_score,
   outsideMs: row.outside_ms_total,
   lastSeen: row.last_seen_at,
-  // The agent is stubbed until M21.
+  // The hub replaces this with what the student's app last reported (`agent.status`, M21).
   agentOk: true,
 });
