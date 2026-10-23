@@ -3,6 +3,7 @@ import type { QuestionLanguage, RunResult } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
 import { useAnswerStore } from '@/lib/answerStore';
 import { runKey, useRunStore } from '@/lib/runStore';
+import { saveNow } from '@/lib/useAutosave';
 import { errorsText, statusLine, tabAfterRun, type RunTab } from '@/lib/runStatus';
 import { RunFlagsInput } from './RunFlagsInput';
 
@@ -59,6 +60,7 @@ export function RunPanel({ questionId, language, code }: Props) {
   const busyHere = running === key;
 
   const run = async () => {
+    saveNow('run');
     start(key);
     let r: RunResult;
     try {

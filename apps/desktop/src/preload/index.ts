@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { z } from 'zod';
 import {
+  AnswerSaveRequestSchema,
+  AnswerStatusSchema,
   AppInfoSchema,
   DiscoveredHostSchema,
   ExamFilesStatusSchema,
@@ -93,6 +95,17 @@ const api: ExamGuardApi = {
     };
     ipcRenderer.on(IPC.sessionExam, handler);
     return () => ipcRenderer.removeListener(IPC.sessionExam, handler);
+  },
+  saveAnswer: async (request) => {
+    await ipcRenderer.invoke(IPC.answerSave, AnswerSaveRequestSchema.parse(request));
+  },
+  onAnswerStatus: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown) => {
+      const parsed = AnswerStatusSchema.safeParse(payload);
+      if (parsed.success) listener(parsed.data);
+    };
+    ipcRenderer.on(IPC.answerStatus, handler);
+    return () => ipcRenderer.removeListener(IPC.answerStatus, handler);
   },
   runCode: async (request) =>
     RunResultSchema.parse(await ipcRenderer.invoke(IPC.runCode, RunRequestSchema.parse(request))),

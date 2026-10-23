@@ -16,6 +16,7 @@ let frames: unknown[];
 let skew: number;
 let welcomeWith: 'welcome' | { closeCode: number };
 let ackEvents: boolean;
+let welcomeSaved: unknown[];
 
 beforeAll(async () => {
   const pems = await generate([{ name: 'commonName', value: 'ExamGuard' }], {
@@ -34,13 +35,24 @@ beforeAll(async () => {
         clientSent?: number;
         id?: string;
         key?: string;
+        clientSeq?: number;
       };
       frames.push(message);
       if (message.t === 'hello') {
         if (welcomeWith !== 'welcome') return socket.close(welcomeWith.closeCode, 'no');
-        socket.send(JSON.stringify({ t: 'welcome', serverTime: Date.now() + skew, state: STATE }));
+        socket.send(
+          JSON.stringify({
+            t: 'welcome',
+            serverTime: Date.now() + skew,
+            state: { ...STATE, saved: welcomeSaved },
+          }),
+        );
       } else if (message.t === 'event' && ackEvents) {
         socket.send(JSON.stringify({ t: 'event.ack', id: message.id }));
+      } else if (message.t === 'answer.save' && ackEvents) {
+        socket.send(
+          JSON.stringify({ t: 'answer.ack', id: message.id, clientSeq: message.clientSeq }),
+        );
       } else if (message.t === 'transcript' && ackEvents) {
         socket.send(JSON.stringify({ t: 'transcript.ack', key: message.key }));
       } else if (message.t === 'ping') {
@@ -84,6 +96,7 @@ beforeEach(() => {
   skew = 0;
   welcomeWith = 'welcome';
   ackEvents = true;
+  welcomeSaved = [];
   statuses = [];
   client = new SessionClient({
     onStatus: (s) => statuses.push(s),
@@ -263,5 +276,82 @@ describe('SessionClient transcript', () => {
     for (const c of clients) c.terminate();
     await until(() => chunks().length === 3);
     expect(chunks()[2]).toMatchObject({ key: 's:2', text: 'file.txt' });
+  });
+});
+
+describe('SessionClient answers', () => {
+  interface Saved {
+    t: string;
+    id: string;
+    clientSeq: number;
+    clientTs: number;
+    questionId: string;
+    language: string;
+    content: string;
+  }
+  const saves = () => (frames as Saved[]).filter((f) => f.t === 'answer.save');
+  const request = (content: string) => ({
+    questionId: 'q1',
+    language: 'c',
+    content,
+    selected: true,
+    reason: 'interval' as const,
+  });
+
+  it('numbers saves from 1, stamps them in server time and reports the pending count', async () => {
+    const pending: number[] = [];
+    client = new SessionClient({
+      onStatus: (s) => statuses.push(s),
+      onAnswers: (s) => pending.push(s.pending),
+      pingMs: 50,
+      random: () => 0,
+    });
+    skew = 5_000;
+    client.start(target(), TOKEN);
+    await until(() => client.clockOffsetMs !== null);
+    client.sendAnswer(request('a'));
+    client.sendAnswer(request('ab'));
+    await until(() => saves().length === 2);
+    expect(saves().map((s) => s.clientSeq)).toEqual([1, 2]);
+    const stamp = saves()[0]?.clientTs ?? 0;
+    expect(Math.abs(stamp - (Date.now() + 5_000))).toBeLessThan(1_000);
+    await until(() => pending.at(-1) === 0);
+    expect(pending[0]).toBe(1);
+    expect(client.answerStatus.lastAckAt).not.toBeNull();
+  });
+
+  it('holds a save until welcome, then sends it', async () => {
+    client.sendAnswer(request('early'));
+    expect(saves()).toHaveLength(0);
+    client.start(target(), TOKEN);
+    await until(() => saves().length === 1);
+    expect(saves()[0]).toMatchObject({ clientSeq: 1, content: 'early' });
+  });
+
+  it('re-sends an unacked save with the same number after a reconnect, and not an acked one', async () => {
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    client.sendAnswer(request('one'));
+    await until(() => saves().length === 1);
+    await until(() => client.answerStatus.pending === 0);
+    ackEvents = false;
+    client.sendAnswer(request('two'));
+    await until(() => saves().length === 2);
+    for (const c of clients) c.terminate();
+    await until(() => saves().length === 3);
+    expect(saves()[2]).toMatchObject({ clientSeq: 2, content: 'two' });
+    expect(saves()[2]?.id).toBe(saves()[1]?.id);
+  });
+
+  it('continues after the newest number the server already holds', async () => {
+    welcomeSaved = [
+      { questionId: 'q1', language: 'c', clientSeq: 7, selected: true },
+      { questionId: 'q2', language: 'text', clientSeq: 4, selected: true },
+    ];
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    client.sendAnswer(request('after restart'));
+    await until(() => saves().length === 1);
+    expect(saves()[0]?.clientSeq).toBe(8);
   });
 });

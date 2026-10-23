@@ -14,6 +14,8 @@ export const IPC = {
   startSession: 'session:start',
   sessionStatus: 'session:status',
   sessionExam: 'session:exam',
+  answerSave: 'answers:save',
+  answerStatus: 'answers:status',
   runCode: 'runner:run',
   stopRun: 'runner:stop',
   runInput: 'runner:input',

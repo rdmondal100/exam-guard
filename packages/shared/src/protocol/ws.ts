@@ -5,6 +5,7 @@ import { ExamStateSchema } from './exams.js';
 import { StudentQuestionSchema } from './questions.js';
 import { TerminalStateSchema } from './actions.js';
 import { ExamFilesSchema } from './exam-files.js';
+import { AnswerAckSchema, AnswerSaveSchema, SavedAnswerSchema } from './answers.js';
 
 /** Idle limit on a student socket and the client's ping period (docs/protocol.md §3). */
 export const STUDENT_IDLE_MS = 15_000;
@@ -74,6 +75,7 @@ export const StudentMessageSchema = z.discriminatedUnion('t', [
   PingSchema,
   EventReportSchema,
   TranscriptChunkSchema,
+  AnswerSaveSchema,
 ]);
 export type StudentMessage = z.infer<typeof StudentMessageSchema>;
 
@@ -85,14 +87,8 @@ export const SessionStateSchema = z.object({
   deadline: z.number().nullable(),
   /** Sent once the exam is running. */
   questions: z.array(StudentQuestionSchema).optional(),
-  saved: z.array(
-    z.object({
-      questionId: z.string(),
-      language: z.string(),
-      clientSeq: z.number().int(),
-      selected: z.boolean(),
-    }),
-  ),
+  /** The newest stored version of each buffer; the client continues its `clientSeq` after these. */
+  saved: z.array(SavedAnswerSchema),
   locked: z.boolean(),
   monitoring: z.boolean(),
   /** The teacher's exam terminal switch (server-authoritative). */
@@ -146,6 +142,7 @@ export const ServerToStudentSchema = z.discriminatedUnion('t', [
   PongSchema,
   EventAckSchema,
   TranscriptAckSchema,
+  AnswerAckSchema,
   WsErrorSchema,
 ]);
 export type ServerToStudent = z.infer<typeof ServerToStudentSchema>;

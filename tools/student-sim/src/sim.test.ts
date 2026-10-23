@@ -17,6 +17,7 @@ describe('parseArgs', () => {
       students: 10,
       csv: undefined,
       rampMs: 20,
+      autosaveMs: 0,
     });
   });
 
@@ -33,8 +34,16 @@ describe('parseArgs', () => {
       'a.csv',
       '--ramp-ms',
       '0',
+      '--autosave-ms',
+      '10000',
     ]);
-    expect(options).toMatchObject({ port: 5000, students: 200, csv: 'a.csv', rampMs: 0 });
+    expect(options).toMatchObject({
+      port: 5000,
+      students: 200,
+      csv: 'a.csv',
+      rampMs: 0,
+      autosaveMs: 10_000,
+    });
   });
 
   it.each([
@@ -44,6 +53,8 @@ describe('parseArgs', () => {
     [[...base, '--students', '0'], '--students'],
     [[...base, '--students', '5000'], '--students'],
     [[...base, '--students'], 'needs a value'],
+    [[...base, '--autosave-ms', '5'], '--autosave-ms'],
+    [[...base, '--autosave-ms', 'x'], '--autosave-ms'],
     [[...base, '--nope', '1'], 'Unknown flag'],
     [['--host', 'a:b:c', '--pin', '123456'], 'not a valid host'],
     [['--host', 'a:99999', '--pin', '123456'], 'not a valid host'],
@@ -72,6 +83,9 @@ describe('runSim against a fake teacher', () => {
   let wss: WebSocketServer;
   let port: number;
   let hellos = 0;
+  /** The clientSeq of every save the fake teacher received. */
+  const seqs: number[] = [];
+  let withQuestions = false;
 
   beforeAll(async () => {
     const pems = await generate([{ name: 'commonName', value: 'ExamGuard' }], {
@@ -98,10 +112,22 @@ describe('runSim against a fake teacher', () => {
     wss = new WebSocketServer({ server: https, path: '/ws' });
     wss.on('connection', (socket) => {
       socket.on('message', (data) => {
-        const message = JSON.parse(data.toString()) as { t: string };
+        const message = JSON.parse(data.toString()) as {
+          t: string;
+          id?: string;
+          clientSeq?: number;
+        };
         if (message.t === 'hello') {
           hellos += 1;
-          socket.send(JSON.stringify({ t: 'welcome', serverTime: Date.now(), state: {} }));
+          const state = withQuestions
+            ? { questions: [{ id: 'q1', type: 'code', allowedLanguages: ['c'] }], saved: [] }
+            : {};
+          socket.send(JSON.stringify({ t: 'welcome', serverTime: Date.now(), state }));
+        } else if (message.t === 'answer.save') {
+          seqs.push(message.clientSeq ?? -1);
+          socket.send(
+            JSON.stringify({ t: 'answer.ack', id: message.id, clientSeq: message.clientSeq }),
+          );
         }
       });
     });
@@ -141,5 +167,27 @@ describe('runSim against a fake teacher', () => {
     run.stop();
     await drained(0);
     expect(wss.clients.size).toBe(0);
+  });
+
+  it('saves answers once the exam has questions, and counts the acks', async () => {
+    withQuestions = true;
+    seqs.length = 0;
+    const run = runSim(
+      { host: '127.0.0.1', port, pin: '123456', rampMs: 0, autosaveMs: 100 },
+      ['a', 'b', 'c'],
+      100,
+    );
+    await run.settled();
+    const end = Date.now() + 3000;
+    while (run.saves().acked < 12 && Date.now() < end) await new Promise((r) => setTimeout(r, 20));
+    const saves = run.saves();
+    expect(saves.acked).toBeGreaterThanOrEqual(12);
+    expect(saves.sent).toBeGreaterThanOrEqual(saves.acked);
+    expect(saves.sent - saves.acked).toBeLessThanOrEqual(3);
+    // Each student counts 1, 2, 3...; three students, so every number repeats up to three times.
+    expect(Math.min(...seqs)).toBe(1);
+    run.stop();
+    await drained(0);
+    withQuestions = false;
   });
 });

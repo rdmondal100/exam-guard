@@ -1,4 +1,6 @@
 import type {
+  AnswerSaveRequest,
+  AnswerStatus,
   AppInfo,
   AppMode,
   DiscoveredHost,
@@ -54,6 +56,10 @@ export interface ExamGuardApi {
   onSessionStatus(listener: (status: SessionStatus) => void): () => void;
   /** Exam state (state, deadline, questions) after each welcome and push. Returns an unsubscribe. */
   onSessionExam(listener: (state: SessionState) => void): () => void;
+  /** Student mode: autosave one answer buffer. Main numbers it and re-sends it until the server acks. */
+  saveAnswer(request: AnswerSaveRequest): Promise<void>;
+  /** How many saves wait for the server. Returns an unsubscribe function. */
+  onAnswerStatus(listener: (status: AnswerStatus) => void): () => void;
   /** Student mode: compile and run code on this PC (one at a time). Resolves when it ends. */
   runCode(request: RunRequestInput): Promise<RunResult>;
   /** Stops the current run, if any. */

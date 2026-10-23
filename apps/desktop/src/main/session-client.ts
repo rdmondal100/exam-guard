@@ -5,6 +5,8 @@ import {
   STUDENT_PING_MS,
   ServerToStudentSchema,
   WS_CLOSE,
+  type AnswerSaveRequest,
+  type AnswerStatus,
   type AppEventType,
   type EventReport,
   type SessionState,
@@ -16,6 +18,7 @@ import {
 export const MAX_PENDING_EVENTS = 500;
 /** Unacked transcript chunks kept in memory (16 KB each at most). */
 export const MAX_PENDING_TRANSCRIPT = 128;
+import { AnswerOutbox } from './answers/answer-outbox.js';
 import { PinError, connectPinned, type PinnedTarget } from './tls-pin.js';
 
 /** 0.5 s → 5 s doubling, with jitter so 200 students do not reconnect in step. */
@@ -26,6 +29,8 @@ export function reconnectDelay(attempt: number, random: () => number = Math.rand
 
 export interface SessionClientDeps {
   onStatus: (status: SessionStatus) => void;
+  /** How many autosaves wait for the server: after each save and each ack. */
+  onAnswers?: (status: AnswerStatus) => void;
   /** The latest exam state: on every welcome and after each `state` push. */
   onExam?: (state: SessionState) => void;
   pingMs?: number;
@@ -60,7 +65,22 @@ export class SessionClient {
   /** Sent transcript chunks waiting for `transcript.ack`, in send order. */
   private readonly pendingTranscript = new Map<string, TranscriptChunk>();
 
-  constructor(private readonly deps: SessionClientDeps) {}
+  /** Autosaves waiting for `answer.ack`, and the counter that numbers them. */
+  private readonly answers: AnswerOutbox;
+
+  constructor(private readonly deps: SessionClientDeps) {
+    this.answers = new AnswerOutbox((status) => deps.onAnswers?.(status));
+  }
+
+  /** Saves one answer buffer. It is re-sent after every reconnect until the server acks it. */
+  sendAnswer(request: AnswerSaveRequest): void {
+    const save = this.answers.add(request, Date.now() + (this.offsetMs ?? 0));
+    if (this.welcomed) this.sendFrame(this.welcomed, save);
+  }
+
+  get answerStatus(): AnswerStatus {
+    return this.answers.status();
+  }
 
   /** The latest exam state, or `null` before the first welcome. */
   get examState(): SessionState | null {
@@ -196,10 +216,14 @@ export class SessionClient {
       this.pingTimer = setInterval(() => this.ping(ws), this.deps.pingMs ?? STUDENT_PING_MS);
       this.ping(ws);
       this.welcomed = ws;
+      this.answers.continueAfter(message.state.saved);
+      for (const save of this.answers.unacked()) this.sendFrame(ws, save);
       for (const event of this.pending.values()) this.sendFrame(ws, event);
       for (const chunk of this.pendingTranscript.values()) this.sendFrame(ws, chunk);
     } else if (message.t === 'event.ack') {
       this.pending.delete(message.id);
+    } else if (message.t === 'answer.ack') {
+      this.answers.ack(message.clientSeq, Date.now());
     } else if (message.t === 'transcript.ack') {
       this.pendingTranscript.delete(message.key);
     } else if (message.t === 'state') {

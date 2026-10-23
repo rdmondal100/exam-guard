@@ -1,8 +1,7 @@
 import { create } from 'zustand';
-import type { QuestionLanguage } from '@examguard/shared';
+import { ANSWER_TEXT_KEY, type QuestionLanguage } from '@examguard/shared';
 
-/** Buffer key for written answers; code answers use the language id. */
-export const ANSWER_TEXT_KEY = 'text';
+export { ANSWER_TEXT_KEY };
 
 type Buffers = Record<string, string>;
 
