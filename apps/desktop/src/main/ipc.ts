@@ -18,6 +18,7 @@ import { JoinClient } from './join-client.js';
 import { probeHost } from './probe-host.js';
 import { SessionClient } from './session-client.js';
 import { resolveMode, saveStoredMode } from './mode-store.js';
+import { registerAgentIpc } from './agent/agent-ipc.js';
 import { registerExamFilesIpc } from './exam-files/exam-files-ipc.js';
 import { registerFilesIpc } from './files/files-ipc.js';
 import { registerAnswersIpc } from './answers/answers-ipc.js';
@@ -51,6 +52,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
   const requireStudent = () => {
     if (state.mode !== 'student') throw new Error('Discovery is for Student mode');
   };
+  registerAgentIpc({ userData: state.userData, requireStudent });
   ipcMain.handle(IPC.getInfo, () => toInfo(state));
   ipcMain.handle(IPC.getServerConnection, () => server.getConnection());
   ipcMain.handle(IPC.getServerStatus, () => server.getStatus());

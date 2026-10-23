@@ -9,6 +9,7 @@
     "dev": "pnpm build:server && electron-vite dev",
     "dev:teacher": "pnpm build:server && electron-vite dev -- --profile teacher",
     "dev:student": "pnpm build:server && cross-env EG_FAKE_AGENT=1 electron-vite dev -- --profile student",
+    "dev:student:agent": "cargo build -p eg-agent --release && pnpm build:server && electron-vite dev -- --profile student",
     "build": "electron-vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"

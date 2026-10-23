@@ -11,7 +11,7 @@ const buttonVariants = cva(
         default: 'bg-primary text-primary-foreground hover:bg-primary/90',
         outline: 'border border-border bg-card hover:bg-background',
       },
-      size: { default: 'h-10 px-4 py-2', lg: 'h-11 px-8' },
+      size: { default: 'h-10 px-4 py-2', sm: 'h-8 px-3', lg: 'h-11 px-8' },
     },
     defaultVariants: { variant: 'default', size: 'default' },
   },
