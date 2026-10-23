@@ -14,6 +14,7 @@ export interface ExamFormValues {
   durationMin: number;
   classListId: string | null;
   monitoring: MonitoringSettings;
+  filesEnabled: boolean;
 }
 
 interface Props {
@@ -32,6 +33,7 @@ export function ExamSettingsForm({ exam, classLists, onSubmit, onCancel }: Props
   const [durationMin, setDurationMin] = useState(String(exam?.durationMin ?? 90));
   const [classListId, setClassListId] = useState(exam?.classListId ?? '');
   const [monitoring, setMonitoring] = useState(exam?.monitoring ?? DEFAULT_MONITORING);
+  const [filesEnabled, setFilesEnabled] = useState(exam?.filesEnabled ?? true);
   const [apps, setApps] = useState(monitoring.highSeverityApps.join(', '));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -49,6 +51,7 @@ export function ExamSettingsForm({ exam, classLists, onSubmit, onCancel }: Props
         title: title.trim(),
         durationMin: minutes,
         classListId: classListId === '' ? null : classListId,
+        filesEnabled,
         monitoring: {
           ...monitoring,
           highSeverityApps: apps
@@ -101,6 +104,22 @@ export function ExamSettingsForm({ exam, classLists, onSubmit, onCancel }: Props
           ))}
         </select>
       </label>
+
+      <fieldset className="flex flex-col gap-2 rounded-md border border-border p-4">
+        <legend className="px-1 text-sm font-medium">Students' tools</legend>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={filesEnabled}
+            onChange={(e) => setFilesEnabled(e.target.checked)}
+          />
+          Files panel (students can create, read and write files in their project folder)
+        </label>
+        <p className="text-xs text-muted">
+          Files stay on the student's PC and are not submitted. The exam terminal is switched on and
+          off while the exam runs.
+        </p>
+      </fieldset>
 
       <fieldset className="flex flex-col gap-3 rounded-md border border-border p-4">
         <legend className="px-1 text-sm font-medium">Monitoring</legend>

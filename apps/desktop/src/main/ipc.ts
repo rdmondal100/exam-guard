@@ -17,6 +17,8 @@ import { JoinClient } from './join-client.js';
 import { probeHost } from './probe-host.js';
 import { SessionClient } from './session-client.js';
 import { resolveMode, saveStoredMode } from './mode-store.js';
+import { registerExamFilesIpc } from './exam-files/exam-files-ipc.js';
+import { registerFilesIpc } from './files/files-ipc.js';
 import { registerRunnerIpc } from './runner/runner-ipc.js';
 import type { ServerHost } from './server-host.js';
 import { registerTerminalIpc } from './terminal/terminal-ipc.js';
@@ -72,6 +74,11 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     return joinClient.confirm();
   });
 
+  const onExamFiles = registerExamFilesIpc({
+    examStudentId: () => joinClient.examStudentId(),
+    credentials: () => joinClient.credentials(),
+    requireStudent,
+  });
   let onTerminalExam: (exam: SessionState) => void = () => {};
   const session = new SessionClient({
     onStatus: (status) => {
@@ -81,10 +88,16 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     onExam: (exam) => {
       examLock.setActive(exam.examState === 'running');
       onTerminalExam(exam);
+      onExamFiles(exam);
       for (const win of BrowserWindow.getAllWindows()) win.webContents.send(IPC.sessionExam, exam);
     },
   });
   registerRunnerIpc({
+    session,
+    examStudentId: () => joinClient.examStudentId(),
+    requireStudent,
+  });
+  registerFilesIpc({
     session,
     examStudentId: () => joinClient.examStudentId(),
     requireStudent,

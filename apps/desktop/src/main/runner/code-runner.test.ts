@@ -139,7 +139,8 @@ describe('CodeRunner', () => {
       '8',
     ]);
     expect(run?.args.at(-1)).toBe(join(dir, 'main.exe'));
-    expect(run?.cwd).toBe(dir);
+    // The program runs in the workspace; the build folder only holds source and output.
+    expect(run?.cwd).toBe(join(root, 'workspace'));
     expect(run?.env.PATH?.split(';')).toContain('C:\\mingw\\bin');
     expect(ran).toHaveLength(1);
   });
@@ -156,8 +157,8 @@ describe('CodeRunner', () => {
     expect(opened[0]?.[0].args.slice(-4)).toEqual([
       'electron.exe',
       '-r',
-      './eg-stdin.cjs',
-      'main.js',
+      join(root, 'q-1', 'js', 'eg-stdin.cjs'),
+      join(root, 'q-1', 'js', 'main.js'),
     ]);
     expect(opened[0]?.[0].env.ELECTRON_RUN_AS_NODE).toBe('1');
   });
@@ -166,12 +167,18 @@ describe('CodeRunner', () => {
     const r = await runner().run(req({ language: 'py' }));
     expect(r.status).toBe('ok');
     expect(spawned).toHaveLength(0);
-    expect(opened[0]?.[0].args.slice(-2)).toEqual(['python.exe', 'main.py']);
+    expect(opened[0]?.[0].args.slice(-2)).toEqual([
+      'python.exe',
+      join(root, 'q-1', 'py', 'main.py'),
+    ]);
     const env = opened[0]?.[0].env;
     expect(env?.PYTHONUTF8).toBe('1');
     // NumPy would otherwise reserve a buffer per core and hit the memory limit on import.
     expect(env?.OPENBLAS_NUM_THREADS).toBe('1');
-    expect(env?.PYTHONPATH).toBe(join(root, 'workspace', 'site-packages'));
+    expect(env?.PYTHONPATH).toBe(
+      [join(root, 'workspace', 'site-packages'), join(root, 'workspace')].join(';'),
+    );
+    expect(opened[0]?.[0].cwd).toBe(join(root, 'workspace'));
     expect(env?.ELECTRON_RUN_AS_NODE).toBeUndefined();
   });
 

@@ -9,3 +9,5 @@ export * from './discovery.js';
 export * from './join.js';
 export * from './actions.js';
 export * from './ws.js';
+export * from './file-name.js';
+export * from './exam-files.js';

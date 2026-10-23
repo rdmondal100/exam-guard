@@ -33,6 +33,7 @@ export function SessionScreen({ name, examTitle }: Props) {
         questions={exam.questions}
         deadline={exam.deadline}
         terminalOn={exam.terminal.enabled}
+        filesOn={exam.filesEnabled}
         status={status}
       />
     );

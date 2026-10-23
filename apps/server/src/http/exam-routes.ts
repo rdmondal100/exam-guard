@@ -2,6 +2,7 @@ import type { FastifyInstance, preHandlerAsyncHookHandler } from 'fastify';
 import { ExamCreateBodySchema, ExamUpdateBodySchema } from '@examguard/shared';
 import type { ExamRepo } from '../db/exam-repo.js';
 import type { QuestionRepo } from '../db/question-repo.js';
+import type { ExamFileService } from '../exam-files/exam-file-service.js';
 import { canTransition, isEditable } from '../exams/exam-state.js';
 import { readyProblems } from '../exams/ready-check.js';
 import { sendError } from './errors.js';
@@ -9,6 +10,8 @@ import { sendError } from './errors.js';
 export interface ExamRoutesDeps {
   exams: ExamRepo;
   questions: QuestionRepo;
+  /** The teacher's attached files; a copy and a delete carry them along. */
+  examFiles?: ExamFileService;
   requireLogin: preHandlerAsyncHookHandler;
   now?: () => number;
 }
@@ -16,7 +19,7 @@ export interface ExamRoutesDeps {
 /** `/exams*`: list, create, edit settings, duplicate, delete and ready/unready. Hosting and more come later. */
 export function registerExamRoutes(
   app: FastifyInstance,
-  { exams, questions, requireLogin, now = Date.now }: ExamRoutesDeps,
+  { exams, questions, examFiles, requireLogin, now = Date.now }: ExamRoutesDeps,
 ): void {
   const guarded = { preHandler: requireLogin };
 
@@ -57,6 +60,7 @@ export function registerExamRoutes(
     async (request, reply) => {
       const copy = exams.duplicate(request.params.id, now());
       if (!copy) return sendError(reply, 404, 'not_found', 'Exam not found');
+      await examFiles?.copyExam(request.params.id, copy.id, now());
       return reply.code(201).send(copy);
     },
   );
@@ -110,6 +114,7 @@ export function registerExamRoutes(
       return sendError(reply, 409, 'invalid_state', `A ${current.state} exam cannot be deleted`);
     }
     exams.delete(current.id);
+    await examFiles?.removeExam(current.id);
     return { ok: true };
   });
 }

@@ -129,6 +129,10 @@ export class CodeRunner {
     const dir = join(root, safe(request.questionId), lang.id);
     await rm(dir, { recursive: true, force: true });
     await mkdir(dir, { recursive: true });
+    // The program runs in the workspace (cwd), where the terminal works and where the student's
+    // own files live; the wiped `dir` keeps only the source, the build output and helper files.
+    const paths = terminalPaths(root);
+    await mkdir(paths.workspace, { recursive: true });
     await writeFile(join(dir, lang.fileName), request.code, 'utf8');
     for (const [name, text] of Object.entries(lang.files ?? {})) {
       await writeFile(join(dir, name), text, 'utf8');
@@ -139,7 +143,7 @@ export class CodeRunner {
     const env = {
       ...terminalEnv({
         base: this.deps.baseEnv ?? process.env,
-        paths: terminalPaths(root),
+        paths,
         mingwBin: tools.mingwBin,
       }),
       ...lang.env,
@@ -173,7 +177,7 @@ export class CodeRunner {
             argv,
             true,
           ),
-          cwd: dir,
+          cwd: paths.workspace,
           env,
           outputCap: RUN_LIMITS.outputBytes,
           reportPath,

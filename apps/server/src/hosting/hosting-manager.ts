@@ -9,6 +9,7 @@ import {
 } from '@examguard/shared';
 import { computeDeadline } from '../exams/deadline.js';
 import type { EventRepo } from '../db/event-repo.js';
+import type { ExamFileService } from '../exam-files/exam-file-service.js';
 import type { ExamRepo } from '../db/exam-repo.js';
 import type { ExamStudentRepo } from '../db/exam-student-repo.js';
 import type { QuestionRepo } from '../db/question-repo.js';
@@ -37,6 +38,8 @@ export interface HostingManagerDeps {
   terminals: TerminalRepo;
   terminalLogs: TerminalLogRepo;
   actions: TeacherActionRepo;
+  /** The teacher's exam files: the manifest in the session state and the download route. */
+  examFiles: ExamFileService;
   /** Live student sockets and teacher subscribers. */
   hub: SessionHub;
   dataDir: string;
@@ -180,6 +183,8 @@ export class HostingManager {
       locked: state === 'locked',
       monitoring: false,
       terminal: this.terminal.state(student.examId),
+      filesEnabled: exam?.filesEnabled ?? true,
+      examFiles: exam?.filesEnabled ? this.deps.examFiles.list(student.examId) : [],
     };
   }
 
@@ -263,6 +268,7 @@ export class HostingManager {
     const app = buildStudentApp({
       cert,
       join,
+      files: { exams: this.deps.exams, students: this.deps.students, files: this.deps.examFiles },
       current: () => {
         const exam = this.deps.exams.get(examId);
         if (!exam) return null;

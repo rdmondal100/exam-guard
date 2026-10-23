@@ -1,7 +1,17 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+import { z } from 'zod';
 import {
   AppInfoSchema,
   DiscoveredHostSchema,
+  ExamFilesStatusSchema,
+  FileCreateRequestSchema,
+  FilePathSchema,
+  FileReadResultSchema,
+  FileRenameRequestSchema,
+  FileWriteRequestSchema,
+  FilesListRequestSchema,
+  FilesListSchema,
+  filesResultSchema,
   JoinAttemptSchema,
   JoinConfirmResultSchema,
   JoinResultSchema,
@@ -98,6 +108,43 @@ const api: ExamGuardApi = {
     };
     ipcRenderer.on(IPC.runData, handler);
     return () => ipcRenderer.removeListener(IPC.runData, handler);
+  },
+  filesList: async (request) =>
+    filesResultSchema(FilesListSchema).parse(
+      await ipcRenderer.invoke(IPC.filesList, FilesListRequestSchema.parse(request)),
+    ),
+  filesRead: async (path) =>
+    filesResultSchema(FileReadResultSchema).parse(
+      await ipcRenderer.invoke(IPC.filesRead, FilePathSchema.parse(path)),
+    ),
+  filesWrite: async (request) =>
+    filesResultSchema(z.null()).parse(
+      await ipcRenderer.invoke(IPC.filesWrite, FileWriteRequestSchema.parse(request)),
+    ),
+  filesCreate: async (request) =>
+    filesResultSchema(z.null()).parse(
+      await ipcRenderer.invoke(IPC.filesCreate, FileCreateRequestSchema.parse(request)),
+    ),
+  filesRename: async (request) =>
+    filesResultSchema(z.null()).parse(
+      await ipcRenderer.invoke(IPC.filesRename, FileRenameRequestSchema.parse(request)),
+    ),
+  filesRemove: async (path) =>
+    filesResultSchema(z.null()).parse(
+      await ipcRenderer.invoke(IPC.filesRemove, FilePathSchema.min(1).parse(path)),
+    ),
+  examFilesStatus: async () =>
+    ExamFilesStatusSchema.parse(await ipcRenderer.invoke(IPC.examFilesStatus)),
+  retryExamFiles: async () => {
+    await ipcRenderer.invoke(IPC.examFilesRetry);
+  },
+  onExamFilesStatus: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown) => {
+      const parsed = ExamFilesStatusSchema.safeParse(payload);
+      if (parsed.success) listener(parsed.data);
+    };
+    ipcRenderer.on(IPC.examFilesChanged, handler);
+    return () => ipcRenderer.removeListener(IPC.examFilesChanged, handler);
   },
   terminalStatus: async () =>
     TerminalStatusSchema.parse(await ipcRenderer.invoke(IPC.terminalStatus)),

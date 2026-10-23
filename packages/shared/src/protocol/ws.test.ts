@@ -44,6 +44,8 @@ describe('server messages', () => {
         locked: false,
         monitoring: false,
         terminal: { enabled: false, until: null },
+        filesEnabled: true,
+        examFiles: [],
       },
     };
     expect(ServerToStudentSchema.safeParse(welcome).success).toBe(true);
@@ -64,6 +66,8 @@ describe('server messages', () => {
         locked: false,
         monitoring: false,
         terminal: { enabled: false, until: null },
+        filesEnabled: true,
+        examFiles: [],
       },
     };
     expect(ServerToStudentSchema.safeParse(bad).success).toBe(false);

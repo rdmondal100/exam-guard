@@ -9,6 +9,10 @@ import type { TerminalLogRepo } from '../db/terminal-log-repo.js';
 import type { SessionHub } from '../ws/session-hub.js';
 import { registerStudentSocket, type StudentSocketDeps } from '../ws/student-socket.js';
 import { sendError } from './errors.js';
+import {
+  registerExamFileStudentRoutes,
+  type ExamFileStudentDeps,
+} from './exam-file-student-routes.js';
 import { registerJoinRoutes } from './join-routes.js';
 
 export interface StudentAppDeps {
@@ -16,6 +20,8 @@ export interface StudentAppDeps {
   /** The hosted exam, or `null` when nothing is hosted. */
   current: () => { examTitle: string; state: StudentInfo['state'] } | null;
   join: JoinService;
+  /** The teacher's exam files for a student to download. Without it the route is not registered. */
+  files?: ExamFileStudentDeps;
   /** Live sockets. Without it the WS route is not registered. */
   live?: {
     hub: SessionHub;
@@ -27,7 +33,13 @@ export interface StudentAppDeps {
 }
 
 /** Student-facing HTTPS app: `/info`, join and the `/ws` session socket. */
-export function buildStudentApp({ cert, current, join, live }: StudentAppDeps): FastifyInstance {
+export function buildStudentApp({
+  cert,
+  current,
+  join,
+  files,
+  live,
+}: StudentAppDeps): FastifyInstance {
   const app = Fastify({ logger: false, https: { key: cert.key, cert: cert.cert } });
 
   app.get('/api/v1/info', async (_request, reply) => {
@@ -38,6 +50,7 @@ export function buildStudentApp({ cert, current, join, live }: StudentAppDeps): 
   });
 
   registerJoinRoutes(app, join);
+  if (files) registerExamFileStudentRoutes(app, files);
 
   if (live) {
     void app.register(websocket, { options: { maxPayload: MAX_WS_FRAME_BYTES } });

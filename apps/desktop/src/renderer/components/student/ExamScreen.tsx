@@ -2,13 +2,16 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import type { SessionStatus, StudentQuestion } from '@examguard/shared';
 import { ANSWER_TEXT_KEY, answeredIds, getAnswer, useAnswerStore } from '@/lib/answerStore';
 import { pickLanguage } from '@/lib/languages';
+import { useExamFilesStatus } from '@/lib/useExamFilesStatus';
 import { CodeAnswer } from './CodeAnswer';
+import { ExamFilesNotice } from './ExamFilesNotice';
 import { ExamTimer } from './ExamTimer';
 import { LINK_TEXT } from './LobbyScreen';
 import { QuestionNav } from './QuestionNav';
 import { WrittenAnswer } from './WrittenAnswer';
 
 const TerminalDock = lazy(() => import('./TerminalDock'));
+const FilesPanel = lazy(() => import('./FilesPanel'));
 
 interface Props {
   name: string;
@@ -17,6 +20,8 @@ interface Props {
   deadline: number;
   /** The teacher's terminal switch; main closes the shell itself when it goes off. */
   terminalOn: boolean;
+  /** The teacher's Files panel switch (the project folder explorer). */
+  filesOn: boolean;
   status: SessionStatus;
 }
 
@@ -25,7 +30,15 @@ interface Props {
  * questions, a text box for written ones), the server timer, the connection state and a
  * monitoring badge. Answers are kept in memory only; autosave arrives with M16.
  */
-export function ExamScreen({ name, examTitle, questions, deadline, terminalOn, status }: Props) {
+export function ExamScreen({
+  name,
+  examTitle,
+  questions,
+  deadline,
+  terminalOn,
+  filesOn,
+  status,
+}: Props) {
   const [selectedId, setSelectedId] = useState(questions[0]?.id ?? '');
   const answers = useAnswerStore((s) => s.answers);
   const languages = useAnswerStore((s) => s.languages);
@@ -39,8 +52,12 @@ export function ExamScreen({ name, examTitle, questions, deadline, terminalOn, s
     return (q && languageOf(q)) ?? ANSWER_TEXT_KEY;
   };
   const answered = answeredIds(answers, keyOf);
+  const examFiles = useExamFilesStatus();
   const linkOk = status.link === 'connected';
   const language = question ? languageOf(question) : undefined;
+  // Same for the Files panel: its open file and folder survive toggling.
+  const [filesMounted, setFilesMounted] = useState(false);
+  const [filesShown, setFilesShown] = useState(false);
   // Mounted on first open and then only hidden, so the shell output survives toggling.
   const [terminalMounted, setTerminalMounted] = useState(false);
   const [terminalShown, setTerminalShown] = useState(false);
@@ -61,6 +78,18 @@ export function ExamScreen({ name, examTitle, questions, deadline, terminalOn, s
           <p className="text-sm text-muted">{name}</p>
         </div>
         <div className="flex items-center gap-4">
+          {filesOn && (
+            <button
+              type="button"
+              onClick={() => {
+                setFilesMounted(true);
+                setFilesShown((v) => !v);
+              }}
+              className={`rounded-md border px-3 py-1 text-sm ${filesShown ? 'bg-black/10' : ''}`}
+            >
+              {filesShown ? 'Hide files' : 'Files'}
+            </button>
+          )}
           {(terminalOn || terminalShown) && (
             <button
               type="button"
@@ -87,6 +116,7 @@ export function ExamScreen({ name, examTitle, questions, deadline, terminalOn, s
           <ExamTimer deadline={deadline} offsetMs={status.offsetMs} />
         </div>
       </header>
+      <ExamFilesNotice status={examFiles} />
       <div className="flex min-h-0 flex-1">
         <aside className="w-48 shrink-0 overflow-y-auto border-r p-3">
           <QuestionNav
@@ -134,6 +164,13 @@ export function ExamScreen({ name, examTitle, questions, deadline, terminalOn, s
           <main className="p-6">This exam has no questions.</main>
         )}
       </div>
+      {filesOn && filesMounted && (
+        <section className={`h-72 shrink-0 border-t p-3 ${filesShown ? '' : 'hidden'}`}>
+          <Suspense fallback={<p className="text-sm text-muted">Loading files…</p>}>
+            <FilesPanel visible={filesShown} />
+          </Suspense>
+        </section>
+      )}
       {terminalMounted && (
         <section className={`h-72 shrink-0 border-t p-3 ${terminalShown ? '' : 'hidden'}`}>
           <Suspense fallback={<p className="text-sm text-muted">Loading terminal…</p>}>

@@ -502,6 +502,10 @@ describe('exam terminal', () => {
     c.ws.send(hello(token));
     await c.waitFor(() => has(c, 'welcome'));
     expect(terminalOf(last(c, 'welcome'))).toEqual({ enabled: false, until: null });
+    // The Files panel switch rides along in the session state (on unless the teacher turned it off).
+    expect((last(c, 'welcome')?.state as unknown as { filesEnabled?: boolean }).filesEnabled).toBe(
+      true,
+    );
 
     const res = await action({ type: 'terminal', enabled: true });
     expect(res.statusCode).toBe(200);

@@ -18,6 +18,7 @@ interface ExamRow {
   class_list_id: string | null;
   class_list_name: string | null;
   monitoring_json: string;
+  files_enabled: number;
   created_at: number;
   updated_at: number;
 }
@@ -29,7 +30,8 @@ export interface ExamTiming {
 }
 
 const SELECT = `SELECT e.id, e.title, e.state, e.duration_sec, e.class_list_id,
-    l.name AS class_list_name, e.monitoring_json, e.created_at, e.updated_at
+    l.name AS class_list_name, e.monitoring_json, e.files_enabled,
+    e.created_at, e.updated_at
   FROM exams e LEFT JOIN class_lists l ON l.id = e.class_list_id`;
 
 function toSummary(row: ExamRow): ExamSummary {
@@ -41,6 +43,7 @@ function toSummary(row: ExamRow): ExamSummary {
     classListId: row.class_list_id,
     classListName: row.class_list_name,
     monitoring: MonitoringSettingsSchema.parse(JSON.parse(row.monitoring_json)),
+    filesEnabled: row.files_enabled === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -74,6 +77,7 @@ export class ExamRepo {
       body.durationMin * 60,
       body.classListId ?? null,
       body.monitoring ?? DEFAULT_MONITORING,
+      body.filesEnabled ?? true,
       now,
     );
     return this.requireExam(id);
@@ -86,13 +90,14 @@ export class ExamRepo {
     this.db
       .prepare(
         `UPDATE exams SET title = ?, duration_sec = ?, class_list_id = ?, monitoring_json = ?,
-           updated_at = ? WHERE id = ?`,
+           files_enabled = ?, updated_at = ? WHERE id = ?`,
       )
       .run(
         patch.title ?? current.title,
         (patch.durationMin ?? current.durationMin) * 60,
         patch.classListId === undefined ? current.classListId : patch.classListId,
         JSON.stringify(patch.monitoring ?? current.monitoring),
+        (patch.filesEnabled ?? current.filesEnabled) ? 1 : 0,
         now,
         id,
       );
@@ -100,7 +105,7 @@ export class ExamRepo {
   }
 
   /**
-   * A new draft with the same title, duration, class list and monitoring settings, and no
+   * A new draft with the same title, duration, class list, monitoring and Files settings, and no
    * runtime data (pin, timestamps, extension). Questions and criteria are copied too.
    */
   duplicate(id: string, now: number): ExamSummary | undefined {
@@ -114,6 +119,7 @@ export class ExamRepo {
         source.durationMin * 60,
         source.classListId,
         source.monitoring,
+        source.filesEnabled,
         now,
       );
       new QuestionRepo(this.db).copyAll(id, copyId, now);
@@ -208,14 +214,24 @@ export class ExamRepo {
     durationSec: number,
     classListId: string | null,
     monitoring: ExamSummary['monitoring'],
+    filesEnabled: boolean,
     now: number,
   ): void {
     this.db
       .prepare(
         `INSERT INTO exams (id, title, state, duration_sec, class_list_id, monitoring_json,
-           created_at, updated_at) VALUES (?, ?, 'draft', ?, ?, ?, ?, ?)`,
+           files_enabled, created_at, updated_at) VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?)`,
       )
-      .run(id, title, durationSec, classListId, JSON.stringify(monitoring), now, now);
+      .run(
+        id,
+        title,
+        durationSec,
+        classListId,
+        JSON.stringify(monitoring),
+        filesEnabled ? 1 : 0,
+        now,
+        now,
+      );
   }
 
   private requireExam(id: string): ExamSummary {

@@ -119,15 +119,20 @@ describe('student flags', () => {
     expect(opened[0]?.[0].args.slice(-5)).toEqual([
       'electron.exe',
       '-r',
-      './eg-stdin.cjs',
+      join(root, 'q1', 'js', 'eg-stdin.cjs'),
       '--stack-size=2000',
-      'main.js',
+      join(root, 'q1', 'js', 'main.js'),
     ]);
   });
 
   it('gives them to Python before the file', async () => {
     await runner().run(req({ language: 'py', flags: '-W ignore' }));
-    expect(opened[0]?.[0].args.slice(-4)).toEqual(['python.exe', '-W', 'ignore', 'main.py']);
+    expect(opened[0]?.[0].args.slice(-4)).toEqual([
+      'python.exe',
+      '-W',
+      'ignore',
+      join(root, 'q1', 'py', 'main.py'),
+    ]);
   });
 
   it('does not run anything for flags with an unclosed quote', async () => {
@@ -156,7 +161,9 @@ describe('workspace environment', () => {
   it('points Node at the workspace node_modules', async () => {
     await runner().run(req({ language: 'js' }));
     const env = opened[0]?.[0].env ?? {};
-    expect(env.NODE_PATH).toBe(join(root, 'workspace', 'node_modules'));
+    expect(env.NODE_PATH).toBe(
+      [join(root, 'workspace', 'node_modules'), join(root, 'workspace')].join(';'),
+    );
     expect(env.ELECTRON_RUN_AS_NODE).toBe('1');
   });
 });
