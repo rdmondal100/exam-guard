@@ -7,7 +7,6 @@ use std::ptr::null_mut;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use windows_sys::Win32::Foundation::HWND;
-use windows_sys::Win32::System::RemoteDesktop::ProcessIdToSessionId;
 use windows_sys::Win32::System::WindowsProgramming::GetUserNameW;
 use windows_sys::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
 use windows_sys::Win32::UI::HiDpi::{
@@ -18,7 +17,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     EVENT_SYSTEM_FOREGROUND, MSG, OBJID_WINDOW, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
 };
 
-use crate::{capture, spike_dir, window_info};
+use crate::{capture, config, log, session, shots, window_info};
 
 /// Minimum gap between two screenshots.
 pub const SHOT_GAP: Duration = Duration::from_secs(5);
@@ -61,12 +60,6 @@ fn user_name() -> String {
     String::from_utf16_lossy(&buf[..(len as usize).saturating_sub(1)])
 }
 
-fn session_id() -> Option<u32> {
-    let mut session = 0u32;
-    // SAFETY: valid out pointer.
-    (unsafe { ProcessIdToSessionId(std::process::id(), &mut session) } != 0).then_some(session)
-}
-
 fn unix_ms() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -92,8 +85,8 @@ fn take_shot(reason: &str) {
             return;
         }
     };
-    let folder = spike_dir::dir();
-    let path = folder.join(spike_dir::shot_name(unix_ms()));
+    let folder = config::data_dir();
+    let path = folder.join(shots::shot_name(unix_ms()));
     if let Err(error) = std::fs::write(&path, &jpeg) {
         tracing::error!(reason, %error, "could not save the screenshot");
         return;
@@ -112,7 +105,7 @@ fn take_shot(reason: &str) {
         black = stats.is_black(),
         "screenshot"
     );
-    if let Err(error) = spike_dir::prune(&folder, spike_dir::KEEP_SHOTS) {
+    if let Err(error) = shots::prune(&folder, shots::KEEP_SHOTS) {
         tracing::warn!(%error, "could not prune old screenshots");
     }
 }
@@ -155,14 +148,14 @@ unsafe extern "system" fn on_foreground(
 }
 
 pub fn run() -> Result<(), String> {
-    spike_dir::init_log("helper.log");
+    log::init_file("helper.log");
     // SAFETY: called once at start, before any window or DC exists.
     let dpi_ok =
         unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) != 0 };
     tracing::info!(
         pid = std::process::id(),
         user = %user_name(),
-        session = ?session_id(),
+        session = ?session::current_session(),
         dpi_ok,
         "helper started"
     );

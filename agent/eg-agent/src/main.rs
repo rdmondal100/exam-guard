@@ -1,19 +1,27 @@
 //! eg-agent: Windows service + session helper that observes and reports.
-//! M19 spike: install/uninstall, the service that launches the helper, and the helper itself.
-//! Design: docs/architecture.md §3.
+//! `--service` supervises one `--helper` in the user's session; `--console` does the same without
+//! the SCM, for development. Design: docs/architecture.md §3.
 
 #[cfg(windows)]
 mod capture;
+#[cfg(windows)]
+mod config;
+#[cfg(windows)]
+mod console;
 #[cfg(windows)]
 mod helper;
 #[cfg(windows)]
 mod install;
 #[cfg(windows)]
+mod log;
+#[cfg(windows)]
 mod service;
 #[cfg(windows)]
 mod session;
 #[cfg(windows)]
-mod spike_dir;
+mod shots;
+#[cfg(windows)]
+mod supervisor;
 #[cfg(windows)]
 mod win;
 #[cfg(windows)]
@@ -30,8 +38,8 @@ fn main() -> std::process::ExitCode {
         "--install" => install::install(),
         "--uninstall" => install::uninstall(),
         "--service" => service::run().map_err(|e| e.to_string()),
-        // `--console` runs the helper in the current session without the service (dev).
-        "--helper" | "--console" => helper::run(),
+        "--helper" => helper::run(),
+        "--console" => console::run(),
         _ => {
             eprintln!("{USAGE}");
             return ExitCode::from(2);

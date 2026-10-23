@@ -1,36 +1,10 @@
-//! The spike's output folder `%ProgramData%\ExamGuard\spike\`: log files and screenshots.
+//! Screenshot files in the data folder: names that sort by time, and pruning of the oldest.
 
-use std::fs::OpenOptions;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 /// Screenshots kept in the folder; older ones are deleted.
 pub const KEEP_SHOTS: usize = 50;
-
-pub fn dir() -> PathBuf {
-    let base = std::env::var_os("ProgramData")
-        .map_or_else(|| PathBuf::from(r"C:\ProgramData"), PathBuf::from);
-    base.join("ExamGuard").join("spike")
-}
-
-/// Sends tracing output to `<dir>\<file>` (appended). Falls back to stderr if the file can't be opened.
-pub fn init_log(file: &str) {
-    let path = dir().join(file);
-    let opened = std::fs::create_dir_all(dir())
-        .and_then(|()| OpenOptions::new().create(true).append(true).open(&path));
-    let builder = tracing_subscriber::fmt().with_ansi(false).with_env_filter(
-        tracing_subscriber::EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-    );
-    match opened {
-        Ok(handle) => builder.with_writer(Mutex::new(handle)).init(),
-        Err(error) => {
-            builder.with_writer(io::stderr).init();
-            tracing::warn!(%error, path = %path.display(), "could not open the log file");
-        }
-    }
-}
 
 /// `shot-<unix ms>.jpg`, zero-padded so names sort by time.
 pub fn shot_name(unix_ms: u128) -> String {
