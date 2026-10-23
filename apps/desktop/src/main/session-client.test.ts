@@ -71,6 +71,8 @@ const STATE = {
   locked: false,
   monitoring: false,
   terminal: { enabled: false, until: null },
+  filesEnabled: true,
+  examFiles: [],
 };
 
 let statuses: SessionStatus[];

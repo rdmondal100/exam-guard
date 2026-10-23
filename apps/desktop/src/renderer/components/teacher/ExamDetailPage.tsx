@@ -13,6 +13,7 @@ import { useQuestions } from '@/lib/useQuestions';
 import { QuestionEditor } from './QuestionEditor';
 import { QuestionList } from './QuestionList';
 import { EndedTerminalLogs } from './EndedTerminalLogs';
+import { ExamFilesSection } from './ExamFilesSection';
 import { HostingPanel } from './HostingPanel';
 import { ReadyPanel } from './ReadyPanel';
 
@@ -172,6 +173,7 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
           {AFTER_EXAM.has(exam.state) && examApi && (
             <EndedTerminalLogs examId={exam.id} api={examApi} />
           )}
+          <ExamFilesSection examId={exam.id} editable={editable} filesEnabled={exam.filesEnabled} />
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">Questions</h2>
             <div className="flex gap-2">

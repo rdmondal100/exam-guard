@@ -35,6 +35,8 @@ export const ExamSummarySchema = z.object({
   classListId: z.string().nullable(),
   classListName: z.string().nullable(),
   monitoring: MonitoringSettingsSchema,
+  /** Whether students get the Files panel (their project folder). */
+  filesEnabled: z.boolean(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
@@ -49,6 +51,7 @@ export const ExamCreateBodySchema = z.object({
   durationMin: DurationSchema,
   classListId: z.string().nullable().optional(),
   monitoring: MonitoringSettingsSchema.optional(),
+  filesEnabled: z.boolean().optional(),
 });
 export type ExamCreateBody = z.infer<typeof ExamCreateBodySchema>;
 
@@ -58,6 +61,7 @@ export const ExamUpdateBodySchema = z.object({
   durationMin: DurationSchema.optional(),
   classListId: z.string().nullable().optional(),
   monitoring: MonitoringSettingsSchema.optional(),
+  filesEnabled: z.boolean().optional(),
 });
 export type ExamUpdateBody = z.infer<typeof ExamUpdateBodySchema>;
 

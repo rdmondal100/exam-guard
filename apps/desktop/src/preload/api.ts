@@ -2,6 +2,14 @@ import type {
   AppInfo,
   AppMode,
   DiscoveredHost,
+  ExamFilesStatus,
+  FileCreateRequest,
+  FileReadResult,
+  FileRenameRequest,
+  FileWriteRequest,
+  FilesList,
+  FilesListRequest,
+  FilesResult,
   JoinAttempt,
   JoinConfirmResult,
   JoinResult,
@@ -55,6 +63,19 @@ export interface ExamGuardApi {
   resizeRun(size: RunSize): void;
   /** Output of an interactive run, as it is produced. Returns an unsubscribe function. */
   onRunData(listener: (data: string) => void): () => void;
+  /** Student mode: the project folder (the exam workspace). A call can be refused with a message. */
+  filesList(request: FilesListRequest): Promise<FilesResult<FilesList>>;
+  filesRead(path: string): Promise<FilesResult<FileReadResult>>;
+  filesWrite(request: FileWriteRequest): Promise<FilesResult<null>>;
+  filesCreate(request: FileCreateRequest): Promise<FilesResult<null>>;
+  filesRename(request: FileRenameRequest): Promise<FilesResult<null>>;
+  filesRemove(path: string): Promise<FilesResult<null>>;
+  /** Student mode: how the download of the teacher's exam files is going. */
+  examFilesStatus(): Promise<ExamFilesStatus>;
+  /** Tries the failed downloads again. */
+  retryExamFiles(): Promise<void>;
+  /** Returns an unsubscribe function. */
+  onExamFilesStatus(listener: (status: ExamFilesStatus) => void): () => void;
   /** Student mode: may the exam terminal open now, and is one already running. */
   terminalStatus(): Promise<TerminalStatus>;
   /** Starts the exam terminal (or resizes the one already running). */

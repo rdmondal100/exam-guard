@@ -4,6 +4,7 @@ import { StudentStateSchema } from './join.js';
 import { ExamStateSchema } from './exams.js';
 import { StudentQuestionSchema } from './questions.js';
 import { TerminalStateSchema } from './actions.js';
+import { ExamFilesSchema } from './exam-files.js';
 
 /** Idle limit on a student socket and the client's ping period (docs/protocol.md §3). */
 export const STUDENT_IDLE_MS = 15_000;
@@ -96,6 +97,10 @@ export const SessionStateSchema = z.object({
   monitoring: z.boolean(),
   /** The teacher's exam terminal switch (server-authoritative). */
   terminal: TerminalStateSchema,
+  /** The teacher's Files panel switch for this exam (server-authoritative). */
+  filesEnabled: z.boolean(),
+  /** The files the teacher attached; students download them in the lobby (M15f). */
+  examFiles: ExamFilesSchema,
 });
 export type SessionState = z.infer<typeof SessionStateSchema>;
 

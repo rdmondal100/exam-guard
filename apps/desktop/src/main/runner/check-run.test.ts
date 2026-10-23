@@ -10,6 +10,8 @@ const exam: SessionState = {
   locked: false,
   monitoring: false,
   terminal: { enabled: false, until: null },
+  filesEnabled: true,
+  examFiles: [],
   questions: [
     {
       id: 'q1',

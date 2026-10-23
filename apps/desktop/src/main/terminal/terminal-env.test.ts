@@ -44,13 +44,17 @@ describe('terminalEnv', () => {
   it('points gcc at the pacman packages and quiets npm', () => {
     const env = terminalEnv({ base, paths, mingwBin: null });
     expect(env.C_INCLUDE_PATH).toBe(
-      [join(paths.workspace, 'include'), join(paths.msysOverlay, 'ucrt64', 'include')].join(';'),
+      [
+        paths.workspace,
+        join(paths.workspace, 'include'),
+        join(paths.msysOverlay, 'ucrt64', 'include'),
+      ].join(';'),
     );
     expect(env.CPLUS_INCLUDE_PATH).toBe(env.C_INCLUDE_PATH);
     expect(env.LIBRARY_PATH).toBe(
       [join(paths.workspace, 'lib'), join(paths.msysOverlay, 'ucrt64', 'lib')].join(';'),
     );
-    expect(env.NODE_PATH).toBe(join(paths.workspace, 'node_modules'));
+    expect(env.NODE_PATH).toBe([join(paths.workspace, 'node_modules'), paths.workspace].join(';'));
     expect(env.npm_config_update_notifier).toBe('false');
     expect(env.PATH?.split(';')[1]).toBe(join(paths.msysOverlay, 'ucrt64', 'bin'));
   });
@@ -59,7 +63,7 @@ describe('terminalEnv', () => {
     const env = terminalEnv({ base, paths, mingwBin: null });
     const sitePackages = join(paths.workspace, 'site-packages');
     expect(env.PIP_TARGET).toBe(sitePackages);
-    expect(env.PYTHONPATH).toBe(sitePackages);
+    expect(env.PYTHONPATH).toBe([sitePackages, paths.workspace].join(';'));
     expect(env.PIP_DISABLE_PIP_VERSION_CHECK).toBe('1');
     expect(env.MPLCONFIGDIR).toBe(join(paths.workspace, '.mpl'));
   });

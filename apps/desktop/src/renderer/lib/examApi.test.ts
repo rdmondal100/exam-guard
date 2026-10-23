@@ -18,6 +18,7 @@ const EXAM = {
     highSeverityApps: [],
     graceSec: 60,
   },
+  filesEnabled: true,
   createdAt: 1,
   updatedAt: 1,
 };

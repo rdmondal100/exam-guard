@@ -56,6 +56,7 @@ UNIQUE(class_list_id, student_code)
 | terminal_enabled | INTEGER DEFAULT 0 | exam terminal switch (M15b, migration 0006); off by default |
 | terminal_minutes | INTEGER | "on for N minutes" chosen before Start, cleared when Start sets `terminal_until` |
 | terminal_until | INTEGER | server time the terminal turns off by itself; NULL = no end |
+| files_enabled | INTEGER DEFAULT 1 | student Files panel switch (M15e, migration 0007); on by default; copied by duplicate |
 | hosting_started_at, started_at, ended_at, finalized_at | INTEGER | nullable |
 | created_at, updated_at | INTEGER | |
 INDEX(state)
@@ -104,6 +105,17 @@ UNIQUE(question_id, name)
 | risk_score | INTEGER DEFAULT 0 | denormalised, updated with each event batch |
 | outside_ms_total | INTEGER DEFAULT 0 | denormalised |
 UNIQUE(exam_id, class_student_id); UNIQUE(token_hash); INDEX(exam_id, state); INDEX(exam_id, risk_score DESC)
+
+### exam_files (files the teacher attaches to an exam, M15f, migration 0008)
+| column | type | notes |
+|---|---|---|
+| id | TEXT PK | UUIDv7; also the file name on disk |
+| exam_id | TEXT FK → exams (CASCADE) | |
+| name | TEXT NOT NULL COLLATE NOCASE | what the student's copy is called; unique per exam in any letter case |
+| size | INTEGER | bytes |
+| sha256 | TEXT | hex; students verify it after the download |
+| created_at | INTEGER | list order |
+UNIQUE(exam_id, name). The bytes are in `exam-files/<examId>/<id>` (see the folder layout); a replace gets a new id.
 
 ### answer_versions (every autosave)
 | col | type | notes |
@@ -217,7 +229,7 @@ INDEX(question_id, status)
 ## Relationships (summary)
 `class_lists 1─* class_students`, `exams 1─* questions 1─* marking_criteria`, `exams 1─* exam_students *─1 class_students`, `exam_students 1─* answer_versions`, `exam_students 1─* final_answers 1─1 answer_grades`, `exam_students 1─* terminal_chunks`, `answer_grades → evaluations (current)`, `exams 1─* events / teacher_actions / grading_jobs`.
 
-Deleting an exam cascades to everything under it and deletes its screenshot folder. Class lists that are assigned to an exam can't be deleted.
+Deleting an exam cascades to everything under it and deletes its screenshot folder and its `exam-files/<examId>/` folder (`exams 1─* exam_files`). Class lists that are assigned to an exam can't be deleted.
 
 ## Data folder layout (teacher PC)
 Default `%APPDATA%\ExamGuard\` (Electron userData, per profile in dev). Movable in Settings.
@@ -226,6 +238,7 @@ db/examguard.sqlite (+ -wal, -shm)
 secrets.bin                      safeStorage-encrypted: AI API key
 certs/server.key, server.crt     self-signed TLS (key never leaves the PC)
 screenshots/<examId>/<examStudentId>/<eventId>.jpg
+exam-files/<examId>/<fileId>     the files the teacher attached to the exam (M15f)
 exports/<examTitle>_<yyyyMMdd-HHmm>.csv
 backups/<yyyyMMdd-HHmmss>/       SQLite online backup + copy of screenshots/
 logs/main.log, server.log        rotated, 5 × 5 MB
@@ -240,8 +253,9 @@ logs/main.log, server.log        rotated, 5 × 5 MB
   session/<examId>.json                encrypted: token, server addr, pinned fp, selected languages, buffers
 %LOCALAPPDATA%\ExamGuard\run\<examStudentId>\
   <questionId>\<lang>\                 code-run folder (wiped per run and at exam end)
-  workspace\                           exam terminal cwd: node_modules, .msys\ (pacman root); kept between runs
+  workspace\                           project folder: cwd of the terminal and of Run, the Files panel's root; node_modules, site-packages, .msys\ (pacman root); kept between runs
   .examguard\                          bin\ shims, pacman.conf, gnupg\ keyring copy (ExamGuard's, not the student's)
+  .examguard\exam-files\               the teacher's files while they wait for the exam to start: <fileId>, revealed.json (ids already copied into workspace\)
 %ProgramData%\ExamGuard\buffer\<examId>\  agent evidence buffer (SYSTEM-only, AES-GCM)
 %ProgramData%\ExamGuard\agent.log
 ```

@@ -1,4 +1,6 @@
 import type { SessionStatus } from '@examguard/shared';
+import { useExamFilesStatus } from '@/lib/useExamFilesStatus';
+import { ExamFilesNotice } from './ExamFilesNotice';
 
 interface Props {
   name: string;
@@ -23,6 +25,7 @@ const REASON_TEXT: Record<string, string> = {
 
 /** The lobby: shows the live link while the teacher has not started the exam. */
 export function LobbyScreen({ name, examTitle, status, error }: Props) {
+  const examFiles = useExamFilesStatus();
   const tone =
     status.link === 'connected'
       ? 'bg-green-100 text-green-900'
@@ -43,6 +46,7 @@ export function LobbyScreen({ name, examTitle, status, error }: Props) {
           {error ?? REASON_TEXT[status.reason ?? ''] ?? 'The connection was closed.'}
         </p>
       )}
+      <ExamFilesNotice status={examFiles} confirmReady />
       <p className="text-sm text-muted">Waiting for the teacher to start the exam.</p>
     </main>
   );

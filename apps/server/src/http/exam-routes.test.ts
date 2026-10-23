@@ -90,6 +90,25 @@ describe('exam routes', () => {
     expect(cleared.json().title).toBe('Final');
   });
 
+  it('has the Files panel on by default, and the teacher can turn it off', async () => {
+    const exam = await createExam();
+    expect(exam.filesEnabled).toBe(true);
+    const off = await send('PATCH', `/exams/${exam.id}`, { filesEnabled: false });
+    expect(off.json().filesEnabled).toBe(false);
+    expect((await send('GET', `/exams/${exam.id}`)).json().filesEnabled).toBe(false);
+    // Other edits leave the switch alone, and a copy keeps it.
+    const renamed = await send('PATCH', `/exams/${exam.id}`, { title: 'Quiz' });
+    expect(renamed.json().filesEnabled).toBe(false);
+    const copy = (await send('POST', `/exams/${exam.id}/duplicate`)).json();
+    expect(copy.filesEnabled).toBe(false);
+    const created = await send('POST', '/exams', {
+      title: 'No files',
+      durationMin: 5,
+      filesEnabled: false,
+    });
+    expect(created.json().filesEnabled).toBe(false);
+  });
+
   it('answers 404 for unknown exams', async () => {
     expect((await send('GET', '/exams/nope')).statusCode).toBe(404);
     expect((await send('PATCH', '/exams/nope', { title: 'x' })).statusCode).toBe(404);

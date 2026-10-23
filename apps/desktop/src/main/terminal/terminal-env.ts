@@ -63,14 +63,16 @@ export function terminalEnv({ base, paths, mingwBin }: TerminalEnvInput): Record
     .join(';');
   // The workspace's own include/lib folders come first (a library the student unpacked there,
   // e.g. graphics.h and libbgi.a), then what pacman installed. gcc takes ";"-separated lists.
-  const include = [join(paths.workspace, 'include'), join(ucrt, 'include')].join(';');
+  const include = [paths.workspace, join(paths.workspace, 'include'), join(ucrt, 'include')].join(
+    ';',
+  );
   env.C_INCLUDE_PATH = include;
   env.CPLUS_INCLUDE_PATH = include;
   env.LIBRARY_PATH = [join(paths.workspace, 'lib'), join(ucrt, 'lib')].join(';');
-  env.NODE_PATH = join(paths.workspace, 'node_modules');
+  env.NODE_PATH = [join(paths.workspace, 'node_modules'), paths.workspace].join(';');
   // pip installs straight into the workspace (no flags, no admin rights) and Python finds it there.
   env.PIP_TARGET = sitePackages;
-  env.PYTHONPATH = sitePackages;
+  env.PYTHONPATH = [sitePackages, paths.workspace].join(';');
   env.PIP_DISABLE_PIP_VERSION_CHECK = '1';
   env.MPLCONFIGDIR = join(paths.workspace, '.mpl');
   env.npm_config_update_notifier = 'false';

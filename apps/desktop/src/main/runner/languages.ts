@@ -15,7 +15,8 @@ export interface ToolPaths {
 
 /**
  * One runnable language (architecture §4). Adding Java or Python later means adding an entry.
- * Commands run with the work dir as cwd, so compiler messages name the bare file.
+ * The compiler runs with the work dir as cwd, so its messages name the bare file; the program
+ * runs in the workspace, so `run` names the source by its full path.
  */
 export interface LanguageConfig {
   id: QuestionLanguage;
@@ -69,7 +70,13 @@ export const LANGUAGES: Record<QuestionLanguage, LanguageConfig> = {
     label: 'JavaScript',
     fileName: 'main.js',
     files: { [JS_STDIN_FILE]: JS_STDIN },
-    run: (tools, _dir, flags) => [tools.nodeExe, '-r', `./${JS_STDIN_FILE}`, ...flags, 'main.js'],
+    run: (tools, dir, flags) => [
+      tools.nodeExe,
+      '-r',
+      join(dir, JS_STDIN_FILE),
+      ...flags,
+      join(dir, 'main.js'),
+    ],
     env: { ELECTRON_RUN_AS_NODE: '1' },
   },
   py: {
@@ -77,7 +84,7 @@ export const LANGUAGES: Record<QuestionLanguage, LanguageConfig> = {
     label: 'Python',
     fileName: 'main.py',
     unavailable: (tools) => (tools.pythonExe ? null : 'Python is not installed on this computer.'),
-    run: (tools, _dir, flags) => [tools.pythonExe ?? '', ...flags, 'main.py'],
+    run: (tools, dir, flags) => [tools.pythonExe ?? '', ...flags, join(dir, 'main.py')],
     // UTF-8 for input() and print() in the console; no .pyc files in the run folder. NumPy's
     // OpenBLAS reserves a buffer per CPU core at import, which on a 20-core PC alone passes the
     // 256 MB job limit ("OpenBLAS error: Memory allocation still failed"), so it gets one thread.

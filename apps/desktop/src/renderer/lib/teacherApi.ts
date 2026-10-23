@@ -43,20 +43,23 @@ export async function call<T>(
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const json: unknown = await res.json().catch(() => null);
-  if (!res.ok) {
-    const parsed = ApiErrorSchema.safeParse(json);
-    if (!parsed.success) throw new TeacherApiError(res.status, 'unknown', `HTTP ${res.status}`);
-    const { code, message, details } = parsed.data.error;
-    const retry = RetryDetailsSchema.safeParse(details);
-    throw new TeacherApiError(
-      res.status,
-      code,
-      message,
-      retry.success ? retry.data.retryAfterSec : undefined,
-      details,
-    );
-  }
+  if (!res.ok) throw apiError(res.status, json);
   return schema.parse(json);
+}
+
+/** The `TeacherApiError` for a failed answer, from its `{ error: {...} }` body (if it has one). */
+export function apiError(status: number, json: unknown): TeacherApiError {
+  const parsed = ApiErrorSchema.safeParse(json);
+  if (!parsed.success) return new TeacherApiError(status, 'unknown', `HTTP ${status}`);
+  const { code, message, details } = parsed.data.error;
+  const retry = RetryDetailsSchema.safeParse(details);
+  return new TeacherApiError(
+    status,
+    code,
+    message,
+    retry.success ? retry.data.retryAfterSec : undefined,
+    details,
+  );
 }
 
 export interface AuthApi {

@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import type { QuestionLanguage, RunRequest } from '@examguard/shared';
 import { spawnPtyProcess } from '../terminal/pty.js';
 import { CodeRunner } from './code-runner.js';
@@ -17,6 +17,9 @@ const tools = resolveToolchain({
   execPath: process.execPath,
   env: process.env,
 });
+// The first gcc start is slow while the whole suite competes for the CPU; at the 5 s default it
+// timed out, and every test after it then got "busy" because that run was still going.
+vi.setConfig({ testTimeout: 30_000 });
 const root = mkdtempSync(join(tmpdir(), 'eg-e2e-'));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
@@ -67,6 +70,17 @@ describe.skipIf(!tools.runner || !tools.mingwBin)(
       expect(r).toMatchObject({ status: 'ok', exitCode: 0 });
       expect(r.stdout).toContain('2,4,6');
     });
+
+    it('C reads a file from the workspace', async () => {
+      mkdirSync(join(root, 'workspace'), { recursive: true });
+      writeFileSync(join(root, 'workspace', 'nums.txt'), '40 2');
+      const r = await run(
+        'c',
+        '#include <stdio.h>\nint main(void){int a,b;FILE*f=fopen("nums.txt","r");if(!f)return 9;fscanf(f,"%d %d",&a,&b);printf("sum=%d",a+b);return 0;}',
+      );
+      expect(r).toMatchObject({ status: 'ok', exitCode: 0 });
+      expect(r.stdout).toContain('sum=42');
+    }, 30_000);
 
     it('a scanf menu loop takes input while it runs', async () => {
       const running = run(
@@ -205,6 +219,26 @@ describe.skipIf(!tools.runner || !tools.pythonExe)('Python in the run console', 
     const r = await run('py', 'import eg_demo\nprint("twice =", eg_demo.twice(21))');
     expect(r.status).toBe('ok');
     expect(r.stdout).toContain('twice = 42');
+  }, 30_000);
+
+  it('runs in the workspace: reads its files and keeps the ones it writes', async () => {
+    mkdirSync(join(root, 'workspace'), { recursive: true });
+    writeFileSync(join(root, 'workspace', 'data.txt'), 'from the workspace');
+    const first = await run(
+      'py',
+      "print(open('data.txt').read())\nopen('out.txt', 'w').write('made')",
+    );
+    expect(first.stdout).toContain('from the workspace');
+    expect(readFileSync(join(root, 'workspace', 'out.txt'), 'utf8')).toBe('made');
+    // A later run, even of another question, still sees the file and the run folder is wiped.
+    const second = await run('py', "print(open('out.txt').read())");
+    expect(second.stdout).toContain('made');
+  }, 30_000);
+
+  it('imports a module the student saved in the workspace', async () => {
+    writeFileSync(join(root, 'workspace', 'eg_local.py'), 'VALUE = 7\n');
+    const r = await run('py', 'import eg_local\nprint("value", eg_local.VALUE)');
+    expect(r.stdout).toContain('value 7');
   }, 30_000);
 
   it('can open a tkinter window', async () => {
