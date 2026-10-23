@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import { ANSWER_TEXT_KEY, type QuestionLanguage } from '@examguard/shared';
+import {
+  ANSWER_TEXT_KEY,
+  QuestionLanguageSchema,
+  type QuestionLanguage,
+  type RestoredAnswers,
+} from '@examguard/shared';
 
 export { ANSWER_TEXT_KEY };
 
@@ -15,6 +20,8 @@ export interface AnswerState {
   setAnswer: (questionId: string, key: string, value: string) => void;
   setLanguage: (questionId: string, language: QuestionLanguage) => void;
   setFlags: (questionId: string, language: QuestionLanguage, value: string) => void;
+  /** Fills the editors from what main restored after a restart. */
+  restore: (restored: RestoredAnswers) => void;
   reset: () => void;
 }
 
@@ -32,6 +39,21 @@ export const useAnswerStore = create<AnswerState>((set) => ({
     set((s) => ({
       flags: { ...s.flags, [questionId]: { ...s.flags[questionId], [language]: value } },
     })),
+  restore: (restored) =>
+    set((s) => {
+      const answers = { ...s.answers };
+      const flags = { ...s.flags };
+      const languages = { ...s.languages };
+      for (const b of restored.buffers) {
+        answers[b.questionId] = { ...answers[b.questionId], [b.language]: b.content };
+        if (b.flags) flags[b.questionId] = { ...flags[b.questionId], [b.language]: b.flags };
+      }
+      for (const l of restored.languages) {
+        const language = QuestionLanguageSchema.safeParse(l.language);
+        if (language.success) languages[l.questionId] = language.data;
+      }
+      return { answers, flags, languages };
+    }),
   reset: () => set({ answers: {}, languages: {}, flags: {} }),
 }));
 

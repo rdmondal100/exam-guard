@@ -156,3 +156,36 @@ describe('JoinClient.confirm', () => {
     expect(seen).toHaveLength(2);
   });
 });
+
+describe('JoinClient snapshot, restore and forget', () => {
+  it('has nothing to store before a join', () => {
+    expect(client.snapshot()).toBeNull();
+  });
+
+  it('stores the pinned target, token and names, and a restored client can use them', async () => {
+    await client.join(attempt());
+    const stored = client.snapshot();
+    expect(stored).toEqual({
+      target: { address: '127.0.0.1', port, expectedFingerprint: fingerprint },
+      token: TOKEN,
+      examStudentId: 'es1',
+      name: 'Ada',
+      examTitle: 'Mid',
+    });
+
+    const restarted = new JoinClient(async () => 'device-xyz');
+    if (stored) restarted.restore(stored);
+    expect(restarted.credentials()).toEqual({
+      target: { address: '127.0.0.1', port, expectedFingerprint: fingerprint },
+      token: TOKEN,
+    });
+    expect(restarted.examStudentId()).toBe('es1');
+  });
+
+  it('forgets the session', async () => {
+    await client.join(attempt());
+    client.forget();
+    expect(client.credentials()).toBeNull();
+    expect(client.snapshot()).toBeNull();
+  });
+});

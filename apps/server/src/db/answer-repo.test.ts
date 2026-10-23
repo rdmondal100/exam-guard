@@ -85,6 +85,29 @@ describe('AnswerRepo', () => {
     expect(repo.savedFor('s2')).toEqual([]);
   });
 
+  it('snapshots the newest content of each buffer and the selected language of each question', () => {
+    repo.insertMany([
+      version({ clientSeq: 1, language: 'c', content: 'c1', flags: '-lm' }),
+      version({ clientSeq: 2, language: 'cpp', content: 'cpp1' }),
+      version({ clientSeq: 3, language: 'c', content: 'c2', selected: false, flags: '-lm -O2' }),
+      version({ clientSeq: 4, questionId: 'q2', language: 'text', content: 'LIFO' }),
+    ]);
+    const snap = repo.snapshot('s1');
+    expect(snap.buffers).toEqual([
+      { questionId: 'q1', language: 'cpp', content: 'cpp1', flags: null, clientSeq: 2 },
+      { questionId: 'q1', language: 'c', content: 'c2', flags: '-lm -O2', clientSeq: 3 },
+      { questionId: 'q2', language: 'text', content: 'LIFO', flags: null, clientSeq: 4 },
+    ]);
+    expect(snap.selected).toHaveLength(2);
+    expect(snap.selected).toEqual(
+      expect.arrayContaining([
+        { questionId: 'q1', language: 'cpp', clientSeq: 2 },
+        { questionId: 'q2', language: 'text', clientSeq: 4 },
+      ]),
+    );
+    expect(repo.snapshot('s2')).toEqual({ buffers: [], selected: [] });
+  });
+
   it('keeps the flags with the version', () => {
     repo.insertMany([version({ flags: '-lm -O2' }), version({ clientSeq: 2 })]);
     expect(repo.list('s1').map((v) => v.flags)).toEqual(['-lm -O2', null]);

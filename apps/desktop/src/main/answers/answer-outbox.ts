@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { AnswerSave, AnswerSaveRequest, AnswerStatus, SavedAnswer } from '@examguard/shared';
 
-/** Unacked saves kept in memory; the oldest are dropped past this. The disk queue is M17. */
+/** Unacked saves kept in memory and in the disk queue; the oldest are dropped past this. */
 export const MAX_PENDING_SAVES = 500;
 
 /**
@@ -17,6 +17,8 @@ export class AnswerOutbox {
   constructor(
     private readonly onStatus: (status: AnswerStatus) => void = () => {},
     private readonly max = MAX_PENDING_SAVES,
+    /** Called for a save pushed out by the cap, so the disk queue can forget it too. */
+    private readonly onDrop: (save: AnswerSave) => void = () => {},
   ) {}
 
   /** Numbers a save and keeps it until it is acked. `serverNow` stamps it in server time. */
@@ -29,13 +31,28 @@ export class AnswerOutbox {
       ...request,
     };
     this.nextSeq += 1;
+    this.keep(save);
+    this.report();
+    return save;
+  }
+
+  /** Puts back saves read from the disk queue and moves the counter past them. */
+  restore(saves: readonly AnswerSave[]): void {
+    for (const save of [...saves].sort((a, b) => a.clientSeq - b.clientSeq)) {
+      this.nextSeq = Math.max(this.nextSeq, save.clientSeq + 1);
+      this.keep(save);
+    }
+    this.report();
+  }
+
+  private keep(save: AnswerSave): void {
     this.pending.set(save.clientSeq, save);
     if (this.pending.size > this.max) {
       const oldest = this.pending.keys().next().value;
+      const dropped = oldest === undefined ? undefined : this.pending.get(oldest);
       if (oldest !== undefined) this.pending.delete(oldest);
+      if (dropped) this.onDrop(dropped);
     }
-    this.report();
-    return save;
   }
 
   ack(clientSeq: number, now: number): void {

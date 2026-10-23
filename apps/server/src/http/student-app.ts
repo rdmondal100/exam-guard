@@ -14,6 +14,7 @@ import {
   registerExamFileStudentRoutes,
   type ExamFileStudentDeps,
 } from './exam-file-student-routes.js';
+import { registerAnswerStudentRoutes, type AnswerStudentDeps } from './answer-student-routes.js';
 import { registerJoinRoutes } from './join-routes.js';
 
 export interface StudentAppDeps {
@@ -23,6 +24,8 @@ export interface StudentAppDeps {
   join: JoinService;
   /** The teacher's exam files for a student to download. Without it the route is not registered. */
   files?: ExamFileStudentDeps;
+  /** The stored answers a restarted student app asks for. Without it the route is not registered. */
+  answers?: AnswerStudentDeps;
   /** Live sockets. Without it the WS route is not registered. */
   live?: {
     hub: SessionHub;
@@ -40,6 +43,7 @@ export function buildStudentApp({
   current,
   join,
   files,
+  answers,
   live,
 }: StudentAppDeps): FastifyInstance {
   const app = Fastify({ logger: false, https: { key: cert.key, cert: cert.cert } });
@@ -53,6 +57,7 @@ export function buildStudentApp({
 
   registerJoinRoutes(app, join);
   if (files) registerExamFileStudentRoutes(app, files);
+  if (answers) registerAnswerStudentRoutes(app, answers);
 
   if (live) {
     void app.register(websocket, { options: { maxPayload: MAX_WS_FRAME_BYTES } });

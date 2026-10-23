@@ -1,4 +1,5 @@
 import type { SessionStatus } from '@examguard/shared';
+import { Button } from '@/components/ui/button';
 import { useExamFilesStatus } from '@/lib/useExamFilesStatus';
 import { ExamFilesNotice } from './ExamFilesNotice';
 
@@ -7,6 +8,8 @@ interface Props {
   examTitle: string;
   status: SessionStatus;
   error: string | null;
+  /** Offered while the link is down, so a stale session cannot trap the student. */
+  onLeave: () => void;
 }
 
 export const LINK_TEXT: Record<SessionStatus['link'], string> = {
@@ -18,13 +21,13 @@ export const LINK_TEXT: Record<SessionStatus['link'], string> = {
 
 const REASON_TEXT: Record<string, string> = {
   replaced: 'This student signed in on another window or computer.',
-  unauthorized: 'Your sign-in expired. Close ExamGuard and join again.',
+  unauthorized: 'Your sign-in expired. Leave this exam and join again.',
   protocol_mismatch: "Update ExamGuard to match the teacher's version.",
   fingerprint_mismatch: 'This computer is not the teacher you checked. Tell your invigilator.',
 };
 
 /** The lobby: shows the live link while the teacher has not started the exam. */
-export function LobbyScreen({ name, examTitle, status, error }: Props) {
+export function LobbyScreen({ name, examTitle, status, error, onLeave }: Props) {
   const examFiles = useExamFilesStatus();
   const tone =
     status.link === 'connected'
@@ -48,6 +51,11 @@ export function LobbyScreen({ name, examTitle, status, error }: Props) {
       )}
       <ExamFilesNotice status={examFiles} confirmReady />
       <p className="text-sm text-muted">Waiting for the teacher to start the exam.</p>
+      {(status.link === 'reconnecting' || status.link === 'failed') && (
+        <Button variant="outline" className="w-fit" onClick={onLeave}>
+          Leave this exam
+        </Button>
+      )}
     </main>
   );
 }

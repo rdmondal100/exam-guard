@@ -1,4 +1,4 @@
-import type { SaveReason, SavedAnswer } from '@examguard/shared';
+import type { AnswerSnapshot, SaveReason, SavedAnswer } from '@examguard/shared';
 import type { Db } from './connection.js';
 
 export interface NewAnswerVersion {
@@ -86,18 +86,65 @@ export class AnswerRepo {
            WHERE exam_student_id = ? GROUP BY question_id, language`,
       )
       .all(examStudentId) as { question_id: string; language: string; client_seq: number }[];
-    const chosen = this.db
-      .prepare(
-        `SELECT question_id, language, MAX(client_seq) FROM answer_versions
-           WHERE exam_student_id = ? AND selected = 1 GROUP BY question_id`,
-      )
-      .all(examStudentId) as { question_id: string; language: string }[];
-    const selectedKey = new Set(chosen.map((c) => `${c.question_id}\u0000${c.language}`));
+    const selectedKey = new Set(
+      this.selectedFor(examStudentId).map((c) => `${c.questionId}\u0000${c.language}`),
+    );
     return newest.map((r) => ({
       questionId: r.question_id,
       language: r.language,
       clientSeq: r.client_seq,
       selected: selectedKey.has(`${r.question_id}\u0000${r.language}`),
+    }));
+  }
+
+  /**
+   * What a restarted student app needs: the content of the newest version of each buffer, and the
+   * language each question was last saved as selected.
+   */
+  snapshot(examStudentId: string): AnswerSnapshot {
+    const rows = this.db
+      .prepare(
+        `SELECT v.question_id, v.language, v.content, v.flags, v.client_seq FROM answer_versions v
+           JOIN (SELECT question_id, language, MAX(client_seq) AS client_seq FROM answer_versions
+                   WHERE exam_student_id = ? GROUP BY question_id, language) n
+             ON v.question_id = n.question_id AND v.language = n.language
+            AND v.client_seq = n.client_seq
+          WHERE v.exam_student_id = ?
+          ORDER BY v.client_seq`,
+      )
+      .all(examStudentId, examStudentId) as {
+      question_id: string;
+      language: string;
+      content: string;
+      flags: string | null;
+      client_seq: number;
+    }[];
+    return {
+      buffers: rows.map((r) => ({
+        questionId: r.question_id,
+        language: r.language,
+        content: r.content,
+        flags: r.flags,
+        clientSeq: r.client_seq,
+      })),
+      selected: this.selectedFor(examStudentId),
+    };
+  }
+
+  /** Per question, the language and sequence of the newest version saved as selected. */
+  private selectedFor(
+    examStudentId: string,
+  ): { questionId: string; language: string; clientSeq: number }[] {
+    const rows = this.db
+      .prepare(
+        `SELECT question_id, language, MAX(client_seq) AS client_seq FROM answer_versions
+           WHERE exam_student_id = ? AND selected = 1 GROUP BY question_id`,
+      )
+      .all(examStudentId) as { question_id: string; language: string; client_seq: number }[];
+    return rows.map((r) => ({
+      questionId: r.question_id,
+      language: r.language,
+      clientSeq: r.client_seq,
     }));
   }
 

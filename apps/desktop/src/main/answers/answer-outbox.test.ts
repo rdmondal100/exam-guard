@@ -57,4 +57,28 @@ describe('AnswerOutbox', () => {
     for (const c of ['a', 'b', 'c', 'd']) outbox.add(request(c), 1);
     expect(outbox.unacked().map((s) => s.content)).toEqual(['b', 'c', 'd']);
   });
+
+  it('restores saves from disk, keeps them in order and numbers the next one after them', () => {
+    const seen: AnswerStatus[] = [];
+    const outbox = new AnswerOutbox((st) => seen.push(st));
+    const donor = new AnswerOutbox();
+    const first = donor.add(request('a'), 1);
+    const second = donor.add(request('b'), 2);
+    const third = donor.add(request('c'), 3);
+    outbox.restore([third, first, second]);
+    expect(outbox.unacked().map((x) => x.content)).toEqual(['a', 'b', 'c']);
+    expect(seen.at(-1)?.pending).toBe(3);
+    expect(outbox.add(request('d'), 4).clientSeq).toBe(4);
+  });
+
+  it('tells the owner which save the cap pushed out', () => {
+    const dropped: number[] = [];
+    const outbox = new AnswerOutbox(
+      () => {},
+      2,
+      (save) => dropped.push(save.clientSeq),
+    );
+    for (const c of ['a', 'b', 'c', 'd']) outbox.add(request(c), 1);
+    expect(dropped).toEqual([1, 2]);
+  });
 });

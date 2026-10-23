@@ -57,4 +57,25 @@ describe('answer store', () => {
     expect(state().answers).toEqual({});
     expect(state().languages).toEqual({});
   });
+
+  it('fills the editors, flags and chosen language from a restore', () => {
+    state().restore({
+      buffers: [
+        { questionId: 'q1', language: 'c', content: 'int c;', flags: '-lm' },
+        { questionId: 'q1', language: 'cpp', content: 'int cpp;', flags: '' },
+        { questionId: 'q2', language: ANSWER_TEXT_KEY, content: 'LIFO', flags: '' },
+      ],
+      languages: [
+        { questionId: 'q1', language: 'cpp' },
+        { questionId: 'q2', language: ANSWER_TEXT_KEY },
+        { questionId: 'q3', language: 'cobol' },
+      ],
+    });
+    expect(getAnswer(state().answers, 'q1', 'c')).toBe('int c;');
+    expect(getAnswer(state().answers, 'q1', 'cpp')).toBe('int cpp;');
+    expect(getAnswer(state().answers, 'q2', ANSWER_TEXT_KEY)).toBe('LIFO');
+    expect(state().flags).toEqual({ q1: { c: '-lm' } });
+    // Only languages the app knows are kept; "text" and unknown ones are not a language choice.
+    expect(state().languages).toEqual({ q1: 'cpp' });
+  });
 });

@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { z } from 'zod';
 import {
   AnswerSaveRequestSchema,
+  RestoreResultSchema,
   AnswerStatusSchema,
   AppInfoSchema,
   DiscoveredHostSchema,
@@ -80,6 +81,13 @@ const api: ExamGuardApi = {
   startSession: async () => {
     await ipcRenderer.invoke(IPC.startSession);
   },
+  resumeSession: async () =>
+    JoinResultSchema.nullable().parse(await ipcRenderer.invoke(IPC.resumeSession)),
+  leaveSession: async () => {
+    await ipcRenderer.invoke(IPC.leaveSession);
+  },
+  restoreAnswers: async () =>
+    RestoreResultSchema.parse(await ipcRenderer.invoke(IPC.restoreAnswers)),
   onSessionStatus: (listener) => {
     const handler = (_event: IpcRendererEvent, payload: unknown) => {
       const parsed = SessionStatusSchema.safeParse(payload);

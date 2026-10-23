@@ -1,16 +1,20 @@
 import { useEffect, useState } from 'react';
 import type { SessionState, SessionStatus } from '@examguard/shared';
+import { useRestoreAnswers } from '@/lib/restoreAnswers';
 import { ExamEndedScreen } from './ExamEndedScreen';
 import { ExamScreen } from './ExamScreen';
 import { LobbyScreen } from './LobbyScreen';
+import { RestoringScreen } from './RestoringScreen';
 
 interface Props {
   name: string;
   examTitle: string;
+  /** Forget this exam on this computer and go back to finding one. */
+  onLeave: () => void;
 }
 
 /** Opens the live session and shows the lobby until the exam runs, then the exam. */
-export function SessionScreen({ name, examTitle }: Props) {
+export function SessionScreen({ name, examTitle, onLeave }: Props) {
   const [status, setStatus] = useState<SessionStatus>({ link: 'connecting', offsetMs: null });
   const [exam, setExam] = useState<SessionState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +29,17 @@ export function SessionScreen({ name, examTitle }: Props) {
     };
   }, []);
 
+  const examOpen = exam?.examState === 'running' && !!exam.questions && exam.deadline !== null;
+  const restore = useRestoreAnswers(examOpen);
+
+  if (examOpen && restore.state.name !== 'ready') {
+    return (
+      <RestoringScreen
+        error={restore.state.name === 'failed' ? restore.state.message : null}
+        onRetry={restore.retry}
+      />
+    );
+  }
   if (exam?.examState === 'running' && exam.questions && exam.deadline !== null) {
     return (
       <ExamScreen
@@ -41,5 +56,13 @@ export function SessionScreen({ name, examTitle }: Props) {
   if (exam && ['ended', 'grading', 'in_review', 'finalized'].includes(exam.examState)) {
     return <ExamEndedScreen name={name} examTitle={examTitle} />;
   }
-  return <LobbyScreen name={name} examTitle={examTitle} status={status} error={error} />;
+  return (
+    <LobbyScreen
+      name={name}
+      examTitle={examTitle}
+      status={status}
+      error={error}
+      onLeave={onLeave}
+    />
+  );
 }

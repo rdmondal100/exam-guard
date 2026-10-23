@@ -1,17 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AnswerStatus, SaveReason, StudentQuestion } from '@examguard/shared';
+import type { AnswerStatus, RestoredAnswers, SaveReason, StudentQuestion } from '@examguard/shared';
 import { useAnswerStore } from './answerStore';
 import { AUTOSAVE_MS, Autosaver } from './autosave';
 
 type Questions = readonly Pick<StudentQuestion, 'id' | 'type' | 'allowedLanguages'>[];
 
+/**
+ * What the server was last given, kept for the whole app run (not per screen) so that a restore
+ * after a restart can mark its buffers as already saved.
+ */
+const saver = new Autosaver();
+
+/** Marks restored buffers as saved, so the next tick does not send them again. */
+export function seedAutosaver(restored: RestoredAnswers): void {
+  saver.seed(restored);
+}
+
 /** The running scheduler, so a Run (or a later Submit) can ask for a save from anywhere. */
-let active: { saver: Autosaver; questions: Questions } | null = null;
+let active: { questions: Questions } | null = null;
 
 /** Sends every changed buffer now. Does nothing outside the exam screen. */
 export function saveNow(reason: SaveReason): void {
   if (!active) return;
-  const { saver, questions } = active;
+  const { questions } = active;
   const { answers, flags, languages } = useAnswerStore.getState();
   for (const request of saver.collect({ questions, answers, flags, languages }, reason)) {
     window.examguard.saveAnswer(request).catch(() => saver.forget(request));
@@ -23,9 +34,8 @@ export function saveNow(reason: SaveReason): void {
  * changes question or language (a Run calls `saveNow('run')`).
  */
 export function useAutosave(questions: Questions, selectedId: string): void {
-  const saver = useRef(new Autosaver());
   useEffect(() => {
-    active = { saver: saver.current, questions };
+    active = { questions };
     const tick = setInterval(() => saveNow('interval'), AUTOSAVE_MS);
     const unsubscribe = useAnswerStore.subscribe((state, before) => {
       if (state.languages !== before.languages) saveNow('switch_language');

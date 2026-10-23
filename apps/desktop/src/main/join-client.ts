@@ -6,6 +6,7 @@ import {
   type JoinConfirmResult,
   type JoinResult,
 } from '@examguard/shared';
+import type { StoredSession } from './resume/session-store.js';
 import { PinError, pinnedRequest, type PinnedTarget } from './tls-pin.js';
 
 type ErrorCode = (typeof JOIN_CLIENT_ERROR_CODES)[number];
@@ -33,6 +34,8 @@ interface Session {
   target: PinnedTarget;
   token: string;
   examStudentId: string;
+  name: string;
+  examTitle: string;
 }
 
 type Failure = Extract<JoinResult, { ok: false }>;
@@ -81,6 +84,39 @@ export class JoinClient {
     return this.session?.examStudentId ?? null;
   }
 
+  /** The signed-in session in the form the session file stores, or `null` before a join. */
+  snapshot(): StoredSession | null {
+    const session = this.session;
+    if (!session?.target.expectedFingerprint) return null;
+    return {
+      target: {
+        address: session.target.address,
+        port: session.target.port,
+        expectedFingerprint: session.target.expectedFingerprint,
+      },
+      token: session.token,
+      examStudentId: session.examStudentId,
+      name: session.name,
+      examTitle: session.examTitle,
+    };
+  }
+
+  /** Takes a session read from the session file (a restarted app) instead of joining again. */
+  restore(stored: StoredSession): void {
+    this.session = {
+      target: { ...stored.target },
+      token: stored.token,
+      examStudentId: stored.examStudentId,
+      name: stored.name,
+      examTitle: stored.examTitle,
+    };
+  }
+
+  /** Forgets the session (the student left the exam). */
+  forget(): void {
+    this.session = null;
+  }
+
   async join(attempt: JoinAttempt): Promise<JoinResult> {
     this.session = null;
     const target: PinnedTarget = {
@@ -111,7 +147,7 @@ export class JoinClient {
       const parsed = JoinResponseSchema.safeParse(JSON.parse(response.body) as unknown);
       if (!parsed.success) return failure('bad_response');
       const { examStudentId, name, examTitle } = parsed.data;
-      this.session = { target, token: parsed.data.token, examStudentId };
+      this.session = { target, token: parsed.data.token, examStudentId, name, examTitle };
       return { ok: true, examStudentId, name, examTitle };
     } catch (e) {
       return transportFailure(e);

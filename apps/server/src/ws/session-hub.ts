@@ -18,6 +18,8 @@ export interface SessionHubDeps {
   now?: () => number;
   /** Roster diffs are batched into one push per window. */
   batchMs?: number;
+  /** A student's socket opened (`true`) or closed (`false`); a replaced socket is not a close. */
+  onConnection?: (id: string, connected: boolean) => void;
 }
 
 /**
@@ -44,6 +46,7 @@ export class SessionHub {
     this.conns.set(id, conn);
     if (old) old.close(replacedCode, 'replaced');
     this.deps.students.setConnected(id, true, this.now());
+    this.deps.onConnection?.(id, true);
     this.changed(id);
   }
 
@@ -53,6 +56,7 @@ export class SessionHub {
     if (this.disposed || this.conns.get(id) !== conn) return;
     this.conns.delete(id);
     this.deps.students.setConnected(id, false, this.now());
+    this.deps.onConnection?.(id, false);
     this.changed(id);
   }
 
