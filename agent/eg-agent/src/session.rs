@@ -2,7 +2,9 @@
 //! SYSTEM token (architecture §3: DuplicateTokenEx → TokenSessionId → CreateProcessAsUserW).
 
 use std::os::windows::io::{AsRawHandle, OwnedHandle};
+use std::os::windows::process::CommandExt;
 use std::path::Path;
+use std::process::Command;
 use std::ptr::{null, null_mut};
 
 use windows_sys::Win32::Foundation::{HANDLE, WAIT_OBJECT_0};
@@ -10,10 +12,13 @@ use windows_sys::Win32::Security::{
     DuplicateTokenEx, SecurityIdentification, SetTokenInformation, TokenPrimary, TokenSessionId,
     TOKEN_ALL_ACCESS,
 };
-use windows_sys::Win32::System::RemoteDesktop::{WTSGetActiveConsoleSessionId, WTSQueryUserToken};
+use windows_sys::Win32::System::RemoteDesktop::{
+    ProcessIdToSessionId, WTSGetActiveConsoleSessionId, WTSQueryUserToken,
+};
 use windows_sys::Win32::System::Threading::{
     CreateProcessAsUserW, GetCurrentProcess, GetExitCodeProcess, OpenProcessToken,
-    TerminateProcess, WaitForSingleObject, CREATE_NO_WINDOW, PROCESS_INFORMATION, STARTUPINFOW,
+    TerminateProcess, WaitForSingleObject, CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW,
+    PROCESS_INFORMATION, STARTUPINFOW,
 };
 
 use crate::win::{check, owned, wide};
@@ -37,7 +42,30 @@ pub fn active_user_session() -> Option<u32> {
     Some(session)
 }
 
-/// A process the service started in a user session.
+/// The session this process runs in.
+pub fn current_session() -> Option<u32> {
+    let mut session = 0u32;
+    // SAFETY: valid out pointer.
+    (unsafe { ProcessIdToSessionId(std::process::id(), &mut session) } != 0).then_some(session)
+}
+
+/// Starts `exe args` with our own token in our own session (`--console`). It gets its own process
+/// group, so a Ctrl+C meant for the supervisor does not also end it.
+pub fn launch_same_user(session: u32, exe: &Path, args: &str) -> Result<Child, String> {
+    let child = Command::new(exe)
+        .arg(args)
+        .creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP)
+        .spawn()
+        .map_err(|e| format!("start {}: {e}", exe.display()))?;
+    let pid = child.id();
+    Ok(Child {
+        process: OwnedHandle::from(child),
+        pid,
+        session,
+    })
+}
+
+/// A process the supervisor started in a user session.
 pub struct Child {
     pub process: OwnedHandle,
     pub pid: u32,
