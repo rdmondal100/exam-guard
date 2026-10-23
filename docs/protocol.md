@@ -17,6 +17,7 @@ Each shape here has a Zod schema in `packages/shared/src/protocol/` with the sam
 | GET `/info` | none | → `{ examTitle, protocol, state: 'hosting'|'running', fpCode }` (used after manual IP to show the 4-char code) |
 | POST `/join` | none (rate-limited) | `{ studentCode, pin, deviceId, protocol, agent: AgentStatus }` → `{ token, examStudentId, name, examTitle, state }` or error `bad_pin` (401), `not_on_list` (403), `already_active_elsewhere` (409, also writes a critical `duplicate_login` event), `not_hosting` (503), `agent_required`, `protocol_mismatch` (426), `rate_limited` (429, `details.retryAfterSec`), `invalid_body` (400). The row is created at join (state `not_joined`); the same device joining again gets a new token (the old one stops working). `agent` is accepted but not enforced before M21 |
 | POST `/join/confirm` | Bearer token | `{ noticeAccepted: true }` → `{ ok, state }` (`not_joined` → `lobby`, idempotent; 401 `unauthorized` for an unknown token, 400 `invalid_body` if the notice was not accepted) |
+| GET `/answers/latest` (M17) | Bearer token | → `{ buffers: [{questionId, language, content, flags|null, clientSeq}], selected: [{questionId, language, clientSeq}] }`: the newest stored version of each buffer and, per question, the language of the newest version saved with `selected: true`. A restarted student app uses it to refill the editors. It is HTTP and not part of `welcome` because the client caps a WS frame at 512 KB and one buffer can be 128 K characters. 401 `unauthorized` for an unknown token |
 
 Everything else for students goes over WS.
 
@@ -116,7 +117,9 @@ Teacher actions go over HTTP so they're easy to retry and audit. Their effects a
 ### Flow rules
 - The server pushes events and state through a per-student `serverSeq`. `hello.resume.lastServerSeq` lets the server resend missed commands (messages, lock).
 - The student sends `answer.save` and `event` only after `welcome`. Queued items are flushed in `clientSeq` order.
-- The server drops a student WS with no frame for 15 s and marks them `connected=false`, which raises a `network_lost` event after a 10 s grace period.
+- The server drops a student WS with no frame for 15 s and marks them `connected=false`. A student who stays disconnected for 10 s while the exam is `running` gets a server `network_lost` event (`details.since` = when the socket closed); the next connection gets `network_restored` (`details.since`, `details.downMs`). Whether an outage is open is read from the `events` table, so a server restart in the middle of one still ends it. Hosting stop and the end of the exam raise nothing. (M17)
+- The client also drops a socket that has received nothing for 3 ping periods (15 s) and reconnects, so a pulled cable is noticed without waiting for TCP. (M17)
+- `hello.resume.lastServerSeq` is sent as 0: the server has no per-student `serverSeq` commands yet (lock and messages, later milestones).
 
 ## 4. Agent ⇄ student app (named pipe `\\.\pipe\examguard-agent`)
 Framing: `u32 LE length + UTF-8 JSON`. Each message has `{ t, seq }`. Both sides check the peer's process image path before sending anything (architecture §3).

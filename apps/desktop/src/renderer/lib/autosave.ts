@@ -1,6 +1,7 @@
 import {
   ANSWER_TEXT_KEY,
   type AnswerSaveRequest,
+  type RestoredAnswers,
   type SaveReason,
   type StudentQuestion,
 } from '@examguard/shared';
@@ -69,6 +70,17 @@ export class Autosaver {
       }
     }
     return out;
+  }
+
+  /**
+   * After a restart: the server (or the disk queue, which is re-sent by main) already has these
+   * buffers, so the first tick must not save them all again.
+   */
+  seed(restored: RestoredAnswers): void {
+    for (const b of restored.buffers) {
+      this.last.set(bufferKey(b.questionId, b.language), { content: b.content, flags: b.flags });
+    }
+    for (const l of restored.languages) this.selected.set(l.questionId, l.language);
   }
 
   /** A save was not delivered: send that buffer again at the next chance. */

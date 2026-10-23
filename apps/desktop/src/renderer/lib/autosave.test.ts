@@ -113,4 +113,37 @@ describe('Autosaver', () => {
     );
     expect(saved.map((s) => s.reason)).toEqual(['switch_question', 'switch_question']);
   });
+
+  it('does not save a restored buffer again, but saves it once the student changes it', () => {
+    const saver = new Autosaver();
+    saver.seed({
+      buffers: [
+        { questionId: 'q1', language: 'c', content: 'restored', flags: '-lm' },
+        { questionId: 'q2', language: 'text', content: 'LIFO', flags: '' },
+      ],
+      languages: [
+        { questionId: 'q1', language: 'c' },
+        { questionId: 'q2', language: 'text' },
+      ],
+    });
+    const after = snap({
+      answers: { q1: { c: 'restored' }, q2: { text: 'LIFO' } },
+      flags: { q1: { c: '-lm' } },
+      languages: { q1: 'c' },
+    });
+    expect(saver.collect(after, 'interval')).toEqual([]);
+    const edited = snap({ ...after, answers: { q1: { c: 'restored!' }, q2: { text: 'LIFO' } } });
+    expect(saver.collect(edited, 'interval').map((s) => s.content)).toEqual(['restored!']);
+  });
+
+  it('sends the other language when the student switches after a restore', () => {
+    const saver = new Autosaver();
+    saver.seed({
+      buffers: [{ questionId: 'q1', language: 'c', content: 'in c', flags: '' }],
+      languages: [{ questionId: 'q1', language: 'c' }],
+    });
+    const switched = snap({ answers: { q1: { c: 'in c' } }, languages: { q1: 'cpp' } });
+    const saved = saver.collect(switched, 'switch_language');
+    expect(saved.map((s) => [s.language, s.selected])).toEqual([['cpp', true]]);
+  });
 });

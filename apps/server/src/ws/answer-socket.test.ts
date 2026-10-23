@@ -56,6 +56,7 @@ beforeEach(async () => {
       makePin: () => '004217',
       addresses: () => ['127.0.0.1'],
       advertise: () => () => {},
+      networkGraceMs: 150,
     },
   });
   app = built.app;
@@ -108,6 +109,32 @@ function post(path: string, body: object, token?: string): Promise<{ token?: str
     req.end(payload);
   });
 }
+
+function get(path: string, token?: string): Promise<{ status: number; body: unknown }> {
+  return new Promise((resolve, reject) => {
+    const req = request(
+      {
+        host: '127.0.0.1',
+        port: studentPort,
+        path: `/api/v1${path}`,
+        method: 'GET',
+        rejectUnauthorized: false,
+        headers: token ? { authorization: `Bearer ${token}` } : {},
+      },
+      (res) => {
+        let text = '';
+        res.on('data', (c: Buffer) => (text += c.toString()));
+        res.on('end', () =>
+          resolve({ status: res.statusCode ?? 0, body: JSON.parse(text) as unknown }),
+        );
+      },
+    );
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function joinStudent(code: string): Promise<string> {
   const joined = await post('/join', {
@@ -255,5 +282,61 @@ describe('answer.save over the student socket', () => {
     await a.waitFor(() => acks(a).includes(1));
     await b.waitFor(() => acks(b).includes(1));
     expect(db.prepare('SELECT COUNT(*) AS n FROM answer_versions').get()).toEqual({ n: 2 });
+  });
+});
+
+describe('resuming after a restart', () => {
+  it('returns the newest content, flags and selected language for the token holder only', async () => {
+    const token = await joinStudent('1');
+    const c = await connect(token);
+    c.ws.send(JSON.stringify(save(1, { language: 'c', content: 'int c;', flags: '-lm' })));
+    c.ws.send(JSON.stringify(save(2, { language: 'cpp', content: 'int cpp;' })));
+    c.ws.send(JSON.stringify(save(3, { language: 'c', content: 'int c2;', selected: false })));
+    await c.waitFor(() => acks(c).length === 3);
+
+    const other = await joinStudent('2');
+    expect(await get('/answers/latest', other)).toEqual({
+      status: 200,
+      body: { buffers: [], selected: [] },
+    });
+
+    const { status, body } = await get('/answers/latest', token);
+    expect(status).toBe(200);
+    const snapshot = body as { buffers: object[]; selected: object[] };
+    expect(snapshot.buffers).toEqual(
+      expect.arrayContaining([
+        { questionId: codeId, language: 'c', content: 'int c2;', flags: null, clientSeq: 3 },
+        { questionId: codeId, language: 'cpp', content: 'int cpp;', flags: null, clientSeq: 2 },
+      ]),
+    );
+    expect(snapshot.selected).toEqual([{ questionId: codeId, language: 'cpp', clientSeq: 2 }]);
+  });
+
+  it('refuses a missing or wrong token', async () => {
+    expect((await get('/answers/latest')).status).toBe(401);
+    expect((await get('/answers/latest', 'nope')).status).toBe(401);
+  });
+
+  it('records network_lost after the grace period and network_restored on reconnect', async () => {
+    const token = await joinStudent('1');
+    const first = await connect(token);
+    first.ws.terminate();
+    await sleep(500);
+    const types = () =>
+      (db.prepare('SELECT type FROM events ORDER BY id').all() as { type: string }[]).map(
+        (r) => r.type,
+      );
+    expect(types()).toEqual(['network_lost']);
+    await connect(token);
+    expect(types()).toEqual(['network_lost', 'network_restored']);
+  });
+
+  it('records nothing when the student is back within the grace period', async () => {
+    const token = await joinStudent('1');
+    const first = await connect(token);
+    first.ws.terminate();
+    await connect(token);
+    await sleep(400);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM events').get()).toEqual({ n: 0 });
   });
 });

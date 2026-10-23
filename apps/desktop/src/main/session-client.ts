@@ -5,6 +5,7 @@ import {
   STUDENT_PING_MS,
   ServerToStudentSchema,
   WS_CLOSE,
+  type AnswerSave,
   type AnswerSaveRequest,
   type AnswerStatus,
   type AppEventType,
@@ -14,11 +15,12 @@ import {
   type TranscriptChunk,
 } from '@examguard/shared';
 
-/** Unacked events kept in memory; the oldest are dropped past this. The disk queue is M17. */
+/** Unacked events kept in memory; the oldest are dropped past this. */
 export const MAX_PENDING_EVENTS = 500;
 /** Unacked transcript chunks kept in memory (16 KB each at most). */
 export const MAX_PENDING_TRANSCRIPT = 128;
-import { AnswerOutbox } from './answers/answer-outbox.js';
+import { AnswerOutbox, MAX_PENDING_SAVES } from './answers/answer-outbox.js';
+import { queueKey, type OfflineQueue } from './resume/offline-queue.js';
 import { PinError, connectPinned, type PinnedTarget } from './tls-pin.js';
 
 /** 0.5 s → 5 s doubling, with jitter so 200 students do not reconnect in step. */
@@ -67,19 +69,33 @@ export class SessionClient {
 
   /** Autosaves waiting for `answer.ack`, and the counter that numbers them. */
   private readonly answers: AnswerOutbox;
+  /** Everything unacked is mirrored here, so a restart does not lose it. */
+  private queue: OfflineQueue | null = null;
+  private watchTimer: NodeJS.Timeout | null = null;
+  private lastReceived = 0;
 
   constructor(private readonly deps: SessionClientDeps) {
-    this.answers = new AnswerOutbox((status) => deps.onAnswers?.(status));
+    this.answers = new AnswerOutbox(
+      (status) => deps.onAnswers?.(status),
+      MAX_PENDING_SAVES,
+      (dropped) => this.queue?.remove(queueKey(dropped)),
+    );
   }
 
   /** Saves one answer buffer. It is re-sent after every reconnect until the server acks it. */
   sendAnswer(request: AnswerSaveRequest): void {
     const save = this.answers.add(request, Date.now() + (this.offsetMs ?? 0));
+    this.queue?.add(save);
     if (this.welcomed) this.sendFrame(this.welcomed, save);
   }
 
   get answerStatus(): AnswerStatus {
     return this.answers.status();
+  }
+
+  /** The saves the server has not acked yet, oldest first. */
+  unackedSaves(): AnswerSave[] {
+    return this.answers.unacked();
   }
 
   /** The latest exam state, or `null` before the first welcome. */
@@ -99,9 +115,13 @@ export class SessionClient {
       details,
     };
     this.pending.set(id, event);
+    this.queue?.add(event);
     if (this.pending.size > MAX_PENDING_EVENTS) {
       const oldest = this.pending.keys().next().value;
-      if (oldest !== undefined) this.pending.delete(oldest);
+      if (oldest !== undefined) {
+        this.pending.delete(oldest);
+        this.queue?.remove(`e${oldest}`);
+      }
     }
     if (this.welcomed) this.sendFrame(this.welcomed, event);
   }
@@ -110,9 +130,13 @@ export class SessionClient {
   sendTranscript(key: string, text: string): void {
     const chunk: TranscriptChunk = { t: 'transcript', key, clientTs: Date.now(), text };
     this.pendingTranscript.set(key, chunk);
+    this.queue?.add(chunk);
     if (this.pendingTranscript.size > MAX_PENDING_TRANSCRIPT) {
       const oldest = this.pendingTranscript.keys().next().value;
-      if (oldest !== undefined) this.pendingTranscript.delete(oldest);
+      if (oldest !== undefined) {
+        this.pendingTranscript.delete(oldest);
+        this.queue?.remove(`c${oldest}`);
+      }
     }
     if (this.welcomed) this.sendFrame(this.welcomed, chunk);
   }
@@ -121,9 +145,14 @@ export class SessionClient {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(frame));
   }
 
-  /** Starts (or restarts) the session. The token never leaves main. */
-  start(target: PinnedTarget, token: string): void {
+  /**
+   * Starts (or restarts) the session. The token never leaves main. With a `queue`, what an earlier
+   * run left unacked is loaded and sent after the first welcome, and new frames are kept in it.
+   */
+  start(target: PinnedTarget, token: string, queue?: OfflineQueue): void {
     this.stop();
+    this.queue = queue ?? null;
+    if (queue) this.load(queue);
     this.target = target;
     this.token = token;
     this.attempt = 0;
@@ -132,6 +161,16 @@ export class SessionClient {
     this.exam = null;
     this.emit('connecting');
     void this.connect(this.generation);
+  }
+
+  private load(queue: OfflineQueue): void {
+    const saves: AnswerSave[] = [];
+    for (const item of queue.load()) {
+      if (item.t === 'answer.save') saves.push(item);
+      else if (item.t === 'event') this.pending.set(item.id, item);
+      else this.pendingTranscript.set(item.key, item);
+    }
+    this.answers.restore(saves);
   }
 
   stop(): void {
@@ -155,6 +194,8 @@ export class SessionClient {
 
   private clearTimers(): void {
     if (this.pingTimer) clearInterval(this.pingTimer);
+    if (this.watchTimer) clearInterval(this.watchTimer);
+    this.watchTimer = null;
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.pingTimer = null;
     this.retryTimer = null;
@@ -184,6 +225,8 @@ export class SessionClient {
     });
     this.socket = ws;
     ws.on('open', () => {
+      this.lastReceived = Date.now();
+      this.watchTimer = setInterval(() => this.watch(ws), this.pingMs);
       ws.send(
         JSON.stringify({
           t: 'hello',
@@ -200,6 +243,7 @@ export class SessionClient {
 
   private onMessage(ws: WebSocket, raw: string, generation: number): void {
     if (generation !== this.generation) return;
+    this.lastReceived = Date.now();
     let parsed;
     try {
       parsed = ServerToStudentSchema.safeParse(JSON.parse(raw));
@@ -213,7 +257,7 @@ export class SessionClient {
       this.exam = message.state;
       this.deps.onExam?.(message.state);
       this.emit('connected');
-      this.pingTimer = setInterval(() => this.ping(ws), this.deps.pingMs ?? STUDENT_PING_MS);
+      this.pingTimer = setInterval(() => this.ping(ws), this.pingMs);
       this.ping(ws);
       this.welcomed = ws;
       this.answers.continueAfter(message.state.saved);
@@ -222,10 +266,13 @@ export class SessionClient {
       for (const chunk of this.pendingTranscript.values()) this.sendFrame(ws, chunk);
     } else if (message.t === 'event.ack') {
       this.pending.delete(message.id);
+      this.queue?.remove(`e${message.id}`);
     } else if (message.t === 'answer.ack') {
       this.answers.ack(message.clientSeq, Date.now());
+      this.queue?.remove(`s${message.clientSeq}`);
     } else if (message.t === 'transcript.ack') {
       this.pendingTranscript.delete(message.key);
+      this.queue?.remove(`c${message.key}`);
     } else if (message.t === 'state') {
       if (!this.exam) return;
       this.exam = { ...this.exam, ...message.state };
@@ -240,6 +287,15 @@ export class SessionClient {
         this.emit('connected');
       }
     }
+  }
+
+  private get pingMs(): number {
+    return this.deps.pingMs ?? STUDENT_PING_MS;
+  }
+
+  /** A socket that stays silent for three ping periods is dead (a pulled cable): drop it and retry. */
+  private watch(ws: WebSocket): void {
+    if (Date.now() - this.lastReceived > 3 * this.pingMs) ws.terminate();
   }
 
   private ping(ws: WebSocket): void {

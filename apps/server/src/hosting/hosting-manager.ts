@@ -26,6 +26,7 @@ import { loadOrCreateCert } from '../tls/cert.js';
 import { lanAddresses } from '../tls/lan-addresses.js';
 import { advertiseOverMdns, type Advertise } from './mdns-advertiser.js';
 import type { SessionHub } from '../ws/session-hub.js';
+import type { ConnectionEvents } from './connection-events.js';
 import { generatePin } from './pin.js';
 import { HostingError } from './hosting-error.js';
 import { TerminalSwitch } from './terminal-switch.js';
@@ -47,6 +48,8 @@ export interface HostingManagerDeps {
   examFiles: ExamFileService;
   /** Live student sockets and teacher subscribers. */
   hub: SessionHub;
+  /** Raises `network_lost` / `network_restored`; the hub feeds it. Cleared when hosting stops. */
+  connections?: ConnectionEvents;
   dataDir: string;
   /** Tests use 0 (any free port) and 127.0.0.1. */
   port?: number;
@@ -257,6 +260,8 @@ export class HostingManager {
     this.deps.hub.closeAll(WS_CLOSE.notHosting, 'not_hosting');
     await active.app.close();
     this.deps.students.resetConnections();
+    // The sockets closed because we stopped, not because a student lost the network.
+    this.deps.connections?.reset();
     this.deps.onActive?.(false);
   }
 
@@ -276,6 +281,7 @@ export class HostingManager {
       cert,
       join,
       files: { exams: this.deps.exams, students: this.deps.students, files: this.deps.examFiles },
+      answers: { students: this.deps.students, answers: this.deps.answers },
       current: () => {
         const exam = this.deps.exams.get(examId);
         if (!exam) return null;

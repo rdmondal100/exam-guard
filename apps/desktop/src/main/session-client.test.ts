@@ -2,8 +2,13 @@ import { X509Certificate } from 'node:crypto';
 import { createServer, type Server } from 'node:https';
 import { generate } from 'selfsigned';
 import { WebSocketServer, type WebSocket as ServerSocket } from 'ws';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { SessionStatus } from '@examguard/shared';
+import { OfflineQueue } from './resume/offline-queue.js';
+import type { SecretBox } from './resume/secret-box.js';
 import { SessionClient, reconnectDelay } from './session-client.js';
 import { fingerprintOfDer } from './tls-pin.js';
 
@@ -17,6 +22,7 @@ let skew: number;
 let welcomeWith: 'welcome' | { closeCode: number };
 let ackEvents: boolean;
 let welcomeSaved: unknown[];
+let mute: boolean;
 
 beforeAll(async () => {
   const pems = await generate([{ name: 'commonName', value: 'ExamGuard' }], {
@@ -38,6 +44,7 @@ beforeAll(async () => {
         clientSeq?: number;
       };
       frames.push(message);
+      if (mute && message.t !== 'hello') return;
       if (message.t === 'hello') {
         if (welcomeWith !== 'welcome') return socket.close(welcomeWith.closeCode, 'no');
         socket.send(
@@ -97,6 +104,7 @@ beforeEach(() => {
   welcomeWith = 'welcome';
   ackEvents = true;
   welcomeSaved = [];
+  mute = false;
   statuses = [];
   client = new SessionClient({
     onStatus: (s) => statuses.push(s),
@@ -353,5 +361,122 @@ describe('SessionClient answers', () => {
     client.sendAnswer(request('after restart'));
     await until(() => saves().length === 1);
     expect(saves()[0]?.clientSeq).toBe(8);
+  });
+});
+
+describe('SessionClient watchdog', () => {
+  it('drops a socket that goes silent (a pulled cable) and connects again', async () => {
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    mute = true;
+    await until(() => links().includes('reconnecting'));
+    await until(() => frames.filter((f) => (f as { t: string }).t === 'hello').length === 2);
+    await until(() => links().lastIndexOf('connected') > links().indexOf('reconnecting'));
+  });
+});
+
+describe('SessionClient offline queue', () => {
+  const box: SecretBox = {
+    encrypt: (text) => Buffer.from(text).toString('base64'),
+    decrypt: (text) => Buffer.from(text, 'base64').toString('utf8'),
+  };
+  let dir: string;
+  let file: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'eg-sq-'));
+    file = join(dir, 'q.jsonl');
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  const queue = () => new OfflineQueue(file, box, () => {});
+  const request = (content: string) => ({
+    questionId: 'q1',
+    language: 'c',
+    content,
+    selected: true,
+    reason: 'interval' as const,
+  });
+  const saves = () =>
+    (frames as { t: string; clientSeq: number; content: string }[]).filter(
+      (f) => f.t === 'answer.save',
+    );
+
+  it('keeps a save on disk until the server acks it', async () => {
+    ackEvents = false;
+    client.start(target(), TOKEN, queue());
+    await until(() => links().includes('connected'));
+    client.sendAnswer(request('typed offline'));
+    expect(
+      queue()
+        .load()
+        .map((i) => (i.t === 'answer.save' ? i.content : i.t)),
+    ).toEqual(['typed offline']);
+    ackEvents = true;
+    for (const c of clients) c.terminate(); // the reconnect re-sends it, and this time it is acked
+    await until(() => client.answerStatus.pending === 0);
+    expect(queue().load()).toEqual([]);
+  });
+
+  it('sends what an earlier run left, once connected, and numbers the next save after it', async () => {
+    const earlier = queue();
+    earlier.add({
+      t: 'answer.save',
+      id: 'old',
+      clientSeq: 7,
+      clientTs: 1,
+      ...request('from before the restart'),
+    });
+    earlier.add({
+      t: 'event',
+      id: 'ev-old',
+      dedupeKey: 'ev-old',
+      clientTs: 2,
+      type: 'run_executed',
+      details: {},
+    });
+    earlier.add({ t: 'transcript', key: 's:old', clientTs: 3, text: 'dir' });
+
+    client.start(target(), TOKEN, queue());
+    await until(() => saves().length === 1);
+    expect(saves()[0]).toMatchObject({ clientSeq: 7, content: 'from before the restart' });
+    await until(() => frames.some((f) => (f as { t: string }).t === 'event'));
+    await until(() => frames.some((f) => (f as { t: string }).t === 'transcript'));
+    await until(() => queue().load().length === 0);
+
+    client.sendAnswer(request('after'));
+    await until(() => saves().length === 2);
+    expect(saves()[1]?.clientSeq).toBe(8);
+  });
+
+  it('survives the client being replaced while the server was not acking', async () => {
+    ackEvents = false;
+    client.start(target(), TOKEN, queue());
+    await until(() => links().includes('connected'));
+    client.sendAnswer(request('unacked'));
+    client.sendEvent('run_executed', { n: 1 });
+    client.stop();
+
+    ackEvents = true;
+    const next = new SessionClient({ onStatus: () => {}, pingMs: 50, random: () => 0 });
+    next.start(target(), TOKEN, queue());
+    await until(() => saves().filter((s) => s.content === 'unacked').length === 2);
+    await until(() => next.answerStatus.pending === 0);
+    next.stop();
+    expect(
+      queue()
+        .load()
+        .filter((i) => i.t === 'answer.save'),
+    ).toEqual([]);
+  });
+
+  it('forgets a save the cap pushes out', async () => {
+    ackEvents = false;
+    const q = queue();
+    client.start(target(), TOKEN, q);
+    await until(() => links().includes('connected'));
+    for (let i = 0; i < 502; i++) client.sendAnswer(request(`v${i}`));
+    const kept = queue().load();
+    expect(kept).toHaveLength(500);
+    expect(kept[0]).toMatchObject({ clientSeq: 3 });
   });
 });

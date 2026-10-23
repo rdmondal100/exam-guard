@@ -250,8 +250,8 @@ logs/main.log, server.log        rotated, 5 × 5 MB
 ## Student PC local storage
 ```
 %APPDATA%\ExamGuard\                   (Electron userData, student user)
-  queue/<examId>.jsonl                 encrypted (safeStorage) pending saves/events
-  session/<examId>.json                encrypted: token, server addr, pinned fp, selected languages, buffers
+  queue/<examStudentId>.jsonl          pending `answer.save` / `event` / `transcript` frames the server has not acked (M17). One safeStorage-encrypted line per frame, plus a plain `-<key>` line when it is acked; the file is deleted when empty and compacted when acked lines pile up. Named after the student row because main does not know the exam id; a re-join finds the same file
+  session/session.enc                  encrypted (safeStorage): token, server address and port, pinned fingerprint, examStudentId, name, exam title (M17). Written when the student accepts the notice; removed on `unauthorized`, when the exam ends and on Leave. The editors' content is not stored here: it comes from the server (`GET /answers/latest`) plus the queue
 %LOCALAPPDATA%\ExamGuard\run\<examStudentId>\
   <questionId>\<lang>\                 code-run folder (wiped per run and at exam end)
   workspace\                           project folder: cwd of the terminal and of Run, the Files panel's root; node_modules, site-packages, .msys\ (pacman root); kept between runs

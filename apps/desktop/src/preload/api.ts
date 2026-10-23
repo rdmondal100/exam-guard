@@ -1,5 +1,6 @@
 import type {
   AnswerSaveRequest,
+  RestoreResult,
   AnswerStatus,
   AppInfo,
   AppMode,
@@ -52,6 +53,12 @@ export interface ExamGuardApi {
   confirmJoin(): Promise<JoinConfirmResult>;
   /** Student mode: open the live session socket after the notice. Status arrives below. */
   startSession(): Promise<void>;
+  /** A session left by an earlier run of this app, or `null`: rejoin without the PIN. */
+  resumeSession(): Promise<JoinResult | null>;
+  /** Forget the stored session (the student leaves the exam). Unsent work stays queued. */
+  leaveSession(): Promise<void>;
+  /** The editors' content after a restart: the server's versions plus unsent local saves. */
+  restoreAnswers(): Promise<RestoreResult>;
   /** Returns an unsubscribe function. */
   onSessionStatus(listener: (status: SessionStatus) => void): () => void;
   /** Exam state (state, deadline, questions) after each welcome and push. Returns an unsubscribe. */

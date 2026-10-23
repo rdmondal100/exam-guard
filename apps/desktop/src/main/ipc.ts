@@ -1,4 +1,4 @@
-import { BrowserWindow, app, ipcMain } from 'electron';
+import { BrowserWindow, app, ipcMain, safeStorage } from 'electron';
 import {
   JoinAttemptSchema,
   ProbeRequestSchema,
@@ -20,6 +20,8 @@ import { resolveMode, saveStoredMode } from './mode-store.js';
 import { registerExamFilesIpc } from './exam-files/exam-files-ipc.js';
 import { registerFilesIpc } from './files/files-ipc.js';
 import { registerAnswersIpc } from './answers/answers-ipc.js';
+import { registerResumeIpc, type ResumeHooks } from './resume/resume-ipc.js';
+import { createSecretBox } from './resume/secret-box.js';
 import { registerRunnerIpc } from './runner/runner-ipc.js';
 import type { ServerHost } from './server-host.js';
 import { registerTerminalIpc } from './terminal/terminal-ipc.js';
@@ -70,9 +72,12 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     requireStudent();
     return joinClient.join(JoinAttemptSchema.parse(payload));
   });
-  ipcMain.handle(IPC.confirmJoin, () => {
+  const resume: { hooks?: ResumeHooks } = {};
+  ipcMain.handle(IPC.confirmJoin, async () => {
     requireStudent();
-    return joinClient.confirm();
+    const result = await joinClient.confirm();
+    if (result.ok) resume.hooks?.afterConfirm();
+    return result;
   });
 
   const onExamFiles = registerExamFilesIpc({
@@ -85,6 +90,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     onStatus: (status) => {
       for (const win of BrowserWindow.getAllWindows())
         win.webContents.send(IPC.sessionStatus, status);
+      resume.hooks?.onStatus(status);
     },
     onAnswers: (status) => {
       for (const win of BrowserWindow.getAllWindows())
@@ -94,10 +100,18 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
       examLock.setActive(exam.examState === 'running');
       onTerminalExam(exam);
       onExamFiles(exam);
+      resume.hooks?.onExam(exam);
       for (const win of BrowserWindow.getAllWindows()) win.webContents.send(IPC.sessionExam, exam);
     },
   });
   registerAnswersIpc({ session, requireStudent });
+  resume.hooks = registerResumeIpc({
+    userData: state.userData,
+    box: createSecretBox(safeStorage),
+    session,
+    join: joinClient,
+    requireStudent,
+  });
   registerRunnerIpc({
     session,
     examStudentId: () => joinClient.examStudentId(),
@@ -118,7 +132,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     requireStudent();
     const credentials = joinClient.credentials();
     if (!credentials) throw new Error('Join an exam first');
-    session.start(credentials.target, credentials.token);
+    session.start(credentials.target, credentials.token, resume.hooks?.queue());
   });
 
   ipcMain.handle(IPC.setMode, async (_event, payload: unknown) => {

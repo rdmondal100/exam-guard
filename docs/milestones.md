@@ -156,6 +156,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** student `queue/` (encrypted JSONL), reconnect with backoff, `hello.resume`, session file, restore of buffers and the selected language, server-side `network_lost/restored` events.
 - **Accept:** unplugging the laptop's network for 60 s while typing, then reconnecting → every edit arrives. Killing the student app and relaunching → resumes into the exam on the same PC.
 - **Manual test:** do exactly the above on the laptop, then compare the final version with what was on screen.
+- **Built (2026-10-23):** `main/resume/` (`offline-queue`, `session-store`, `secret-box`, `restore-merge`, `restore-answers`, `resume-ipc`), `GET /answers/latest`, `ConnectionEvents` (server `network_lost` / `network_restored`), a socket watchdog, `StudentFlow` resume step, `RestoringScreen`, Leave button in the lobby. `hello.resume.lastServerSeq` stays 0 (no `serverSeq` commands yet). Manual steps are in progress.md.
 
 ### M18 Submit, auto-submit, receipt, student-sim v2 — **Phase 3 demo**
 - **Goal:** final submission with a hash + receipt, auto-submit at the deadline with grace.

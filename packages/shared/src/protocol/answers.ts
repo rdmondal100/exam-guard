@@ -76,3 +76,52 @@ export const AnswerStatusSchema = z.object({
   lastAckAt: z.number().nullable(),
 });
 export type AnswerStatus = z.infer<typeof AnswerStatusSchema>;
+
+// ---- resume after a restart ----
+
+/** The newest stored version of one buffer, with its content. */
+export const SnapshotBufferSchema = z.object({
+  questionId: z.string(),
+  language: z.string(),
+  content: z.string(),
+  flags: z.string().nullable(),
+  clientSeq: z.number().int(),
+});
+export type SnapshotBuffer = z.infer<typeof SnapshotBufferSchema>;
+
+/** The language a question was last saved as selected, and the `clientSeq` of that save. */
+export const SnapshotSelectedSchema = z.object({
+  questionId: z.string(),
+  language: z.string(),
+  clientSeq: z.number().int(),
+});
+export type SnapshotSelected = z.infer<typeof SnapshotSelectedSchema>;
+
+/** `GET /api/v1/answers/latest` (student token): what the server holds for this student. */
+export const AnswerSnapshotSchema = z.object({
+  buffers: z.array(SnapshotBufferSchema),
+  selected: z.array(SnapshotSelectedSchema),
+});
+export type AnswerSnapshot = z.infer<typeof AnswerSnapshotSchema>;
+
+/** What main hands the renderer to refill its editors: server snapshot plus unacked local saves. */
+export const RestoredAnswersSchema = z.object({
+  buffers: z.array(
+    z.object({
+      questionId: z.string(),
+      language: z.string(),
+      content: z.string(),
+      flags: z.string(),
+    }),
+  ),
+  /** The language to show per code question. */
+  languages: z.array(z.object({ questionId: z.string(), language: z.string() })),
+});
+export type RestoredAnswers = z.infer<typeof RestoredAnswersSchema>;
+
+/** `answers:restore`: either the data, or a message to show with a Retry button. */
+export const RestoreResultSchema = z.discriminatedUnion('ok', [
+  z.object({ ok: z.literal(true), answers: RestoredAnswersSchema }),
+  z.object({ ok: z.literal(false), message: z.string() }),
+]);
+export type RestoreResult = z.infer<typeof RestoreResultSchema>;

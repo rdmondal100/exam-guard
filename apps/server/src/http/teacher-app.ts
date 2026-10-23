@@ -15,6 +15,7 @@ import { ExamRepo } from '../db/exam-repo.js';
 import { ExamStudentRepo } from '../db/exam-student-repo.js';
 import { ExamFileService } from '../exam-files/exam-file-service.js';
 import { ExamFileStore } from '../exam-files/exam-file-store.js';
+import { ConnectionEvents } from '../hosting/connection-events.js';
 import { HostingManager, type HostingManagerDeps } from '../hosting/hosting-manager.js';
 import { QuestionRepo } from '../db/question-repo.js';
 import { TeacherActionRepo } from '../db/teacher-action-repo.js';
@@ -55,7 +56,11 @@ export interface TeacherAppOptions {
     | 'actions'
     | 'examFiles'
     | 'hub'
-  >;
+    | 'connections'
+  > & {
+    /** How long a student may be offline before `network_lost`; tests shorten it. */
+    networkGraceMs?: number;
+  };
 }
 
 export interface TeacherApp {
@@ -157,8 +162,21 @@ export function buildTeacherApp({
 
   let hosting: HostingManager | undefined;
   if (hostingOptions && examFiles) {
-    const hub = new SessionHub({ students, now });
+    const { networkGraceMs, ...managerOptions } = hostingOptions;
+    const connections = new ConnectionEvents({
+      students,
+      exams,
+      events,
+      now,
+      ...(networkGraceMs === undefined ? {} : { graceMs: networkGraceMs }),
+    });
+    const hub = new SessionHub({
+      students,
+      now,
+      onConnection: (id, connected) => connections.onConnection(id, connected),
+    });
     hosting = new HostingManager({
+      connections,
       exams,
       questions,
       students,
@@ -176,7 +194,7 @@ export function buildTeacherApp({
       examFiles,
       hub,
       now,
-      ...hostingOptions,
+      ...managerOptions,
     });
     registerHostingRoutes(app, { hosting, requireLogin: state.requireLogin });
     registerRosterRoutes(app, { exams, students, requireLogin: state.requireLogin });
@@ -194,6 +212,7 @@ export function buildTeacherApp({
     const manager = hosting;
     app.addHook('onClose', async () => {
       await manager.close();
+      connections.reset();
       hub.dispose();
     });
   }

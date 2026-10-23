@@ -39,6 +39,19 @@ export class EventRepo {
     return result.changes > 0;
   }
 
+  /** The newest event of one student among the given types, or `undefined`. */
+  lastOfTypes(examStudentId: string, types: readonly string[]): TerminalLogEvent | undefined {
+    if (types.length === 0) return undefined;
+    const row = this.db
+      .prepare(
+        `SELECT id, type, server_ts, client_ts, details_json FROM events
+           WHERE exam_student_id = ? AND type IN (${types.map(() => '?').join(', ')})
+           ORDER BY server_ts DESC, id DESC LIMIT 1`,
+      )
+      .get(examStudentId, ...types) as EventRow | undefined;
+    return row && toLogEvent(row);
+  }
+
   /** One student's events of the given types, oldest first. */
   listForStudent(examStudentId: string, types: readonly string[]): TerminalLogEvent[] {
     if (types.length === 0) return [];
@@ -48,19 +61,23 @@ export class EventRepo {
            WHERE exam_student_id = ? AND type IN (${types.map(() => '?').join(', ')})
            ORDER BY server_ts, id`,
       )
-      .all(examStudentId, ...types) as {
-      id: number;
-      type: string;
-      server_ts: number;
-      client_ts: number | null;
-      details_json: string;
-    }[];
-    return rows.map((r) => ({
-      id: r.id,
-      type: r.type,
-      serverTs: r.server_ts,
-      clientTs: r.client_ts,
-      details: JSON.parse(r.details_json) as Record<string, unknown>,
-    }));
+      .all(examStudentId, ...types) as EventRow[];
+    return rows.map(toLogEvent);
   }
 }
+
+interface EventRow {
+  id: number;
+  type: string;
+  server_ts: number;
+  client_ts: number | null;
+  details_json: string;
+}
+
+const toLogEvent = (r: EventRow): TerminalLogEvent => ({
+  id: r.id,
+  type: r.type,
+  serverTs: r.server_ts,
+  clientTs: r.client_ts,
+  details: JSON.parse(r.details_json) as Record<string, unknown>,
+});
