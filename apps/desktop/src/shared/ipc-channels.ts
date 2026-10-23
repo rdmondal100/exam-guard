@@ -41,4 +41,9 @@ export const IPC = {
   closeTerminal: 'terminal:close',
   terminalData: 'terminal:data',
   terminalExit: 'terminal:exit',
+  agentStatus: 'agent:status',
+  agentInstall: 'agent:install',
+  agentUninstall: 'agent:uninstall',
+  agentReport: 'agent:report',
+  agentOpenShots: 'agent:open-shots',
 } as const;

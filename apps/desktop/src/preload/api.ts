@@ -1,4 +1,7 @@
 import type {
+  AgentChangeResult,
+  AgentReport,
+  AgentServiceStatus,
   AnswerSaveRequest,
   RestoreResult,
   AnswerStatus,
@@ -108,4 +111,14 @@ export interface ExamGuardApi {
   onTerminalData(listener: (data: string) => void): () => void;
   /** The shell ended or was closed. Returns an unsubscribe function. */
   onTerminalExit(listener: (exit: TerminalExit) => void): () => void;
+  /** Student mode: is the monitoring agent service running. */
+  agentStatus(): Promise<AgentServiceStatus>;
+  /** Sets the agent service up (one UAC prompt) and starts it. */
+  installAgent(): Promise<AgentChangeResult>;
+  /** Dev builds only: removes the agent service again (one UAC prompt). */
+  uninstallAgent(): Promise<AgentChangeResult>;
+  /** The agent's latest foreground and screenshot log lines. */
+  agentReport(): Promise<AgentReport>;
+  /** Opens the folder with the agent's screenshots and logs. */
+  openAgentFolder(): Promise<void>;
 }

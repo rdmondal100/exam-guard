@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { z } from 'zod';
 import {
+  AgentChangeResultSchema,
+  AgentReportSchema,
+  AgentServiceStatusSchema,
   AnswerSaveRequestSchema,
   RestoreResultSchema,
   AnswerStatusSchema,
@@ -195,6 +198,16 @@ const api: ExamGuardApi = {
     };
     ipcRenderer.on(IPC.terminalExit, handler);
     return () => ipcRenderer.removeListener(IPC.terminalExit, handler);
+  },
+  agentStatus: async () =>
+    AgentServiceStatusSchema.parse(await ipcRenderer.invoke(IPC.agentStatus)),
+  installAgent: async () =>
+    AgentChangeResultSchema.parse(await ipcRenderer.invoke(IPC.agentInstall)),
+  uninstallAgent: async () =>
+    AgentChangeResultSchema.parse(await ipcRenderer.invoke(IPC.agentUninstall)),
+  agentReport: async () => AgentReportSchema.parse(await ipcRenderer.invoke(IPC.agentReport)),
+  openAgentFolder: async () => {
+    await ipcRenderer.invoke(IPC.agentOpenShots);
   },
 };
 
