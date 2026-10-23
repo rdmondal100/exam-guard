@@ -30,8 +30,12 @@ function main(): void {
   const run = runSim(options, codes);
   const report = () => {
     const c = run.counts();
+    const s = run.saves();
+    const saves = options.autosaveMs
+      ? ` · saves sent ${s.sent} acked ${s.acked} waiting ${s.pending}`
+      : '';
     console.log(
-      `connected ${c.connected}/${c.total} · joining ${c.joining} · reconnecting ${c.connecting} · failed ${c.failed}`,
+      `connected ${c.connected}/${c.total} · joining ${c.joining} · reconnecting ${c.connecting} · failed ${c.failed}${saves}`,
     );
   };
   const timer = setInterval(report, 5000);
@@ -41,6 +45,7 @@ function main(): void {
   });
   const quit = () => {
     clearInterval(timer);
+    report();
     run.stop();
     console.log('Stopped.');
     process.exit(0);

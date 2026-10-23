@@ -162,3 +162,37 @@ describe('events', () => {
     expect(StudentMessageSchema.safeParse(message).success).toBe(false);
   });
 });
+
+describe('answer saves', () => {
+  const save = {
+    t: 'answer.save',
+    id: 'a1',
+    clientSeq: 1,
+    clientTs: 5,
+    questionId: 'q1',
+    language: 'c',
+    content: 'int main(){}',
+    selected: true,
+    reason: 'interval',
+  };
+
+  it('accepts a save with or without flags, and its ack', () => {
+    expect(StudentMessageSchema.safeParse(save).success).toBe(true);
+    expect(StudentMessageSchema.safeParse({ ...save, flags: '-lm' }).success).toBe(true);
+    expect(
+      ServerToStudentSchema.safeParse({ t: 'answer.ack', id: 'a1', clientSeq: 1 }).success,
+    ).toBe(true);
+  });
+
+  it.each([
+    { ...save, clientSeq: 0 },
+    { ...save, clientSeq: 1.5 },
+    { ...save, reason: 'whenever' },
+    { ...save, content: 'x'.repeat(128 * 1024 + 1) },
+    { ...save, flags: 'x'.repeat(501) },
+    { ...save, selected: 'yes' },
+    { ...save, language: '' },
+  ])('rejects %j', (message) => {
+    expect(StudentMessageSchema.safeParse(message).success).toBe(false);
+  });
+});

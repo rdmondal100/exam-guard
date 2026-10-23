@@ -1,4 +1,5 @@
 import type { SimOptions } from './args.js';
+import type { SaveStats } from './sim-saves.js';
 import { SimStudent, type SimState } from './sim-student.js';
 
 export interface SimCounts {
@@ -15,11 +16,14 @@ export interface SimRun {
   settled(): Promise<void>;
   stop(): void;
   failures(): Map<string, string>;
+  /** Autosaves summed over all students. */
+  saves(): SaveStats;
 }
 
 /** Starts one fake student per code, `rampMs` apart. */
 export function runSim(
-  options: Pick<SimOptions, 'host' | 'port' | 'pin' | 'rampMs'>,
+  options: Pick<SimOptions, 'host' | 'port' | 'pin' | 'rampMs'> &
+    Partial<Pick<SimOptions, 'autosaveMs'>>,
   codes: string[],
   pingMs?: number,
 ): SimRun {
@@ -46,6 +50,7 @@ export function runSim(
         code,
         onState,
         ...(pingMs ? { pingMs } : {}),
+        ...(options.autosaveMs ? { autosaveMs: options.autosaveMs } : {}),
       }),
   );
   let stopped = false;
@@ -84,5 +89,15 @@ export function runSim(
       for (const s of students) s.stop();
     },
     failures: () => failed,
+    saves: () => {
+      const total: SaveStats = { sent: 0, acked: 0, pending: 0 };
+      for (const s of students) {
+        const one = s.saveStats();
+        total.sent += one.sent;
+        total.acked += one.acked;
+        total.pending += one.pending;
+      }
+      return total;
+    },
   };
 }

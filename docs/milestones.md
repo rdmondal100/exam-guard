@@ -147,7 +147,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 
 ### M16 Autosave + versions
 - **Goal:** answers autosave to the server as versions.
-- **Touches:** migration (answer_versions), `answer.save`/`answer.ack`, `answer.select`, batched writer (250 ms/200 rows), student autosave scheduler (10 s on change + Run/switch/submit triggers).
+- **Touches:** migration (answer_versions), `answer.save`/`answer.ack` (no `answer.select`: a language switch is a save with `switch_language`), batched writer (250 ms/200 rows), student autosave scheduler (10 s on change + Run/switch/submit triggers).
 - **Accept:** saves are idempotent on clientSeq. Versions are stored per language. 200 sim students saving every 10 s → server CPU stays low and nothing is lost.
 - **Manual test:** type, wait 10 s, and check the version rows. Switch language → a `switch_language` version is saved.
 

@@ -9,6 +9,7 @@ import {
   type ServerToStudent,
   type SessionState,
 } from '@examguard/shared';
+import { takeAnswerSave, type AnswerIntakeDeps } from '../answers/answer-intake.js';
 import type { EventRepo } from '../db/event-repo.js';
 import type { ExamStudentRepo } from '../db/exam-student-repo.js';
 import type { TerminalLogRepo } from '../db/terminal-log-repo.js';
@@ -20,6 +21,8 @@ export interface StudentSocketDeps {
   students: ExamStudentRepo;
   events: EventRepo;
   terminalLogs: TerminalLogRepo;
+  /** Autosaves go through the batch writer. */
+  answers: AnswerIntakeDeps;
   /** The state the client should show; also activates a late joiner. */
   sessionState: (studentId: string) => SessionState;
   /** The hosted exam id, or `null` when nothing is hosted. */
@@ -113,6 +116,14 @@ export function registerStudentSocket(app: FastifyInstance, deps: StudentSocketD
           clientTs: message.clientTs,
         });
         return send({ t: 'transcript.ack', key: message.key });
+      }
+      if (message.t === 'answer.save') {
+        if (!studentId || !examId)
+          return refuse(WS_CLOSE.badHello, 'hello_first', 'Send hello first');
+        const { id, clientSeq } = message;
+        return takeAnswerSave(deps.answers, examId, studentId, message, () =>
+          send({ t: 'answer.ack', id, clientSeq }),
+        );
       }
       if (studentId) return refuse(WS_CLOSE.badHello, 'bad_frame', 'Already said hello');
 

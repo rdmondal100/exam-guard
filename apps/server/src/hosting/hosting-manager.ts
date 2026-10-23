@@ -8,6 +8,8 @@ import {
   type StartResult,
 } from '@examguard/shared';
 import { computeDeadline } from '../exams/deadline.js';
+import type { AnswerWriter } from '../answers/answer-writer.js';
+import type { AnswerRepo } from '../db/answer-repo.js';
 import type { EventRepo } from '../db/event-repo.js';
 import type { ExamFileService } from '../exam-files/exam-file-service.js';
 import type { ExamRepo } from '../db/exam-repo.js';
@@ -37,6 +39,9 @@ export interface HostingManagerDeps {
   events: EventRepo;
   terminals: TerminalRepo;
   terminalLogs: TerminalLogRepo;
+  /** Stored versions (the `saved` list in the session state) and the batch writer for new ones. */
+  answers: AnswerRepo;
+  answerWriter: AnswerWriter;
   actions: TeacherActionRepo;
   /** The teacher's exam files: the manifest in the session state and the download route. */
   examFiles: ExamFileService;
@@ -179,7 +184,7 @@ export class HostingManager {
       studentState: state,
       deadline: running ? this.deadlineFor(student.examId, studentId) : null,
       questions: running ? questions.list(student.examId).map(toStudentQuestion) : undefined,
-      saved: [],
+      saved: this.deps.answers.savedFor(studentId),
       locked: state === 'locked',
       monitoring: false,
       terminal: this.terminal.state(student.examId),
@@ -244,6 +249,8 @@ export class HostingManager {
     const active = this.active;
     this.stopWatchingDeadline();
     this.terminal.disarm();
+    // Saves already received are written before the exam can move on.
+    this.deps.answerWriter.flush();
     if (!active) return;
     this.active = null;
     active.stopAdvertising();
@@ -279,6 +286,14 @@ export class HostingManager {
         students: this.deps.students,
         events: this.deps.events,
         terminalLogs: this.deps.terminalLogs,
+        answers: {
+          exams: this.deps.exams,
+          questions: this.deps.questions,
+          writer: this.deps.answerWriter,
+          now: this.now,
+          onDropped: (reason, save) =>
+            console.warn(`dropped a save of question ${save.questionId}: ${reason}`),
+        },
         sessionState: (id) => this.sessionState(id),
         examId: () => (this.active?.examId === examId ? examId : null),
         now: this.now,

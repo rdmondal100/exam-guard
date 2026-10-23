@@ -1,6 +1,7 @@
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { MAX_WS_FRAME_BYTES, PROTOCOL_VERSION, type StudentInfo } from '@examguard/shared';
+import type { AnswerIntakeDeps } from '../answers/answer-intake.js';
 import type { ServerCert } from '../tls/cert.js';
 import type { JoinService } from '../join/join-service.js';
 import type { EventRepo } from '../db/event-repo.js';
@@ -28,6 +29,7 @@ export interface StudentAppDeps {
     students: ExamStudentRepo;
     events: EventRepo;
     terminalLogs: TerminalLogRepo;
+    answers: AnswerIntakeDeps;
     examId: () => string | null;
   } & Pick<StudentSocketDeps, 'sessionState' | 'now' | 'helloTimeoutMs' | 'idleMs'>;
 }

@@ -7,6 +7,8 @@ import { AuthState } from '../auth/auth-state.js';
 import { LoginLimiter } from '../auth/login-limiter.js';
 import { ClassListRepo } from '../db/class-list-repo.js';
 import type { Db } from '../db/connection.js';
+import { AnswerWriter } from '../answers/answer-writer.js';
+import { AnswerRepo } from '../db/answer-repo.js';
 import { EventRepo } from '../db/event-repo.js';
 import { ExamFileRepo } from '../db/exam-file-repo.js';
 import { ExamRepo } from '../db/exam-repo.js';
@@ -48,6 +50,8 @@ export interface TeacherAppOptions {
     | 'events'
     | 'terminals'
     | 'terminalLogs'
+    | 'answers'
+    | 'answerWriter'
     | 'actions'
     | 'examFiles'
     | 'hub'
@@ -143,6 +147,7 @@ export function buildTeacherApp({
   const students = new ExamStudentRepo(db);
   const events = new EventRepo(db);
   const terminalLogs = new TerminalLogRepo(db);
+  const answers = new AnswerRepo(db);
   registerTerminalLogRoutes(app, {
     students,
     events,
@@ -160,6 +165,13 @@ export function buildTeacherApp({
       events,
       terminals: new TerminalRepo(db),
       terminalLogs,
+      answers,
+      answerWriter: new AnswerWriter(answers, {
+        onRejected: (row, error) =>
+          console.warn(
+            `answer save ${row.clientSeq} refused: ${error instanceof Error ? error.message : String(error)}`,
+          ),
+      }),
       actions: new TeacherActionRepo(db),
       examFiles,
       hub,

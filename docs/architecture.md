@@ -118,7 +118,7 @@ Main restarts the server on exit with backoff (1 s, 2 s, 5 s, then every 10 s). 
 
 ## 6. Autosave, offline, resume, recovery
 - **Answer key:** `(questionId, language)`. Written answers use language `text`. The client keeps a buffer per key and a monotonically increasing `clientSeq` per session.
-- **Autosave triggers:** every 10 s if the content changed, plus Run, question switch, language switch and submit. Each save becomes an `answer_versions` row. The server dedupes on `(exam_student_id, question_id, language, client_seq)` and acks the `clientSeq`.
+- **Autosave triggers:** every 10 s if the content changed, plus Run, question switch, language switch and submit. Each save becomes an `answer_versions` row. The server dedupes on `(exam_student_id, client_seq)` and acks the `clientSeq` after the commit. `clientSeq` is one counter per student; after every welcome the client continues past the largest `clientSeq` in `welcome.saved`, so a restarted app never reuses a number. The scheduler is in the renderer (`Autosaver`), main numbers the saves and keeps the unacked ones (`AnswerOutbox`).
 - **Offline queue:** saves and events go first to an append-only JSONL file in userData (`queue/<examId>.jsonl`). Each line is encrypted with `safeStorage` (DPAPI, user-scoped). Lines are removed when acked. On reconnect the queue is flushed in order before new traffic.
 - **Reconnect:** WS reconnect with backoff (0.5 s → 5 s, jitter). The token is reused. The server replays the state snapshot (`session.state`).
 - **Clock:** the client estimates the server offset from `ping/pong` RTT. Client timestamps (`clientTs`) are in server time.

@@ -2,12 +2,14 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import type { SessionStatus, StudentQuestion } from '@examguard/shared';
 import { ANSWER_TEXT_KEY, answeredIds, getAnswer, useAnswerStore } from '@/lib/answerStore';
 import { pickLanguage } from '@/lib/languages';
+import { useAnswerStatus, useAutosave } from '@/lib/useAutosave';
 import { useExamFilesStatus } from '@/lib/useExamFilesStatus';
 import { CodeAnswer } from './CodeAnswer';
 import { ExamFilesNotice } from './ExamFilesNotice';
 import { ExamTimer } from './ExamTimer';
 import { LINK_TEXT } from './LobbyScreen';
 import { QuestionNav } from './QuestionNav';
+import { SaveChip } from './SaveChip';
 import { WrittenAnswer } from './WrittenAnswer';
 
 const TerminalDock = lazy(() => import('./TerminalDock'));
@@ -28,7 +30,7 @@ interface Props {
 /**
  * The exam window: question list, the answer area (Monaco with one buffer per language for code
  * questions, a text box for written ones), the server timer, the connection state and a
- * monitoring badge. Answers are kept in memory only; autosave arrives with M16.
+ * monitoring badge. Answers are autosaved to the teacher's PC (`useAutosave`).
  */
 export function ExamScreen({
   name,
@@ -54,6 +56,8 @@ export function ExamScreen({
   const answered = answeredIds(answers, keyOf);
   const examFiles = useExamFilesStatus();
   const linkOk = status.link === 'connected';
+  useAutosave(questions, question?.id ?? '');
+  const saveStatus = useAnswerStatus();
   const language = question ? languageOf(question) : undefined;
   // Same for the Files panel: its open file and folder survive toggling.
   const [filesMounted, setFilesMounted] = useState(false);
@@ -105,6 +109,7 @@ export function ExamScreen({
           <span className="rounded-md bg-blue-100 px-3 py-1 text-sm text-blue-900">
             Monitoring active
           </span>
+          <SaveChip status={saveStatus} online={linkOk} />
           <span
             role="status"
             className={`rounded-md px-3 py-1 text-sm ${

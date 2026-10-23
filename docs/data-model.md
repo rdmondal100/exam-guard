@@ -117,7 +117,7 @@ UNIQUE(exam_id, class_student_id); UNIQUE(token_hash); INDEX(exam_id, state); IN
 | created_at | INTEGER | list order |
 UNIQUE(exam_id, name). The bytes are in `exam-files/<examId>/<id>` (see the folder layout); a replace gets a new id.
 
-### answer_versions (every autosave)
+### answer_versions (every autosave, M16, migration 0009)
 | col | type | notes |
 |---|---|---|
 | id | INTEGER PK AUTOINCREMENT | |
@@ -127,6 +127,7 @@ UNIQUE(exam_id, name). The bytes are in `exam-files/<examId>/<id>` (see the fold
 | content | TEXT | |
 | selected | INTEGER (0/1) | this language was the selected one when saved |
 | reason | TEXT | `interval, run, switch_question, switch_language, submit, final` |
+| flags | TEXT | the student's own compiler / Node flags for this buffer; NULL for written answers |
 | client_seq | INTEGER | |
 | client_ts, server_ts | INTEGER | |
 UNIQUE(exam_student_id, client_seq); INDEX(exam_student_id, question_id, language, id DESC)
