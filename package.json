@@ -15,6 +15,7 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "dev:teacher": "pnpm --filter @examguard/desktop dev:teacher",
     "dev:student": "pnpm --filter @examguard/desktop dev:student",
+    "dev:student:agent": "pnpm --filter @examguard/desktop dev:student:agent",
     "sim": "pnpm --filter @examguard/student-sim sim",
     "fetch-toolchains": "node scripts/fetch-toolchains.mjs"
   },
