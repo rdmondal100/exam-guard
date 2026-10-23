@@ -22,7 +22,7 @@ describe('initDatabase', () => {
     expect(existsSync(databasePath(dir))).toBe(true);
     expect(db.pragma('journal_mode', { simple: true })).toBe('wal');
     expect(db.pragma('foreign_keys', { simple: true })).toBe(1);
-    expect(db.pragma('user_version', { simple: true })).toBe(9);
+    expect(db.pragma('user_version', { simple: true })).toBe(10);
     const tables = db
       .prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
@@ -35,6 +35,7 @@ describe('initDatabase', () => {
         'class_students',
         'exam_files',
         'exam_students',
+        'final_answers',
         'events',
         'exams',
         'marking_criteria',
@@ -53,7 +54,7 @@ describe('initDatabase', () => {
     new SettingsRepo(first).set('a', 1);
     first.close();
     const second = initDatabase(dir);
-    expect(second.pragma('user_version', { simple: true })).toBe(9);
+    expect(second.pragma('user_version', { simple: true })).toBe(10);
     expect(new SettingsRepo(second).get('a')).toBe(1);
     second.close();
   });

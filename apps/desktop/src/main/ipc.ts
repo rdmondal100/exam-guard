@@ -13,6 +13,7 @@ import { IPC } from '../shared/ipc-channels.js';
 import { readDeviceId } from './device-id.js';
 import { Discovery } from './discovery.js';
 import type { ExamLock } from './exam-lock.js';
+import { examWorking } from './exam-working.js';
 import { JoinClient } from './join-client.js';
 import { probeHost } from './probe-host.js';
 import { SessionClient } from './session-client.js';
@@ -97,7 +98,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
         win.webContents.send(IPC.answerStatus, status);
     },
     onExam: (exam) => {
-      examLock.setActive(exam.examState === 'running');
+      examLock.setActive(examWorking(exam));
       onTerminalExam(exam);
       onExamFiles(exam);
       resume.hooks?.onExam(exam);

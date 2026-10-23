@@ -14,6 +14,7 @@ import type { EventRepo } from '../db/event-repo.js';
 import type { ExamStudentRepo } from '../db/exam-student-repo.js';
 import type { TerminalLogRepo } from '../db/terminal-log-repo.js';
 import { hashToken } from '../join/join-service.js';
+import type { SubmissionService } from '../submissions/submission-service.js';
 import type { SessionHub, StudentConn } from './session-hub.js';
 
 export interface StudentSocketDeps {
@@ -23,6 +24,8 @@ export interface StudentSocketDeps {
   terminalLogs: TerminalLogRepo;
   /** Autosaves go through the batch writer. */
   answers: AnswerIntakeDeps;
+  /** Makes a student's answers final (M18). */
+  submissions: Pick<SubmissionService, 'submit'>;
   /** The state the client should show; also activates a late joiner. */
   sessionState: (studentId: string) => SessionState;
   /** The hosted exam id, or `null` when nothing is hosted. */
@@ -123,6 +126,16 @@ export function registerStudentSocket(app: FastifyInstance, deps: StudentSocketD
         const { id, clientSeq } = message;
         return takeAnswerSave(deps.answers, examId, studentId, message, () =>
           send({ t: 'answer.ack', id, clientSeq }),
+        );
+      }
+      if (message.t === 'submit') {
+        if (!studentId) return refuse(WS_CLOSE.badHello, 'hello_first', 'Send hello first');
+        // Saves sent before this frame are already in the batch; `submit` flushes it.
+        const outcome = deps.submissions.submit(studentId);
+        return send(
+          outcome.ok
+            ? { t: 'submit.result', id: message.id, receipt: outcome.receipt }
+            : { t: 'submit.refused', id: message.id, reason: outcome.reason },
         );
       }
       if (studentId) return refuse(WS_CLOSE.badHello, 'bad_frame', 'Already said hello');

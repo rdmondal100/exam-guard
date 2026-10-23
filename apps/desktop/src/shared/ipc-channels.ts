@@ -19,6 +19,7 @@ export const IPC = {
   sessionExam: 'session:exam',
   answerSave: 'answers:save',
   answerStatus: 'answers:status',
+  submitExam: 'exam:submit',
   runCode: 'runner:run',
   stopRun: 'runner:stop',
   runInput: 'runner:input',

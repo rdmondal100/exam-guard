@@ -6,6 +6,12 @@ import { StudentQuestionSchema } from './questions.js';
 import { TerminalStateSchema } from './actions.js';
 import { ExamFilesSchema } from './exam-files.js';
 import { AnswerAckSchema, AnswerSaveSchema, SavedAnswerSchema } from './answers.js';
+import {
+  ReceiptSchema,
+  SubmitRefusedSchema,
+  SubmitResultSchema,
+  SubmitSchema,
+} from './submission.js';
 
 /** Idle limit on a student socket and the client's ping period (docs/protocol.md §3). */
 export const STUDENT_IDLE_MS = 15_000;
@@ -76,6 +82,7 @@ export const StudentMessageSchema = z.discriminatedUnion('t', [
   EventReportSchema,
   TranscriptChunkSchema,
   AnswerSaveSchema,
+  SubmitSchema,
 ]);
 export type StudentMessage = z.infer<typeof StudentMessageSchema>;
 
@@ -97,6 +104,8 @@ export const SessionStateSchema = z.object({
   filesEnabled: z.boolean(),
   /** The files the teacher attached; students download them in the lobby (M15f). */
   examFiles: ExamFilesSchema,
+  /** Set once the student's answers are final (submitted, auto-submitted or ended by the teacher). */
+  receipt: ReceiptSchema.nullable().optional(),
 });
 export type SessionState = z.infer<typeof SessionStateSchema>;
 
@@ -143,6 +152,8 @@ export const ServerToStudentSchema = z.discriminatedUnion('t', [
   EventAckSchema,
   TranscriptAckSchema,
   AnswerAckSchema,
+  SubmitResultSchema,
+  SubmitRefusedSchema,
   WsErrorSchema,
 ]);
 export type ServerToStudent = z.infer<typeof ServerToStudentSchema>;

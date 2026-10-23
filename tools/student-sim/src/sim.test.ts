@@ -18,6 +18,8 @@ describe('parseArgs', () => {
       csv: undefined,
       rampMs: 20,
       autosaveMs: 0,
+      submitAfterMs: 0,
+      disconnectEveryMs: 0,
     });
   });
 
@@ -36,6 +38,10 @@ describe('parseArgs', () => {
       '0',
       '--autosave-ms',
       '10000',
+      '--submit-after-ms',
+      '60000',
+      '--disconnect-every-ms',
+      '20000',
     ]);
     expect(options).toMatchObject({
       port: 5000,
@@ -43,6 +49,8 @@ describe('parseArgs', () => {
       csv: 'a.csv',
       rampMs: 0,
       autosaveMs: 10_000,
+      submitAfterMs: 60_000,
+      disconnectEveryMs: 20_000,
     });
   });
 
@@ -55,6 +63,8 @@ describe('parseArgs', () => {
     [[...base, '--students'], 'needs a value'],
     [[...base, '--autosave-ms', '5'], '--autosave-ms'],
     [[...base, '--autosave-ms', 'x'], '--autosave-ms'],
+    [[...base, '--submit-after-ms', '50'], '--submit-after-ms'],
+    [[...base, '--disconnect-every-ms', '500'], '--disconnect-every-ms'],
     [[...base, '--nope', '1'], 'Unknown flag'],
     [['--host', 'a:b:c', '--pin', '123456'], 'not a valid host'],
     [['--host', 'a:99999', '--pin', '123456'], 'not a valid host'],
