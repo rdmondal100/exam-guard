@@ -193,6 +193,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** `agent/eg-agent` WFP code (dynamic session, permit loopback/DHCP/teacher address, block other outbound on all interfaces), lease timer, cleanup on service start/stop, a CLI test switch in `--console` mode.
 - **Accept:** with filters on, a browser and `curl https://example.com` fail while the exam (HTTPS/WSS to the teacher) keeps working; killing the service process restores internet at once; the lease restores it after the app goes silent. Run **only on the second laptop** (manual, admin).
 - **Manual test:** as above, plus reboot the laptop mid-block → internet is back after boot.
+- **Built (2026-10-24):** `eg-agent` `net_rules` / `wfp_filter` / `wfp_engine` / `net_block` / `net_cli`; `eg-agent --console --net-block <ip,...> [--net-lease-secs N]` with `renew` / `off` / `on` on stdin; `scripts/dev-net-probe.ps1`. Unit-tested only; the laptop run is pending and its manual steps are in progress.md. Not wired into the service or the pipe (M21b).
 
 ### M21b Teacher internet toggle
 - **Goal:** the teacher turns student internet off/on per exam from the dashboard.
