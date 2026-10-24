@@ -21,6 +21,12 @@ mod link;
 #[cfg(windows)]
 mod log;
 #[cfg(windows)]
+mod net_block;
+#[cfg(windows)]
+mod net_cli;
+#[cfg(windows)]
+mod net_rules;
+#[cfg(windows)]
 mod pipe_conn;
 #[cfg(windows)]
 mod pipe_frame;
@@ -41,11 +47,15 @@ mod supervisor;
 #[cfg(windows)]
 mod system_check;
 #[cfg(windows)]
+mod wfp_engine;
+#[cfg(windows)]
+mod wfp_filter;
+#[cfg(windows)]
 mod win;
 #[cfg(windows)]
 mod window_info;
 
-const USAGE: &str = "usage: eg-agent --install | --uninstall | --service | --helper | --console";
+const USAGE: &str = "usage: eg-agent --install | --uninstall | --service | --helper | --console [--net-block <ip,...> [--net-lease-secs N]]";
 
 #[cfg(windows)]
 fn main() -> std::process::ExitCode {
