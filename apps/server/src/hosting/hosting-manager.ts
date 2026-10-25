@@ -32,6 +32,7 @@ import type { ConnectionEvents } from './connection-events.js';
 import { generatePin } from './pin.js';
 import { HostingError } from './hosting-error.js';
 import { DeadlineWatcher } from './deadline-watcher.js';
+import { InternetSwitch } from './internet-switch.js';
 import { TerminalSwitch } from './terminal-switch.js';
 
 export { HostingError };
@@ -89,6 +90,8 @@ export class HostingManager {
   private readonly now: () => number;
   /** The teacher's exam terminal switch. */
   readonly terminal: TerminalSwitch;
+  /** The teacher's internet switch. */
+  readonly internet: InternetSwitch;
   private readonly watcher: DeadlineWatcher;
 
   constructor(private readonly deps: HostingManagerDeps) {
@@ -98,6 +101,12 @@ export class HostingManager {
       actions: deps.actions,
       hub: deps.hub,
       examState: (id) => deps.exams.get(id)?.state,
+      now: this.now,
+    });
+    this.internet = new InternetSwitch({
+      exams: deps.exams,
+      actions: deps.actions,
+      hub: deps.hub,
       now: this.now,
     });
     this.watcher = new DeadlineWatcher({
@@ -127,6 +136,7 @@ export class HostingManager {
     }
     const pin = (this.deps.makePin ?? generatePin)();
     const opened = await this.open(exam.id, pin);
+    this.internet.reset(exam.id);
     exams.startHosting(exam.id, pin, this.now());
     return this.describe(opened);
   }
@@ -208,6 +218,7 @@ export class HostingManager {
       locked: state === 'locked',
       monitoring: false,
       terminal: this.terminal.state(student.examId),
+      internet: this.internet.state(student.examId),
       filesEnabled: exam?.filesEnabled ?? true,
       examFiles: exam?.filesEnabled ? this.deps.examFiles.list(student.examId) : [],
       receipt: this.deps.finals.receiptFor(studentId),
@@ -329,6 +340,7 @@ export class HostingManager {
       fpCode: active.fpCode,
       terminal: this.terminal.state(active.examId),
       terminalPendingMinutes: this.terminal.pendingMinutes(active.examId),
+      internet: this.internet.state(active.examId),
     };
   }
 }

@@ -23,7 +23,7 @@ mod log;
 #[cfg(windows)]
 mod net_block;
 #[cfg(windows)]
-mod net_cli;
+mod net_control;
 #[cfg(windows)]
 mod net_rules;
 #[cfg(windows)]
@@ -55,7 +55,7 @@ mod win;
 #[cfg(windows)]
 mod window_info;
 
-const USAGE: &str = "usage: eg-agent --install | --uninstall | --service | --helper | --console [--net-block <ip,...> [--net-lease-secs N]]";
+const USAGE: &str = "usage: eg-agent --install | --uninstall | --service | --helper | --console";
 
 #[cfg(windows)]
 fn main() -> std::process::ExitCode {

@@ -24,6 +24,12 @@ pub enum FromApp {
         #[serde(rename = "hbSeq")]
         hb_seq: u64,
     },
+    #[serde(rename = "net.set")]
+    NetSet {
+        seq: u64,
+        blocked: bool,
+        allow: Vec<String>,
+    },
 }
 
 /// Agent → app.
@@ -59,6 +65,14 @@ pub enum ToApp {
         hb_seq: u64,
         helper: bool,
         monitoring: bool,
+    },
+    #[serde(rename = "net.status")]
+    NetStatus {
+        seq: u64,
+        #[serde(rename = "reqSeq")]
+        req_seq: u64,
+        blocked: bool,
+        error: Option<String>,
     },
     #[serde(rename = "error")]
     Error {
@@ -109,6 +123,44 @@ mod tests {
         let ack: FromApp =
             serde_json::from_str(r#"{"t":"heartbeat.ack","seq":4,"hbSeq":9}"#).unwrap();
         assert_eq!(ack, FromApp::HeartbeatAck { seq: 4, hb_seq: 9 });
+    }
+
+    #[test]
+    fn net_set_parses_and_net_status_serializes_like_the_shared_schema() {
+        let set: FromApp = serde_json::from_str(
+            r#"{"t":"net.set","seq":3,"blocked":true,"allow":["192.168.1.10"]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            set,
+            FromApp::NetSet {
+                seq: 3,
+                blocked: true,
+                allow: vec!["192.168.1.10".into()]
+            }
+        );
+        assert!(
+            serde_json::from_str::<FromApp>(r#"{"t":"net.set","seq":3,"blocked":true}"#).is_err()
+        );
+        let status = serde_json::to_value(ToApp::NetStatus {
+            seq: 4,
+            req_seq: 3,
+            blocked: false,
+            error: Some("denied".into()),
+        })
+        .unwrap();
+        assert_eq!(
+            status,
+            serde_json::json!({"t":"net.status","seq":4,"reqSeq":3,"blocked":false,"error":"denied"})
+        );
+        let clean = serde_json::to_value(ToApp::NetStatus {
+            seq: 5,
+            req_seq: 3,
+            blocked: true,
+            error: None,
+        })
+        .unwrap();
+        assert!(clean["error"].is_null());
     }
 
     #[test]

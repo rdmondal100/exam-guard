@@ -156,6 +156,19 @@ export class ExamRepo {
     return this.get(id);
   }
 
+  /** The teacher's internet switch (migration 0011). */
+  internetBlocked(id: string): boolean {
+    const row = this.db.prepare('SELECT internet_blocked FROM exams WHERE id = ?').get(id) as
+      { internet_blocked: number } | undefined;
+    return row?.internet_blocked === 1;
+  }
+
+  setInternetBlocked(id: string, blocked: boolean, now: number): void {
+    this.db
+      .prepare('UPDATE exams SET internet_blocked = ?, updated_at = ? WHERE id = ?')
+      .run(blocked ? 1 : 0, now, id);
+  }
+
   /** hosting → running: the PIN stays so late joiners and a restart can still use it. */
   startRunning(id: string, now: number): ExamSummary | undefined {
     this.db

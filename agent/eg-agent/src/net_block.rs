@@ -16,6 +16,7 @@ pub trait FilterBackend {
 }
 
 struct Active {
+    allow: Vec<Ipv4Addr>,
     lease: Duration,
     lease_until: Instant,
     /// A removal failed; `tick` tries again whatever the lease says.
@@ -57,11 +58,17 @@ impl<B: FilterBackend> NetBlock<B> {
         self.active = None;
         self.backend.install(&rules)?;
         self.active = Some(Active {
+            allow: allow.to_vec(),
             lease,
             lease_until: now + lease,
             stuck: false,
         });
         Ok(())
+    }
+
+    /// The addresses the current block lets through, or `None` when nothing is blocked.
+    pub fn allowed(&self) -> Option<&[Ipv4Addr]> {
+        self.active.as_ref().map(|active| active.allow.as_slice())
     }
 
     /// Starts the lease over. False when nothing is blocked.

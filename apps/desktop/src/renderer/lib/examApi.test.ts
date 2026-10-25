@@ -80,6 +80,7 @@ describe('createExamApi', () => {
       fpCode: '7ACN',
       terminal: { enabled: false, until: null },
       terminalPendingMinutes: null,
+      internet: 'allowed',
     };
 
     it('hosts with POST and validates the reply', async () => {

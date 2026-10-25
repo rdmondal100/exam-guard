@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ProtocolVersionSchema } from './protocol-version.js';
-import { TerminalStateSchema } from './actions.js';
+import { InternetStateSchema, TerminalStateSchema } from './actions.js';
 
 /** Student listener port (docs/architecture.md §2). */
 export const STUDENT_API_PORT = 47820;
@@ -14,6 +14,7 @@ export const HostingInfoSchema = z.object({
   terminal: TerminalStateSchema,
   /** An "on for N minutes" window that starts counting at Start. */
   terminalPendingMinutes: z.number().int().nullable(),
+  internet: InternetStateSchema,
 });
 export type HostingInfo = z.infer<typeof HostingInfoSchema>;
 

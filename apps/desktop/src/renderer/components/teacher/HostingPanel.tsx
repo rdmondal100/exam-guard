@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import type { ExamApi } from '@/lib/examApi';
 import { sortedStudents } from '@/lib/rosterState';
 import { useRoster } from '@/lib/useRoster';
+import { InternetControl } from './InternetControl';
 import { RosterList } from './RosterList';
 import { TerminalControl } from './TerminalControl';
 import { TerminalLogDialog } from './TerminalLogDialog';
@@ -133,6 +134,14 @@ export function HostingPanel({ examId, api, running, onStart, onStop, onEnd }: P
       )}
       {terminal && (
         <TerminalControl examId={examId} api={api} initial={terminal} onExpired={reloadInfo} />
+      )}
+      {info && (
+        <InternetControl
+          examId={examId}
+          api={api}
+          initial={info.internet}
+          students={sortedStudents(roster)}
+        />
       )}
       <RosterList students={sortedStudents(roster)} onTerminalLog={setLogOf} />
       {logOf && (

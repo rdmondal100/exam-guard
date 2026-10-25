@@ -12,6 +12,7 @@ const state = (over: Partial<SessionState>): SessionState => ({
   locked: false,
   monitoring: false,
   terminal: { enabled: true, until: null },
+  internet: 'allowed',
   filesEnabled: true,
   examFiles: [],
   ...over,

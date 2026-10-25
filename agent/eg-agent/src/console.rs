@@ -1,6 +1,5 @@
 //! `eg-agent --console`: the service's job without the SCM, for development. Runs the same
 //! supervisor in this console, with a helper under your own account. Ctrl+C stops both.
-//! `--net-block` adds the M21a internet-off test switch (`net_cli`).
 
 use std::sync::mpsc::{self, Sender};
 use std::sync::OnceLock;
@@ -25,8 +24,6 @@ unsafe extern "system" fn on_ctrl(kind: u32) -> i32 {
 }
 
 pub fn run() -> Result<(), String> {
-    let rest: Vec<String> = std::env::args().skip(2).collect();
-    let net = crate::net_cli::parse(&rest)?;
     crate::log::init_stderr();
     let (tx, rx) = mpsc::channel::<()>();
     STOP.set(tx).map_err(|_| "console started twice")?;
@@ -40,11 +37,7 @@ pub fn run() -> Result<(), String> {
         "console supervisor running"
     );
     let platform = Platform::console();
-    let net = net.map(crate::net_cli::start);
     let outcome = crate::link::run_with_link(&platform, || supervisor::run(&rx, &platform));
-    if let Some(net) = net {
-        net.stop();
-    }
     tracing::info!("console supervisor stopped");
     outcome
 }

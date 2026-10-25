@@ -13,6 +13,7 @@ const entry = (id: string, connected: boolean): RosterEntry => ({
   outsideMs: 0,
   lastSeen: null,
   agentOk: true,
+  internetBlocked: false,
 });
 
 function fakeRepo() {

@@ -62,6 +62,7 @@ export function SessionScreen({ name, examTitle, onLeave }: Props) {
         questions={exam.questions}
         deadline={exam.deadline}
         terminalOn={exam.terminal.enabled}
+        internetOff={exam.internet === 'blocked'}
         filesOn={exam.filesEnabled}
         status={status}
       />

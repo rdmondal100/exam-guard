@@ -31,6 +31,10 @@ pub fn fwp(code: u32, what: &str) -> Result<(), String> {
 
 struct Engine(HANDLE);
 
+// SAFETY: a WFP engine handle is an RPC context handle that the API allows to be used from any
+// thread; this type only ever uses it from one thread at a time (behind the `NetControl` mutex).
+unsafe impl Send for Engine {}
+
 impl Engine {
     fn open() -> Result<Self, String> {
         let mut name = wide("ExamGuard internet off");

@@ -253,6 +253,132 @@ describe('AgentClient', () => {
     expect(seen.at(-1)).toBe(true);
   });
 
+  describe('internet', () => {
+    const netSets = (c: Conversation | undefined) =>
+      (c?.received ?? []).filter((m) => m['t'] === 'net.set');
+    /** Answers every net.set the way the real agent does, and acks heartbeats. */
+    function behaveLikeAgentWithNet(fail?: string): void {
+      agent.onMessage = (message, c) => {
+        if (message['t'] === 'hello') c.send(hello());
+        if (message['t'] === 'system.check') c.send(checkResult(message['seq'] as number));
+        if (message['t'] === 'net.set') {
+          const blocked = message['blocked'] === true && !fail;
+          c.send({
+            t: 'net.status',
+            seq: 9,
+            reqSeq: message['seq'],
+            blocked,
+            error: message['blocked'] === true ? (fail ?? null) : null,
+          });
+        }
+      };
+    }
+
+    it('sends net.set once linked and reports what the agent confirmed', async () => {
+      await agent.listen();
+      behaveLikeAgentWithNet();
+      const link = make();
+      const seen: boolean[] = [];
+      link.onInternet((o) => seen.push(o.blocked));
+      link.start();
+      await until('ok', () => link.status().ok);
+      link.setInternet(true, ['192.168.1.10']);
+      await until('blocked', () => link.internet().blocked);
+      expect(netSets(agent.conversations[0])[0]).toMatchObject({
+        t: 'net.set',
+        blocked: true,
+        allow: ['192.168.1.10'],
+      });
+      link.setInternet(false, []);
+      await until('allowed', () => !link.internet().blocked);
+      expect(seen).toEqual([true, false]);
+    });
+
+    it('asks again with every heartbeat while blocked, which is the lease', async () => {
+      await agent.listen();
+      behaveLikeAgentWithNet();
+      const link = make();
+      link.start();
+      await until('ok', () => link.status().ok);
+      link.setInternet(true, ['192.168.1.10']);
+      await until('blocked', () => link.internet().blocked);
+      const before = netSets(agent.conversations[0]).length;
+      agent.conversations[0]?.send({
+        t: 'heartbeat',
+        seq: 3,
+        hbSeq: 0,
+        helper: true,
+        monitoring: false,
+      });
+      agent.conversations[0]?.send({
+        t: 'heartbeat',
+        seq: 4,
+        hbSeq: 1,
+        helper: true,
+        monitoring: false,
+      });
+      await until('renewals', () => netSets(agent.conversations[0]).length >= before + 2);
+    });
+
+    it('does not repeat an unblock with the heartbeats', async () => {
+      await agent.listen();
+      behaveLikeAgentWithNet();
+      const link = make();
+      link.start();
+      await until('ok', () => link.status().ok);
+      link.setInternet(false, []);
+      await until('sent', () => netSets(agent.conversations[0]).length === 1);
+      agent.conversations[0]?.send({
+        t: 'heartbeat',
+        seq: 3,
+        hbSeq: 0,
+        helper: true,
+        monitoring: false,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      expect(netSets(agent.conversations[0])).toHaveLength(1);
+    });
+
+    it('reports the agents reason when it cannot block', async () => {
+      await agent.listen();
+      behaveLikeAgentWithNet('access denied (0x00000005)');
+      const link = make();
+      link.start();
+      await until('ok', () => link.status().ok);
+      link.setInternet(true, ['192.168.1.10']);
+      await until('error', () => link.internet().error !== null);
+      expect(link.internet()).toEqual({ blocked: false, error: 'access denied (0x00000005)' });
+    });
+
+    it('says why at once when there is no agent, and sends the request once it appears', async () => {
+      const link = make();
+      link.setInternet(true, ['192.168.1.10']);
+      expect(link.internet()).toEqual({
+        blocked: false,
+        error: 'The monitoring agent is not running.',
+      });
+      await agent.listen();
+      behaveLikeAgentWithNet();
+      link.start();
+      await until('blocked', () => link.internet().blocked);
+    });
+
+    it('is not confirmed any more when the link is lost, and asks again when it is back', async () => {
+      await agent.listen();
+      behaveLikeAgentWithNet();
+      const link = make();
+      link.start();
+      await until('ok', () => link.status().ok);
+      link.setInternet(true, ['192.168.1.10']);
+      await until('blocked', () => link.internet().blocked);
+      agent.conversations[0]?.socket.destroy();
+      await until('lost', () => !link.internet().blocked);
+      expect(link.internet().error).toMatch(/stopped answering/);
+      await until('blocked again', () => link.internet().blocked);
+      expect(netSets(agent.conversations[1])).toHaveLength(1);
+    });
+  });
+
   it('goes down and comes back when the service closes the pipe', async () => {
     await agent.listen();
     behaveLikeAgent();
