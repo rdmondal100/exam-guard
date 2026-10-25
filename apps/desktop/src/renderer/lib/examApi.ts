@@ -3,6 +3,7 @@ import {
   ExamsSchema,
   ExamSummarySchema,
   HostingInfoSchema,
+  InternetActionResultSchema,
   StartResultSchema,
   TerminalActionResultSchema,
   TerminalLogResponseSchema,
@@ -10,6 +11,7 @@ import {
   type ExamSummary,
   type ExamUpdateBody,
   type HostingInfo,
+  type InternetActionResult,
   type ServerConnection,
   type StartResult,
   type TerminalActionResult,
@@ -37,6 +39,8 @@ export interface ExamApi {
   hosting(id: string): Promise<HostingInfo | null>;
   /** The exam terminal switch, hosting or running only. `minutes` only when turning it on. */
   setTerminal(id: string, enabled: boolean, minutes?: number): Promise<TerminalActionResult>;
+  /** The student internet switch, hosting or running only. `allowed: false` blocks it. */
+  setInternet(id: string, allowed: boolean): Promise<InternetActionResult>;
   /** One student's terminal events and transcript, in any exam state. */
   terminalLog(id: string, studentId: string): Promise<TerminalLogResponse>;
 }
@@ -71,6 +75,11 @@ export function createExamApi(connection: ServerConnection, fetchFn: FetchFn = f
         type: 'terminal',
         enabled,
         ...(minutes === undefined ? {} : { minutes }),
+      }),
+    setInternet: (id, allowed) =>
+      call(connection, fetchFn, `${path(id)}/actions`, InternetActionResultSchema, {
+        type: 'internet',
+        enabled: allowed,
       }),
     terminalLog: (id, studentId) =>
       call(

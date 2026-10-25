@@ -242,4 +242,5 @@ const toEntry = (row: RosterRow): RosterEntry => ({
   lastSeen: row.last_seen_at,
   // The hub replaces this with what the student's app last reported (`agent.status`, M21).
   agentOk: true,
+  internetBlocked: false,
 });

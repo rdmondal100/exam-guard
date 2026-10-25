@@ -21,6 +21,7 @@ import { resolveMode, saveStoredMode } from './mode-store.js';
 import { registerAgentIpc } from './agent/agent-ipc.js';
 import { toAgentBlock } from './agent/agent-link.js';
 import { createAgentLink } from './agent/create-agent-link.js';
+import { InternetController } from './internet/internet-controller.js';
 import { runCommand } from './agent/run-command.js';
 import { registerExamFilesIpc } from './exam-files/exam-files-ipc.js';
 import { registerFilesIpc } from './files/files-ipc.js';
@@ -99,6 +100,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     requireStudent,
   });
   let onTerminalExam: (exam: SessionState) => void = () => {};
+  let internet: InternetController | null = null;
   const session = new SessionClient({
     onStatus: (status) => {
       for (const win of BrowserWindow.getAllWindows())
@@ -113,10 +115,14 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
       examLock.setActive(examWorking(exam));
       onTerminalExam(exam);
       onExamFiles(exam);
+      internet?.onExam(exam);
       resume.hooks?.onExam(exam);
       for (const win of BrowserWindow.getAllWindows()) win.webContents.send(IPC.sessionExam, exam);
     },
+    onStop: () => internet?.reset(),
   });
+  // The teacher's internet switch: applied through the agent, confirmed back to the server.
+  internet = new InternetController(agentLink, session);
   // The server learns how the agent link looks after each welcome and whenever it changes.
   session.setAgentStatus(toAgentBlock(agentLink.status()));
   agentLink.onChange((link) => session.setAgentStatus(toAgentBlock(link)));

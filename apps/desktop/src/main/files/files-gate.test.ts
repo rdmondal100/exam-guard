@@ -10,6 +10,7 @@ const state = (patch: Partial<SessionState>): SessionState => ({
   locked: false,
   monitoring: false,
   terminal: { enabled: false, until: null },
+  internet: 'allowed',
   filesEnabled: true,
   examFiles: [],
   ...patch,

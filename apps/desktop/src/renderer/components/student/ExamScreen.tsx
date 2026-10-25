@@ -24,6 +24,8 @@ interface Props {
   deadline: number;
   /** The teacher's terminal switch; main closes the shell itself when it goes off. */
   terminalOn: boolean;
+  /** The teacher turned the internet off for this exam. */
+  internetOff: boolean;
   /** The teacher's Files panel switch (the project folder explorer). */
   filesOn: boolean;
   status: SessionStatus;
@@ -40,6 +42,7 @@ export function ExamScreen({
   questions,
   deadline,
   terminalOn,
+  internetOff,
   filesOn,
   status,
 }: Props) {
@@ -134,6 +137,11 @@ export function ExamScreen({
             >
               {terminalShown ? 'Hide terminal' : 'Terminal'}
             </button>
+          )}
+          {internetOff && (
+            <span className="rounded-md bg-amber-100 px-3 py-1 text-sm text-amber-900">
+              Internet off
+            </span>
           )}
           <span className="rounded-md bg-blue-100 px-3 py-1 text-sm text-blue-900">
             Monitoring active

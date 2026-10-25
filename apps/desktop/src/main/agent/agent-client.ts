@@ -7,7 +7,7 @@ import {
   type AgentToApp,
   type PipeSystemCheckResult,
 } from '@examguard/shared';
-import { NOT_RUNNING, unlinked, type AgentLink } from './agent-link.js';
+import { NOT_RUNNING, unlinked, type AgentLink, type InternetOutcome } from './agent-link.js';
 import { encodeFrame, FrameDecoder } from './pipe-frames.js';
 
 export interface AgentClientOptions {
@@ -58,6 +58,9 @@ export class AgentClient implements AgentLink {
   private pending = new Map<number, (result: PipeSystemCheckResult | null) => void>();
   private listeners = new Set<(status: AgentLinkStatus) => void>();
   private lastEmitted = '';
+  private wantedNet: { blocked: boolean; allow: string[] } | null = null;
+  private netOutcome: InternetOutcome = { blocked: false, error: null };
+  private netListeners = new Set<(outcome: InternetOutcome) => void>();
   private reconnectTimer: NodeJS.Timeout | null = null;
   private watchdog: NodeJS.Timeout | null = null;
   private recheck: NodeJS.Timeout | null = null;
@@ -112,6 +115,23 @@ export class AgentClient implements AgentLink {
   onChange(listener: (status: AgentLinkStatus) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  setInternet(blocked: boolean, allow: string[]): void {
+    this.wantedNet = { blocked, allow };
+    if (this.verified) this.sendNet();
+    else if (blocked) {
+      this.setNetOutcome({ blocked: false, error: this.status().problems[0] ?? NOT_RUNNING });
+    } else this.setNetOutcome({ blocked: false, error: null });
+  }
+
+  internet(): InternetOutcome {
+    return this.netOutcome;
+  }
+
+  onInternet(listener: (outcome: InternetOutcome) => void): () => void {
+    this.netListeners.add(listener);
+    return () => this.netListeners.delete(listener);
   }
 
   async check(): Promise<AgentLinkStatus> {
@@ -195,6 +215,7 @@ export class AgentClient implements AgentLink {
       this.why = null;
       this.backoffMs = this.minMs;
       this.recheck = setInterval(() => void this.check(), this.recheckMs);
+      if (this.wantedNet) this.sendNet();
       this.emit();
       void this.check();
       return;
@@ -203,15 +224,33 @@ export class AgentClient implements AgentLink {
     if (message.t === 'heartbeat') {
       this.lastBeat = Date.now();
       this.send({ t: 'heartbeat.ack', seq: this.nextSeq(), hbSeq: message.hbSeq });
+      // The lease: the agent lifts the block when these stop coming.
+      if (this.wantedNet?.blocked) this.sendNet();
       if (message.helper !== this.helper) {
         this.helper = message.helper;
         this.emit();
         if (message.helper) void this.check();
       }
+    } else if (message.t === 'net.status') {
+      this.setNetOutcome({ blocked: message.blocked, error: message.error });
     } else if (message.t === 'system.check.result') {
       this.pending.get(message.reqSeq)?.(message);
       this.pending.delete(message.reqSeq);
     }
+  }
+
+  private sendNet(): void {
+    if (!this.wantedNet) return;
+    const { blocked, allow } = this.wantedNet;
+    this.send({ t: 'net.set', seq: this.nextSeq(), blocked, allow });
+  }
+
+  private setNetOutcome(outcome: InternetOutcome): void {
+    const same =
+      outcome.blocked === this.netOutcome.blocked && outcome.error === this.netOutcome.error;
+    if (same) return;
+    this.netOutcome = outcome;
+    for (const listener of this.netListeners) listener(outcome);
   }
 
   private send(message: unknown): void {
@@ -236,6 +275,8 @@ export class AgentClient implements AgentLink {
     this.verified = false;
     this.helper = false;
     this.lastCheck = null;
+    // The agent lifts the block by itself when its lease runs out, so a lost link is "not confirmed".
+    if (this.wantedNet?.blocked) this.setNetOutcome({ blocked: false, error: LOST });
     this.emit();
     if (!this.running) return;
     this.reconnectTimer = setTimeout(() => this.open(), this.backoffMs);

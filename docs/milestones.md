@@ -193,13 +193,14 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** `agent/eg-agent` WFP code (dynamic session, permit loopback/DHCP/teacher address, block other outbound on all interfaces), lease timer, cleanup on service start/stop, a CLI test switch in `--console` mode.
 - **Accept:** with filters on, a browser and `curl https://example.com` fail while the exam (HTTPS/WSS to the teacher) keeps working; killing the service process restores internet at once; the lease restores it after the app goes silent. Run **only on the second laptop** (manual, admin).
 - **Manual test:** as above, plus reboot the laptop mid-block → internet is back after boot.
-- **Built (2026-10-24):** `eg-agent` `net_rules` / `wfp_filter` / `wfp_engine` / `net_block` / `net_cli`; `eg-agent --console --net-block <ip,...> [--net-lease-secs N]` with `renew` / `off` / `on` on stdin; `scripts/dev-net-probe.ps1`. Unit-tested only; the laptop run is pending and its manual steps are in progress.md. Not wired into the service or the pipe (M21b).
+- **Built (2026-10-24):** `eg-agent` `net_rules` / `wfp_filter` / `wfp_engine` / `net_block`; `scripts/dev-net-probe.ps1`. Unit-tested only; the laptop run is pending. Its `--net-block` console switch was removed in M21b; the same checks run from the teacher dashboard (steps in progress.md, M21b decisions).
 
 ### M21b Teacher internet toggle
 - **Goal:** the teacher turns student internet off/on per exam from the dashboard.
 - **Touches:** shared `state.internet`, `POST /exams/:id/actions {type:'internet', enabled}` + `teacher_actions`, pipe `net.set {blocked, allow}` (teacher address from the pinned session), app relays on welcome/state, removal on submit/end/`monitor.stop`, `internet_blocked|internet_allowed` events, dashboard toggle with "applied on N of M PCs".
 - **Accept:** toggling off blocks internet on the laptop within 2 s and the event shows; ending the exam or submitting restores it; a late joiner gets the current state; the fake agent (`EG_FAKE_AGENT=1`) acknowledges without touching the network.
 - **Manual test:** laptop as student: toggle off → browser fails, exam still works; toggle on → browser works; end exam while off → internet returns.
+- **Built (2026-10-24):** migration 0011, `InternetSwitch` + `/actions {type:'internet'}`, `state.internet`, `internet.status` + roster `internetBlocked`, pipe `net.set` / `net.status` (the app repeats `net.set` with each heartbeat as the lease), Rust `NetControl`, student `InternetController`, dashboard `InternetControl` with "applied on N of M PCs", the student "Internet off" chip, the three events. The real-filter run on the laptop is pending; steps in progress.md.
 
 ### M22 Focus tracking, outside time, screenshots → events
 - **Goal:** switches away from ExamGuard produce events with screenshots following the policy (switch, title change, every 20 s, ≥5 s gap).

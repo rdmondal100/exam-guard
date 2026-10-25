@@ -1,5 +1,11 @@
 import type { AgentLinkStatus, AgentStatus } from '@examguard/shared';
 
+/** What the agent confirmed about the internet block (M21b). `error` says why a wanted block is not there. */
+export interface InternetOutcome {
+  blocked: boolean;
+  error: string | null;
+}
+
 /**
  * The student app's link to the monitoring agent: the real pipe client, or the dev fake. The join
  * flow, the live socket and the agent gate only use this.
@@ -13,6 +19,15 @@ export interface AgentLink {
   check(): Promise<AgentLinkStatus>;
   /** Called when the status changes. Returns the function that stops listening. */
   onChange(listener: (status: AgentLinkStatus) => void): () => void;
+  /**
+   * Wants the internet blocked except `allow` (IPv4 addresses), or not blocked. The link keeps the
+   * agent's lease alive while it is blocked and says what the agent confirmed through `onInternet`.
+   */
+  setInternet(blocked: boolean, allow: string[]): void;
+  /** What the agent confirmed last. */
+  internet(): InternetOutcome;
+  /** Called when that changes. Returns the function that stops listening. */
+  onInternet(listener: (outcome: InternetOutcome) => void): () => void;
 }
 
 /** A link that is down, with the reason in words for the student. */

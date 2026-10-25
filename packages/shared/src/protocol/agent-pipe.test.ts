@@ -53,3 +53,26 @@ describe('agent → app pipe messages', () => {
     expect(AgentToAppSchema.safeParse(hello).success).toBe(false);
   });
 });
+
+describe('internet messages on the pipe', () => {
+  it('accepts net.set with an address list and net.status with or without an error', () => {
+    const set = { t: 'net.set', seq: 3, blocked: true, allow: ['192.168.1.10'] };
+    expect(AppToAgentSchema.safeParse(set).success).toBe(true);
+    expect(AppToAgentSchema.safeParse({ ...set, blocked: false, allow: [] }).success).toBe(true);
+    const status = { t: 'net.status', seq: 4, reqSeq: 3, blocked: true, error: null };
+    expect(AgentToAppSchema.safeParse(status).success).toBe(true);
+    expect(AgentToAppSchema.safeParse({ ...status, error: 'denied' }).success).toBe(true);
+  });
+
+  it('rejects a net.set without an allow list and one with too many addresses', () => {
+    expect(AppToAgentSchema.safeParse({ t: 'net.set', seq: 1, blocked: true }).success).toBe(false);
+    const many = Array.from({ length: 9 }, (_, i) => `10.0.0.${i + 1}`);
+    const tooMany = { t: 'net.set', seq: 1, blocked: true, allow: many };
+    expect(AppToAgentSchema.safeParse(tooMany).success).toBe(false);
+  });
+
+  it('rejects a net.status that does not say whether it is blocked', () => {
+    const status = { t: 'net.status', seq: 4, reqSeq: 3, error: null };
+    expect(AgentToAppSchema.safeParse(status).success).toBe(false);
+  });
+});

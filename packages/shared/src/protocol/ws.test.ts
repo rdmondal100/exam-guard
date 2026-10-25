@@ -50,6 +50,7 @@ describe('server messages', () => {
         locked: false,
         monitoring: false,
         terminal: { enabled: false, until: null },
+        internet: 'allowed',
         filesEnabled: true,
         examFiles: [],
       },
@@ -72,6 +73,7 @@ describe('server messages', () => {
         locked: false,
         monitoring: false,
         terminal: { enabled: false, until: null },
+        internet: 'allowed',
         filesEnabled: true,
         examFiles: [],
       },
@@ -91,6 +93,7 @@ describe('teacher messages', () => {
     outsideMs: 0,
     lastSeen: null,
     agentOk: true,
+    internetBlocked: false,
   };
 
   it('accepts subscribe and rejects an empty exam id', () => {

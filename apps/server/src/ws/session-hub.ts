@@ -39,6 +39,8 @@ export class SessionHub {
   /** Whether each student's monitoring agent was healthy at their last report. Not stored: a
    * restarted server hears it again from each student's welcome. */
   private readonly agentOk = new Map<string, boolean>();
+  /** Whether each student's PC confirmed a blocked internet (`internet.status`, M21b). */
+  private readonly internetBlocked = new Map<string, boolean>();
   private timer: NodeJS.Timeout | null = null;
   private disposed = false;
   private readonly now: () => number;
@@ -77,8 +79,19 @@ export class SessionHub {
     this.changed(id);
   }
 
+  /** What the student's app says about its internet block (`internet.status`). */
+  setInternet(id: string, blocked: boolean): void {
+    if ((this.internetBlocked.get(id) ?? false) === blocked) return;
+    this.internetBlocked.set(id, blocked);
+    this.changed(id);
+  }
+
   private withAgent(entry: RosterEntry): RosterEntry {
-    return { ...entry, agentOk: this.agentOk.get(entry.id) ?? true };
+    return {
+      ...entry,
+      agentOk: this.agentOk.get(entry.id) ?? true,
+      internetBlocked: this.internetBlocked.get(entry.id) ?? false,
+    };
   }
 
   isConnected(id: string): boolean {

@@ -1,21 +1,28 @@
 //! Starts the agent's two pipes next to the helper supervisor: the app pipe (the student app talks
 //! to it) and the helper pipe (the helper reports to it). Shared by the service and `--console`.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 
 use crate::config;
 use crate::helper_link::HelperLink;
+use crate::net_control::{NetControl, NetStatus};
 use crate::pipe_security::{allowed_app, SDDL_APP_PIPE};
 use crate::pipe_server::{Health, PipeServer, ServerConfig};
 use crate::supervisor::Platform;
 use crate::system_check::{evaluate, CheckResult};
+use crate::wfp_engine::WfpBackend;
 
 /// How long a system check waits for the helper's test capture.
 const CHECK_TIMEOUT: Duration = Duration::from_millis(2500);
 
+type Net = NetControl<WfpBackend>;
+
 struct AgentHealth {
     helper: Arc<HelperLink>,
+    net: Arc<Net>,
 }
 
 impl Health for AgentHealth {
@@ -25,6 +32,10 @@ impl Health for AgentHealth {
 
     fn system_check(&self) -> CheckResult {
         evaluate(self.helper.check(CHECK_TIMEOUT))
+    }
+
+    fn net_set(&self, blocked: bool, allow: &[String]) -> NetStatus {
+        self.net.set(blocked, allow, Instant::now())
     }
 }
 
@@ -48,6 +59,19 @@ pub fn run_with_link<T>(platform: &Platform, body: impl FnOnce() -> T) -> T {
 pub struct Link {
     app: PipeServer,
     helper: Arc<HelperLink>,
+    net: Arc<Net>,
+    stop_lease: Arc<AtomicBool>,
+    lease_timer: JoinHandle<()>,
+}
+
+/// Checks the internet lease a few times a second, so a block nobody renews ends by itself.
+fn spawn_lease_timer(net: Arc<Net>, stop: Arc<AtomicBool>) -> JoinHandle<()> {
+    thread::spawn(move || {
+        while !stop.load(Ordering::SeqCst) {
+            net.tick(Instant::now());
+            thread::sleep(config::NET_TICK);
+        }
+    })
 }
 
 impl Link {
@@ -66,11 +90,23 @@ impl Link {
             lost_after: config::HEARTBEAT_LOST,
             hello_within: config::HELLO_WITHIN,
         };
+        let net = Arc::new(NetControl::new(WfpBackend::default(), config::NET_LEASE));
         let health = Arc::new(AgentHealth {
             helper: helper.clone(),
+            net: net.clone(),
         });
         match PipeServer::start(server, health) {
-            Ok(app) => Ok(Self { app, helper }),
+            Ok(app) => {
+                let stop_lease = Arc::new(AtomicBool::new(false));
+                let lease_timer = spawn_lease_timer(net.clone(), stop_lease.clone());
+                Ok(Self {
+                    app,
+                    helper,
+                    net,
+                    stop_lease,
+                    lease_timer,
+                })
+            }
             Err(error) => {
                 helper.stop();
                 Err(error)
@@ -80,6 +116,11 @@ impl Link {
 
     pub fn stop(self) {
         self.app.stop();
+        self.stop_lease.store(true, Ordering::SeqCst);
+        // The timer only panics on a bug; the log has it.
+        let _ = self.lease_timer.join();
+        // The agent stopping must never leave the PC without internet.
+        self.net.release();
         self.helper.stop();
     }
 }

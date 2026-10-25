@@ -38,6 +38,8 @@ export interface SessionClientDeps {
   onAnswers?: (status: AnswerStatus) => void;
   /** The latest exam state: on every welcome and after each `state` push. */
   onExam?: (state: SessionState) => void;
+  /** The session was stopped for good (Leave), not restarted: nothing may stay locked down. */
+  onStop?: () => void;
   pingMs?: number;
   random?: () => number;
 }
@@ -67,6 +69,8 @@ export class SessionClient {
   private welcomed: WebSocket | null = null;
   /** The agent's latest health, sent after each welcome and whenever it changes (M21). */
   private agent: AgentStatus | null = null;
+  /** What the agent confirmed about the internet block; re-sent after every welcome (M21b). */
+  private internetStatus: { blocked: boolean; error: string | null } | null = null;
   /** Sent events waiting for `event.ack`, in send order. */
   private readonly pending = new Map<string, EventReport>();
   /** Sent transcript chunks waiting for `transcript.ack`, in send order. */
@@ -97,6 +101,19 @@ export class SessionClient {
   setAgentStatus(status: AgentStatus): void {
     this.agent = status;
     if (this.welcomed) this.sendFrame(this.welcomed, { t: 'agent.status', ...status });
+  }
+
+  /** Tells the server whether this PC's internet is blocked; it is also re-sent after every welcome. */
+  setInternetStatus(blocked: boolean, error: string | null): void {
+    this.internetStatus = { blocked, error };
+    if (this.welcomed) {
+      this.sendFrame(this.welcomed, { t: 'internet.status', ...this.internetStatus });
+    }
+  }
+
+  /** The exam server's address, which stays reachable while the internet is blocked. */
+  get teacherAddress(): string | null {
+    return this.target?.address ?? null;
   }
 
   /** Saves one answer buffer. It is re-sent after every reconnect until the server acks it. */
@@ -193,7 +210,7 @@ export class SessionClient {
    * run left unacked is loaded and sent after the first welcome, and new frames are kept in it.
    */
   start(target: PinnedTarget, token: string, queue?: OfflineQueue): void {
-    this.stop();
+    this.halt();
     this.queue = queue ?? null;
     if (queue) this.load(queue);
     this.target = target;
@@ -217,6 +234,11 @@ export class SessionClient {
   }
 
   stop(): void {
+    this.halt();
+    this.deps.onStop?.();
+  }
+
+  private halt(): void {
     this.settleSubmit({ ok: false, reason: 'stopped' });
     this.generation += 1;
     this.target = null;
@@ -305,6 +327,9 @@ export class SessionClient {
       this.ping(ws);
       this.welcomed = ws;
       if (this.agent) this.sendFrame(ws, { t: 'agent.status', ...this.agent });
+      if (this.internetStatus) {
+        this.sendFrame(ws, { t: 'internet.status', ...this.internetStatus });
+      }
       this.answers.continueAfter(message.state.saved);
       for (const save of this.answers.unacked()) this.sendFrame(ws, save);
       for (const event of this.pending.values()) this.sendFrame(ws, event);

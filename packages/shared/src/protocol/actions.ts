@@ -21,8 +21,22 @@ export const TerminalActionSchema = z.object({
 });
 export type TerminalAction = z.infer<typeof TerminalActionSchema>;
 
-/** `POST /exams/:id/actions`. M21b adds `internet`. */
-export const ExamActionSchema = z.discriminatedUnion('type', [TerminalActionSchema]);
+/** Whether students' PCs may reach the internet (server-authoritative). The teacher PC stays reachable. */
+export const InternetStateSchema = z.enum(['allowed', 'blocked']);
+export type InternetState = z.infer<typeof InternetStateSchema>;
+
+export const InternetActionSchema = z.object({
+  type: z.literal('internet'),
+  /** `true` lets students reach the internet, `false` blocks it. */
+  enabled: z.boolean(),
+});
+export type InternetAction = z.infer<typeof InternetActionSchema>;
+
+/** `POST /exams/:id/actions`. */
+export const ExamActionSchema = z.discriminatedUnion('type', [
+  TerminalActionSchema,
+  InternetActionSchema,
+]);
 export type ExamAction = z.infer<typeof ExamActionSchema>;
 
 /** Reply to a `terminal` action: the state students now get. */
@@ -33,6 +47,13 @@ export const TerminalActionResultSchema = z.object({
   pendingMinutes: z.number().int().nullable(),
 });
 export type TerminalActionResult = z.infer<typeof TerminalActionResultSchema>;
+
+/** Reply to an `internet` action. */
+export const InternetActionResultSchema = z.object({
+  ok: z.literal(true),
+  internet: InternetStateSchema,
+});
+export type InternetActionResult = z.infer<typeof InternetActionResultSchema>;
 
 export const TerminalLogEventSchema = z.object({
   id: z.number().int(),

@@ -27,9 +27,7 @@ pub const HELLO_WITHIN: Duration = Duration::from_secs(5);
 
 /// Internet-off lease: with no renewal for this long the filters are removed (architecture §3).
 pub const NET_LEASE: Duration = Duration::from_secs(180);
-/// The longest lease the `--net-block` test switch accepts, so a typo cannot leave a PC offline.
-pub const NET_LEASE_MAX: Duration = Duration::from_secs(600);
-/// How often the test switch checks its lease.
+/// How often the lease is checked.
 pub const NET_TICK: Duration = Duration::from_millis(500);
 
 /// `%ProgramData%\ExamGuard\spike`: logs and screenshots. It is still the M19 folder because the

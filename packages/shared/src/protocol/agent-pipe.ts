@@ -31,10 +31,24 @@ export const PipeHeartbeatAckSchema = z.object({
 });
 export type PipeHeartbeatAck = z.infer<typeof PipeHeartbeatAckSchema>;
 
+/**
+ * Block (or stop blocking) the PC's internet except `allow`: IPv4 addresses, the teacher PC. The app
+ * repeats a `blocked: true` request with every heartbeat; that is the lease, and the agent removes
+ * the block when it stops coming (docs/architecture.md §3).
+ */
+export const PipeNetSetSchema = z.object({
+  t: z.literal('net.set'),
+  seq,
+  blocked: z.boolean(),
+  allow: z.array(z.string().max(45)).max(8),
+});
+export type PipeNetSet = z.infer<typeof PipeNetSetSchema>;
+
 export const AppToAgentSchema = z.discriminatedUnion('t', [
   PipeAppHelloSchema,
   PipeSystemCheckSchema,
   PipeHeartbeatAckSchema,
+  PipeNetSetSchema,
 ]);
 export type AppToAgent = z.infer<typeof AppToAgentSchema>;
 
@@ -73,6 +87,16 @@ export const PipeHeartbeatSchema = z.object({
 });
 export type PipeHeartbeat = z.infer<typeof PipeHeartbeatSchema>;
 
+/** Answer to `net.set`: whether the block is in place now. `error` is set when it could not be. */
+export const PipeNetStatusSchema = z.object({
+  t: z.literal('net.status'),
+  seq,
+  reqSeq: seq,
+  blocked: z.boolean(),
+  error: z.string().max(300).nullable(),
+});
+export type PipeNetStatus = z.infer<typeof PipeNetStatusSchema>;
+
 export const PipeErrorSchema = z.object({
   t: z.literal('error'),
   seq,
@@ -85,6 +109,7 @@ export const AgentToAppSchema = z.discriminatedUnion('t', [
   PipeAgentHelloSchema,
   PipeSystemCheckResultSchema,
   PipeHeartbeatSchema,
+  PipeNetStatusSchema,
   PipeErrorSchema,
 ]);
 export type AgentToApp = z.infer<typeof AgentToAppSchema>;

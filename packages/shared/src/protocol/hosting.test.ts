@@ -9,6 +9,7 @@ describe('HostingInfoSchema', () => {
       port: 47820,
       fpCode: '7K2M',
       terminal: { enabled: false, until: null },
+      internet: 'allowed',
       terminalPendingMinutes: null,
     };
     expect(HostingInfoSchema.parse(info)).toEqual(info);

@@ -3,7 +3,7 @@ import { ProtocolVersionSchema } from './protocol-version.js';
 import { AgentStatusSchema, StudentStateSchema } from './join.js';
 import { ExamStateSchema } from './exams.js';
 import { StudentQuestionSchema } from './questions.js';
-import { TerminalStateSchema } from './actions.js';
+import { InternetStateSchema, TerminalStateSchema } from './actions.js';
 import { ExamFilesSchema } from './exam-files.js';
 import { AnswerAckSchema, AnswerSaveSchema, SavedAnswerSchema } from './answers.js';
 import {
@@ -49,6 +49,9 @@ export const APP_EVENT_TYPES = [
   'terminal_closed',
   'terminal_command',
   'package_installed',
+  'internet_blocked',
+  'internet_allowed',
+  'internet_block_failed',
 ] as const;
 export const AppEventTypeSchema = z.enum(APP_EVENT_TYPES);
 export type AppEventType = z.infer<typeof AppEventTypeSchema>;
@@ -80,6 +83,17 @@ export type TranscriptChunk = z.infer<typeof TranscriptChunkSchema>;
 export const AgentStatusMessageSchema = AgentStatusSchema.extend({ t: z.literal('agent.status') });
 export type AgentStatusMessage = z.infer<typeof AgentStatusMessageSchema>;
 
+/**
+ * Whether this PC's internet is blocked right now, as the agent confirmed it (M21b). `error` says why a
+ * block the teacher asked for is not in place. Sent after each welcome and on every change.
+ */
+export const InternetStatusMessageSchema = z.object({
+  t: z.literal('internet.status'),
+  blocked: z.boolean(),
+  error: z.string().max(300).nullable(),
+});
+export type InternetStatusMessage = z.infer<typeof InternetStatusMessageSchema>;
+
 export const StudentMessageSchema = z.discriminatedUnion('t', [
   HelloSchema,
   PingSchema,
@@ -88,6 +102,7 @@ export const StudentMessageSchema = z.discriminatedUnion('t', [
   AnswerSaveSchema,
   SubmitSchema,
   AgentStatusMessageSchema,
+  InternetStatusMessageSchema,
 ]);
 export type StudentMessage = z.infer<typeof StudentMessageSchema>;
 
@@ -105,6 +120,8 @@ export const SessionStateSchema = z.object({
   monitoring: z.boolean(),
   /** The teacher's exam terminal switch (server-authoritative). */
   terminal: TerminalStateSchema,
+  /** The teacher's internet switch (server-authoritative; M21b). */
+  internet: InternetStateSchema,
   /** The teacher's Files panel switch for this exam (server-authoritative). */
   filesEnabled: z.boolean(),
   /** The files the teacher attached; students download them in the lobby (M15f). */
@@ -181,6 +198,8 @@ export const RosterEntrySchema = z.object({
   outsideMs: z.number().int(),
   lastSeen: z.number().nullable(),
   agentOk: z.boolean(),
+  /** The student's PC confirmed that its internet is blocked (M21b). */
+  internetBlocked: z.boolean(),
 });
 export type RosterEntry = z.infer<typeof RosterEntrySchema>;
 

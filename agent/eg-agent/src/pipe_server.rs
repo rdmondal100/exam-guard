@@ -14,6 +14,7 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use crate::net_control::NetStatus;
 use crate::pipe_conn::Conn;
 use crate::pipe_frame::{encode, FrameBuffer};
 use crate::pipe_msg::{FromApp, ToApp};
@@ -28,6 +29,14 @@ pub trait Health: Send + Sync {
     fn helper_alive(&self) -> bool;
     /// A fresh check; may take a moment (the helper takes a test capture).
     fn system_check(&self) -> CheckResult;
+    /// The app's `net.set`: block the internet except `allow`, or stop blocking.
+    fn net_set(&self, blocked: bool, allow: &[String]) -> NetStatus {
+        let _ = (blocked, allow);
+        NetStatus {
+            blocked: false,
+            error: Some("This agent cannot control the internet.".to_string()),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -213,6 +222,19 @@ fn serve(
                         problems: check.problems,
                     })
                 }
+                Ok(FromApp::NetSet {
+                    seq: req_seq,
+                    blocked,
+                    allow,
+                }) => {
+                    let status = health.net_set(blocked, &allow);
+                    Some(ToApp::NetStatus {
+                        seq: next_seq(),
+                        req_seq,
+                        blocked: status.blocked,
+                        error: status.error,
+                    })
+                }
                 Ok(FromApp::HeartbeatAck { .. }) => {
                     last_ack = Instant::now();
                     None
@@ -280,6 +302,12 @@ mod tests {
         }
         fn system_check(&self) -> CheckResult {
             self.check.clone()
+        }
+        fn net_set(&self, blocked: bool, allow: &[String]) -> NetStatus {
+            NetStatus {
+                blocked: blocked && !allow.is_empty(),
+                error: allow.is_empty().then(|| "no address".to_string()),
+            }
         }
     }
 
@@ -380,6 +408,49 @@ mod tests {
         assert_eq!(result["reqSeq"], 9);
         assert_eq!(result["ok"], true);
         assert_eq!(result["monitors"], 2);
+        drop(client);
+        server.stop();
+    }
+
+    #[test]
+    fn net_set_is_answered_with_the_status_and_needs_a_hello_first() {
+        let server = start(me(), good_check());
+        let client = Conn::connect(&server.name).unwrap();
+        let mut frames = FrameBuffer::default();
+        assert_eq!(next(&client, &mut frames).unwrap()["t"], "hello");
+
+        put(
+            &client,
+            r#"{"t":"net.set","seq":4,"blocked":true,"allow":["10.0.0.2"]}"#,
+        );
+        let early = next(&client, &mut frames).unwrap();
+        assert_eq!(early["t"], "error");
+        assert_eq!(early["code"], "no_hello");
+
+        put(&client, HELLO);
+        put(
+            &client,
+            r#"{"t":"net.set","seq":5,"blocked":true,"allow":["10.0.0.2"]}"#,
+        );
+        put(
+            &client,
+            r#"{"t":"net.set","seq":6,"blocked":true,"allow":[]}"#,
+        );
+        let mut answers = Vec::new();
+        while answers.len() < 2 {
+            let message = next(&client, &mut frames).unwrap();
+            match message["t"].as_str().unwrap() {
+                "net.status" => answers.push(message),
+                "heartbeat" => {}
+                other => panic!("unexpected {other}"),
+            }
+        }
+        assert_eq!(answers[0]["reqSeq"], 5);
+        assert_eq!(answers[0]["blocked"], true);
+        assert!(answers[0]["error"].is_null());
+        assert_eq!(answers[1]["reqSeq"], 6);
+        assert_eq!(answers[1]["blocked"], false);
+        assert_eq!(answers[1]["error"], "no address");
         drop(client);
         server.stop();
     }

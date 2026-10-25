@@ -20,6 +20,7 @@ interface Entry {
   state: string;
   connected: boolean;
   agentOk?: boolean;
+  internetBlocked?: boolean;
 }
 interface Msg {
   t: string;
@@ -512,6 +513,102 @@ describe('starting the exam', () => {
     );
     await vi.waitFor(() => expect(examState()).toBe('ended'), { timeout: 3000 });
     expect(hosting.info(examId)).toBeNull();
+  });
+});
+
+describe('internet switch', () => {
+  const action = (payload: object, id = examId) =>
+    app.inject({
+      method: 'POST',
+      url: `/api/v1/exams/${id}/actions`,
+      headers: HEADERS,
+      payload,
+    });
+  const internetOf = (m: Msg | undefined) =>
+    (m?.state as unknown as { internet?: string } | undefined)?.internet;
+
+  it('pushes the switch, gives late joiners the state and logs the action', async () => {
+    const token = await joinStudent('1');
+    const c = await studentWs();
+    c.ws.send(hello(token));
+    await c.waitFor(() => has(c, 'welcome'));
+    expect(internetOf(last(c, 'welcome'))).toBe('allowed');
+
+    const off = await action({ type: 'internet', enabled: false });
+    expect(off.statusCode).toBe(200);
+    expect(off.json()).toEqual({ ok: true, internet: 'blocked' });
+    await c.waitFor(() => internetOf(last(c, 'state')) === 'blocked');
+
+    const late = await joinStudent('2');
+    const l = await studentWs();
+    l.ws.send(hello(late));
+    await l.waitFor(() => has(l, 'welcome'));
+    expect(internetOf(last(l, 'welcome'))).toBe('blocked');
+
+    const info = await app.inject({
+      method: 'GET',
+      url: `/api/v1/exams/${examId}/hosting`,
+      headers: HEADERS,
+    });
+    expect(info.json()).toMatchObject({ internet: 'blocked' });
+
+    await action({ type: 'internet', enabled: true });
+    await c.waitFor(() => internetOf(last(c, 'state')) === 'allowed');
+    expect(db.prepare('SELECT action, payload_json FROM teacher_actions').all()).toEqual([
+      { action: 'internet', payload_json: '{"enabled":false}' },
+      { action: 'internet', payload_json: '{"enabled":true}' },
+    ]);
+  });
+
+  it('rejects bad bodies, unknown exams and ended exams', async () => {
+    expect((await action({ type: 'internet' })).statusCode).toBe(400);
+    expect((await action({ type: 'internet', enabled: 'no' })).statusCode).toBe(400);
+    expect((await action({ type: 'internet', enabled: false }, 'nope')).statusCode).toBe(404);
+    await app.inject({ method: 'POST', url: `/api/v1/exams/${examId}/start`, headers: HEADERS });
+    await app.inject({ method: 'POST', url: `/api/v1/exams/${examId}/end`, headers: HEADERS });
+    const ended = await action({ type: 'internet', enabled: false });
+    expect(ended.statusCode).toBe(409);
+    expect(ended.json().error.code).toBe('invalid_state');
+  });
+
+  it('shows on the roster which PCs confirmed the block', async () => {
+    const token = await joinStudent('1');
+    const teacher = await teacherWs();
+    const c = await studentWs();
+    c.ws.send(hello(token));
+    await teacher.waitFor(() => entry(teacher, '1')?.connected === true);
+    expect(entry(teacher, '1')?.internetBlocked).toBe(false);
+
+    c.ws.send(JSON.stringify({ t: 'internet.status', blocked: true, error: null }));
+    await teacher.waitFor(() => entry(teacher, '1')?.internetBlocked === true);
+    c.ws.send(JSON.stringify({ t: 'internet.status', blocked: false, error: 'not admin' }));
+    await teacher.waitFor(() => entry(teacher, '1')?.internetBlocked === false);
+  });
+
+  it('refuses internet.status before hello', async () => {
+    const early = await studentWs();
+    early.ws.send(JSON.stringify({ t: 'internet.status', blocked: true, error: null }));
+    expect(await early.closed).toBe(4400);
+  });
+
+  it('stores the internet events the app reports', async () => {
+    const token = await joinStudent('1');
+    const c = await studentWs();
+    c.ws.send(hello(token));
+    await c.waitFor(() => has(c, 'welcome'));
+    for (const [id, type] of [
+      ['i1', 'internet_blocked'],
+      ['i2', 'internet_block_failed'],
+      ['i3', 'internet_allowed'],
+    ]) {
+      c.ws.send(JSON.stringify({ t: 'event', id, dedupeKey: id, clientTs: 1, type, details: {} }));
+    }
+    await c.waitFor(() => c.messages.filter((m) => m.t === 'event.ack').length === 3);
+    expect(db.prepare('SELECT type FROM events ORDER BY id').all()).toEqual([
+      { type: 'internet_blocked' },
+      { type: 'internet_block_failed' },
+      { type: 'internet_allowed' },
+    ]);
   });
 });
 
