@@ -1,4 +1,5 @@
 import type { RosterEntry } from '@examguard/shared';
+import { formatDuration } from '@/lib/eventsView';
 
 interface Props {
   students: RosterEntry[];
@@ -21,6 +22,11 @@ export function RosterList({ students, onTerminalLog }: Props) {
           />
           <span className="w-24 shrink-0 font-mono">{s.studentCode}</span>
           <span className="flex-1 truncate">{s.name}</span>
+          {s.outsideMs > 0 && (
+            <span className="shrink-0 text-amber-700" title="Total time outside the exam window">
+              Outside {formatDuration(s.outsideMs)}
+            </span>
+          )}
           <span className="text-muted">{s.connected ? s.state : `${s.state} · offline`}</span>
           {onTerminalLog && (
             <button

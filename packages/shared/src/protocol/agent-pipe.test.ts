@@ -17,7 +17,7 @@ describe('app → agent pipe messages', () => {
   });
 
   it('rejects an unknown type, another pipe version and a negative seq', () => {
-    expect(AppToAgentSchema.safeParse({ t: 'monitor.start', seq: 1 }).success).toBe(false);
+    expect(AppToAgentSchema.safeParse({ t: 'monitor.pause', seq: 1 }).success).toBe(false);
     const hello = { t: 'hello', seq: 1, pipeVersion: 2, appVersion: 'x' };
     expect(AppToAgentSchema.safeParse(hello).success).toBe(false);
     expect(AppToAgentSchema.safeParse({ t: 'system.check', seq: -1 }).success).toBe(false);

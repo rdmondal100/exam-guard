@@ -166,6 +166,13 @@ export class ExamStudentRepo {
       .run(connected ? 1 : 0, now, id);
   }
 
+  /** Adds time the student spent outside the exam window (the `focus_returned` durations). */
+  addOutsideMs(id: string, ms: number): void {
+    this.db
+      .prepare('UPDATE exam_students SET outside_ms_total = outside_ms_total + ? WHERE id = ?')
+      .run(Math.max(0, Math.round(ms)), id);
+  }
+
   /** A crash or restart leaves no socket open, so no row may stay `connected`. */
   resetConnections(): void {
     this.db.prepare('UPDATE exam_students SET connected = 0 WHERE connected = 1').run();

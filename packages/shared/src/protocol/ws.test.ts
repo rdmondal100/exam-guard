@@ -164,7 +164,7 @@ describe('events', () => {
   });
 
   it.each([
-    { ...event, type: 'focus_lost' },
+    { ...event, type: 'app_launched' },
     { ...event, dedupeKey: '' },
     { ...event, details: 'x' },
   ])('rejects %j', (message) => {

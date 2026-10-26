@@ -17,11 +17,14 @@ import { examWorking } from './exam-working.js';
 import { JoinClient } from './join-client.js';
 import { probeHost } from './probe-host.js';
 import { SessionClient } from './session-client.js';
+import { SessionExitWatch } from './session-exit-watch.js';
 import { resolveMode, saveStoredMode } from './mode-store.js';
 import { registerAgentIpc } from './agent/agent-ipc.js';
 import { toAgentBlock } from './agent/agent-link.js';
 import { createAgentLink } from './agent/create-agent-link.js';
 import { InternetController } from './internet/internet-controller.js';
+import { announceExamWindow } from './monitor/exam-window.js';
+import { MonitorController } from './monitor/monitor-controller.js';
 import { runCommand } from './agent/run-command.js';
 import { registerExamFilesIpc } from './exam-files/exam-files-ipc.js';
 import { registerFilesIpc } from './files/files-ipc.js';
@@ -48,7 +51,12 @@ function toInfo(state: AppState): AppInfo {
   };
 }
 
-export function registerIpc(state: AppState, server: ServerHost, examLock: ExamLock): void {
+export interface IpcHandle {
+  /** Tells the agent which window is the exam (the student's agent link; harmless in Teacher mode). */
+  announceWindow(window: BrowserWindow): void;
+}
+
+export function registerIpc(state: AppState, server: ServerHost, examLock: ExamLock): IpcHandle {
   const discovery = new Discovery((hosts) => {
     for (const win of BrowserWindow.getAllWindows())
       win.webContents.send(IPC.discoveryHosts, hosts);
@@ -101,11 +109,16 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
   });
   let onTerminalExam: (exam: SessionState) => void = () => {};
   let internet: InternetController | null = null;
+  let monitor: MonitorController | null = null;
+  // A failed session, or a link that stayed down past the deadline, must not trap the student.
+  const exitWatch = new SessionExitWatch({ release: () => examLock.setActive(false) });
+  app.once('will-quit', () => exitWatch.stop());
   const session = new SessionClient({
     onStatus: (status) => {
       for (const win of BrowserWindow.getAllWindows())
         win.webContents.send(IPC.sessionStatus, status);
       resume.hooks?.onStatus(status);
+      exitWatch.setStatus(status);
     },
     onAnswers: (status) => {
       for (const win of BrowserWindow.getAllWindows())
@@ -113,16 +126,26 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     },
     onExam: (exam) => {
       examLock.setActive(examWorking(exam));
+      exitWatch.setExam(exam);
       onTerminalExam(exam);
       onExamFiles(exam);
       internet?.onExam(exam);
+      monitor?.onExam(exam);
       resume.hooks?.onExam(exam);
       for (const win of BrowserWindow.getAllWindows()) win.webContents.send(IPC.sessionExam, exam);
     },
-    onStop: () => internet?.reset(),
+    onStop: () => {
+      internet?.reset();
+      monitor?.reset();
+    },
   });
   // The teacher's internet switch: applied through the agent, confirmed back to the server.
   internet = new InternetController(agentLink, session);
+  // Focus changes and screenshots the agent sees while the exam runs go to the server as events.
+  monitor = new MonitorController(agentLink, {
+    examStudentId: () => joinClient.examStudentId(),
+    sendEvidence: (evidence, onAcked) => session.sendEvidence(evidence, onAcked),
+  });
   // The server learns how the agent link looks after each welcome and whenever it changes.
   session.setAgentStatus(toAgentBlock(agentLink.status()));
   agentLink.onChange((link) => session.setAgentStatus(toAgentBlock(link)));
@@ -168,4 +191,8 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     if (state.mode === 'student') agentLink.start();
     return toInfo(state);
   });
+
+  return {
+    announceWindow: (window) => announceExamWindow(agentLink, window, process.pid),
+  };
 }

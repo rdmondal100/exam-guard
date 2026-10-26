@@ -9,6 +9,10 @@ mod config;
 #[cfg(windows)]
 mod console;
 #[cfg(windows)]
+mod evidence_queue;
+#[cfg(windows)]
+mod focus;
+#[cfg(windows)]
 mod helper;
 #[cfg(windows)]
 mod helper_client;
@@ -37,11 +41,13 @@ mod pipe_security;
 #[cfg(windows)]
 mod pipe_server;
 #[cfg(windows)]
+mod policy;
+#[cfg(windows)]
+mod process_tree;
+#[cfg(windows)]
 mod service;
 #[cfg(windows)]
 mod session;
-#[cfg(windows)]
-mod shots;
 #[cfg(windows)]
 mod supervisor;
 #[cfg(windows)]

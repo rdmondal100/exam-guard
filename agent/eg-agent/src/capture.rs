@@ -15,7 +15,10 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 
 use crate::win::{check, last_error};
 
+/// The size and quality the exam policy asks for (`monitor.start`); the tests use the same.
+#[cfg(test)]
 pub const MAX_WIDTH: u32 = 1600;
+#[cfg(test)]
 pub const JPEG_QUALITY: u8 = 60;
 
 /// One captured frame, top-down BGRA.

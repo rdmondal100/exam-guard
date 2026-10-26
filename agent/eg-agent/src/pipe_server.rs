@@ -14,10 +14,11 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use crate::evidence_queue::Stored;
 use crate::net_control::NetStatus;
 use crate::pipe_conn::Conn;
-use crate::pipe_frame::{encode, FrameBuffer};
-use crate::pipe_msg::{FromApp, ToApp};
+use crate::pipe_frame::{encode, FrameBuffer, MAX_FRAME};
+use crate::pipe_msg::{FromApp, MonitorPolicy, ToApp};
 use crate::pipe_security::{image_path, same_image};
 use crate::system_check::CheckResult;
 
@@ -36,6 +37,28 @@ pub trait Health: Send + Sync {
             blocked: false,
             error: Some("This agent cannot control the internet.".to_string()),
         }
+    }
+    /// The app's `monitor.start`: watch the foreground window for this student.
+    fn monitor_start(&self, exam_student_id: &str, policy: &MonitorPolicy) {
+        let _ = (exam_student_id, policy);
+    }
+    fn monitor_stop(&self) {}
+    /// The app's `exam.window`: the window (and process) that counts as inside.
+    fn exam_window(&self, hwnd: u64, pid: u32) {
+        let _ = (hwnd, pid);
+    }
+    /// Monitoring is on (the heartbeat says so).
+    fn monitoring(&self) -> bool {
+        false
+    }
+    /// Evidence numbered above `after` that the app has not acknowledged.
+    fn evidence_after(&self, after: u64) -> Vec<Stored> {
+        let _ = after;
+        Vec::new()
+    }
+    /// The app says the server stored the evidence up to `up_to`.
+    fn evidence_ack(&self, up_to: u64) {
+        let _ = up_to;
     }
 }
 
@@ -142,7 +165,11 @@ fn verify_peer(conn: &Conn, config: &ServerConfig) -> Result<u32, String> {
 
 fn send(conn: &Conn, message: &ToApp) -> io::Result<()> {
     let json = serde_json::to_vec(message).map_err(io::Error::other)?;
-    let wire = encode(&json).map_err(io::Error::other)?;
+    send_raw(conn, &json)
+}
+
+fn send_raw(conn: &Conn, json: &[u8]) -> io::Result<()> {
+    let wire = encode(json).map_err(io::Error::other)?;
     conn.write_all(&wire)
 }
 
@@ -175,6 +202,8 @@ fn serve(
     let mut last_ack = started;
     let mut next_heartbeat = started;
     let mut heartbeat_seq = 0u64;
+    // Evidence up to this number was sent on this connection; a new hello sends it all again.
+    let mut delivered = 0u64;
     let mut chunk = [0u8; 4096];
 
     loop {
@@ -207,6 +236,7 @@ fn serve(
                     greeted = true;
                     last_ack = Instant::now();
                     next_heartbeat = Instant::now();
+                    delivered = 0;
                     None
                 }
                 Ok(_) if !greeted => Some(error(next_seq(), "no_hello", "say hello first")),
@@ -239,6 +269,26 @@ fn serve(
                     last_ack = Instant::now();
                     None
                 }
+                Ok(FromApp::MonitorStart {
+                    exam_student_id,
+                    policy,
+                    ..
+                }) => {
+                    health.monitor_start(&exam_student_id, &policy);
+                    None
+                }
+                Ok(FromApp::MonitorStop { .. }) => {
+                    health.monitor_stop();
+                    None
+                }
+                Ok(FromApp::ExamWindow { hwnd, pid, .. }) => {
+                    health.exam_window(hwnd, pid);
+                    None
+                }
+                Ok(FromApp::EvidenceAck { up_to, .. }) => {
+                    health.evidence_ack(up_to);
+                    None
+                }
                 Err(_) => Some(error(next_seq(), "bad_message", "not a message I know")),
             };
             if let Some(reply) = reply {
@@ -256,12 +306,32 @@ fn serve(
             if now.duration_since(last_ack) > config.lost_after {
                 return "no heartbeat ack";
             }
+            for stored in health.evidence_after(delivered) {
+                delivered = stored.evidence_seq;
+                let evidence = ToApp::Evidence {
+                    seq: next_seq(),
+                    evidence_seq: stored.evidence_seq,
+                    body: stored.body,
+                };
+                match serde_json::to_vec(&evidence) {
+                    Ok(json) if json.len() <= MAX_FRAME => {
+                        if send_raw(conn, &json).is_err() {
+                            return "write failed";
+                        }
+                    }
+                    _ => {
+                        // It can never be sent; keeping it would block the ones behind it for good.
+                        tracing::warn!(evidence_seq = stored.evidence_seq, "evidence too large, dropped");
+                        health.evidence_ack(stored.evidence_seq);
+                    }
+                }
+            }
             if now >= next_heartbeat {
                 let beat = ToApp::Heartbeat {
                     seq: next_seq(),
                     hb_seq: heartbeat_seq,
                     helper: health.helper_alive(),
-                    monitoring: false,
+                    monitoring: health.monitoring(),
                 };
                 heartbeat_seq += 1;
                 next_heartbeat = now + config.heartbeat;
@@ -294,9 +364,44 @@ mod tests {
 
     struct FakeHealth {
         check: CheckResult,
+        queue: crate::evidence_queue::EvidenceQueue,
+        calls: std::sync::Mutex<Vec<String>>,
+    }
+
+    impl FakeHealth {
+        fn new(check: CheckResult) -> Self {
+            Self {
+                check,
+                queue: crate::evidence_queue::EvidenceQueue::new(1),
+                calls: std::sync::Mutex::new(Vec::new()),
+            }
+        }
+
+        fn note(&self, call: String) {
+            self.calls.lock().unwrap().push(call);
+        }
     }
 
     impl Health for FakeHealth {
+        fn monitor_start(&self, exam_student_id: &str, policy: &MonitorPolicy) {
+            self.note(format!("start {exam_student_id} {}", policy.max_width));
+        }
+        fn monitor_stop(&self) {
+            self.note("stop".to_string());
+        }
+        fn exam_window(&self, hwnd: u64, pid: u32) {
+            self.note(format!("window {hwnd} {pid}"));
+        }
+        fn monitoring(&self) -> bool {
+            self.calls.lock().unwrap().last().is_some_and(|c| c.starts_with("start"))
+        }
+        fn evidence_after(&self, after: u64) -> Vec<Stored> {
+            self.queue.after(after)
+        }
+        fn evidence_ack(&self, up_to: u64) {
+            self.queue.ack(up_to);
+            self.note(format!("ack {up_to}"));
+        }
         fn helper_alive(&self) -> bool {
             self.check.helper
         }
@@ -327,6 +432,10 @@ mod tests {
     }
 
     fn start(allowed: Option<PathBuf>, check: CheckResult) -> PipeServer {
+        start_with(allowed, Arc::new(FakeHealth::new(check)))
+    }
+
+    fn start_with(allowed: Option<PathBuf>, health: Arc<FakeHealth>) -> PipeServer {
         let config = ServerConfig {
             name: unique_name(),
             sddl: TEST_SDDL.to_string(),
@@ -336,7 +445,7 @@ mod tests {
             lost_after: Duration::from_millis(400),
             hello_within: Duration::from_millis(400),
         };
-        PipeServer::start(config, Arc::new(FakeHealth { check })).unwrap()
+        PipeServer::start(config, health).unwrap()
     }
 
     fn me() -> Option<PathBuf> {
@@ -575,13 +684,8 @@ mod tests {
             lost_after: Duration::from_millis(400),
             hello_within: Duration::from_millis(400),
         };
-        let server = PipeServer::start(
-            config,
-            Arc::new(FakeHealth {
-                check: good_check(),
-            }),
-        )
-        .unwrap();
+        let server =
+            PipeServer::start(config, Arc::new(FakeHealth::new(good_check()))).unwrap();
         let client = Conn::connect(&server.name).unwrap();
         let mut frames = FrameBuffer::default();
         assert_eq!(next(&client, &mut frames).unwrap()["t"], "hello");
@@ -623,6 +727,106 @@ mod tests {
             assert_eq!(next(&client, &mut frames).unwrap()["t"], "hello");
             drop(client);
         }
+        server.stop();
+    }
+
+    fn body(kind: &str) -> crate::pipe_msg::EvidenceBody {
+        crate::pipe_msg::EvidenceBody {
+            ts: 9,
+            kind: kind.into(),
+            data: crate::pipe_msg::EvidenceData::default(),
+            screenshot: None,
+        }
+    }
+
+    /// Next message of a type other than the heartbeat (which is acked on the way).
+    fn next_non_heartbeat(client: &Conn, frames: &mut FrameBuffer) -> serde_json::Value {
+        loop {
+            let message = next(client, frames).unwrap();
+            if message["t"] == "heartbeat" {
+                put(client, r#"{"t":"heartbeat.ack","seq":2,"hbSeq":0}"#);
+            } else {
+                return message;
+            }
+        }
+    }
+
+    #[test]
+    fn monitoring_commands_reach_the_agent_and_the_heartbeat_reports_it() {
+        let health = Arc::new(FakeHealth::new(good_check()));
+        let server = start_with(me(), health.clone());
+        let client = Conn::connect(&server.name).unwrap();
+        let mut frames = FrameBuffer::default();
+        assert_eq!(next(&client, &mut frames).unwrap()["t"], "hello");
+        put(&client, HELLO);
+        put(
+            &client,
+            r#"{"t":"exam.window","seq":2,"hwnd":66012,"pid":4100}"#,
+        );
+        put(
+            &client,
+            r#"{"t":"monitor.start","seq":3,"examStudentId":"s1","policy":{"screenshotOnSwitch":true,"titleChangeShots":true,"periodicOutsideSec":20,"minShotGapSec":5,"maxWidth":1600,"jpegQuality":60}}"#,
+        );
+        let give_up = Instant::now() + Duration::from_secs(3);
+        let monitoring = loop {
+            let message = next(&client, &mut frames).unwrap();
+            if message["t"] == "heartbeat" {
+                put(&client, r#"{"t":"heartbeat.ack","seq":4,"hbSeq":0}"#);
+                if message["monitoring"] == true {
+                    break true;
+                }
+            }
+            assert!(Instant::now() < give_up, "the heartbeat never said monitoring");
+        };
+        assert!(monitoring);
+        put(&client, r#"{"t":"monitor.stop","seq":5}"#);
+        let give_up = Instant::now() + Duration::from_secs(3);
+        while health.monitoring() {
+            assert!(Instant::now() < give_up, "monitor.stop never arrived");
+            thread::sleep(Duration::from_millis(5));
+        }
+        let calls = health.calls.lock().unwrap().clone();
+        assert_eq!(calls[0], "window 66012 4100");
+        assert_eq!(calls[1], "start s1 1600");
+        assert_eq!(calls[2], "stop");
+        drop(client);
+        server.stop();
+    }
+
+    #[test]
+    fn evidence_goes_to_the_app_and_is_sent_again_on_a_new_hello_until_acked() {
+        let health = Arc::new(FakeHealth::new(good_check()));
+        health.queue.push(body("focus_lost"));
+        health.queue.push(body("focus_returned"));
+        let server = start_with(me(), health.clone());
+        let client = Conn::connect(&server.name).unwrap();
+        let mut frames = FrameBuffer::default();
+        assert_eq!(next(&client, &mut frames).unwrap()["t"], "hello");
+
+        // Nothing is sent before the app says hello.
+        put(&client, HELLO);
+        let first = next_non_heartbeat(&client, &mut frames);
+        assert_eq!(first["t"], "evidence");
+        assert_eq!(first["evidenceSeq"], 1);
+        assert_eq!(first["kind"], "focus_lost");
+        let second = next_non_heartbeat(&client, &mut frames);
+        assert_eq!(second["evidenceSeq"], 2);
+
+        // The app says hello again (it restarted its link): both come again.
+        put(&client, HELLO);
+        assert_eq!(next_non_heartbeat(&client, &mut frames)["evidenceSeq"], 1);
+        assert_eq!(next_non_heartbeat(&client, &mut frames)["evidenceSeq"], 2);
+
+        put(&client, r#"{"t":"evidence.ack","seq":3,"upTo":1}"#);
+        let give_up = Instant::now() + Duration::from_secs(3);
+        while health.queue.after(0).len() != 1 {
+            assert!(Instant::now() < give_up, "the ack never arrived");
+            thread::sleep(Duration::from_millis(5));
+        }
+        health.queue.push(body("title_changed"));
+        let third = next_non_heartbeat(&client, &mut frames);
+        assert_eq!(third["evidenceSeq"], 3);
+        drop(client);
         server.stop();
     }
 }

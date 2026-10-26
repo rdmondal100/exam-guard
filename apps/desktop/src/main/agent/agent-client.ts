@@ -7,7 +7,14 @@ import {
   type AgentToApp,
   type PipeSystemCheckResult,
 } from '@examguard/shared';
-import { NOT_RUNNING, unlinked, type AgentLink, type InternetOutcome } from './agent-link.js';
+import {
+  NOT_RUNNING,
+  unlinked,
+  type AgentEvidence,
+  type AgentLink,
+  type InternetOutcome,
+  type MonitoringRequest,
+} from './agent-link.js';
 import { encodeFrame, FrameDecoder } from './pipe-frames.js';
 
 export interface AgentClientOptions {
@@ -61,6 +68,11 @@ export class AgentClient implements AgentLink {
   private wantedNet: { blocked: boolean; allow: string[] } | null = null;
   private netOutcome: InternetOutcome = { blocked: false, error: null };
   private netListeners = new Set<(outcome: InternetOutcome) => void>();
+  private wantedMonitor: MonitoringRequest | null = null;
+  /** A `monitor.stop` is owed: the app stopped while the link was down. */
+  private stopPending = false;
+  private examWindow: { hwnd: number; pid: number } | null = null;
+  private evidenceListeners = new Set<(evidence: AgentEvidence) => void>();
   private reconnectTimer: NodeJS.Timeout | null = null;
   private watchdog: NodeJS.Timeout | null = null;
   private recheck: NodeJS.Timeout | null = null;
@@ -132,6 +144,28 @@ export class AgentClient implements AgentLink {
   onInternet(listener: (outcome: InternetOutcome) => void): () => void {
     this.netListeners.add(listener);
     return () => this.netListeners.delete(listener);
+  }
+
+  setMonitoring(request: MonitoringRequest | null): void {
+    const previous = this.wantedMonitor;
+    this.wantedMonitor = request;
+    if (request) this.stopPending = false;
+    else if (previous) this.stopPending = true;
+    if (this.verified) this.sendMonitor();
+  }
+
+  setExamWindow(hwnd: number, pid: number): void {
+    this.examWindow = { hwnd, pid };
+    if (this.verified) this.sendWindow();
+  }
+
+  onEvidence(listener: (evidence: AgentEvidence) => void): () => void {
+    this.evidenceListeners.add(listener);
+    return () => this.evidenceListeners.delete(listener);
+  }
+
+  ackEvidence(upTo: number): void {
+    if (this.verified) this.send({ t: 'evidence.ack', seq: this.nextSeq(), upTo });
   }
 
   async check(): Promise<AgentLinkStatus> {
@@ -216,6 +250,8 @@ export class AgentClient implements AgentLink {
       this.backoffMs = this.minMs;
       this.recheck = setInterval(() => void this.check(), this.recheckMs);
       if (this.wantedNet) this.sendNet();
+      this.sendWindow();
+      this.sendMonitor();
       this.emit();
       void this.check();
       return;
@@ -226,6 +262,8 @@ export class AgentClient implements AgentLink {
       this.send({ t: 'heartbeat.ack', seq: this.nextSeq(), hbSeq: message.hbSeq });
       // The lease: the agent lifts the block when these stop coming.
       if (this.wantedNet?.blocked) this.sendNet();
+      // A service that restarted its helper side may have lost the request; saying it again is harmless.
+      if (this.wantedMonitor && !message.monitoring) this.sendMonitor();
       if (message.helper !== this.helper) {
         this.helper = message.helper;
         this.emit();
@@ -233,6 +271,15 @@ export class AgentClient implements AgentLink {
       }
     } else if (message.t === 'net.status') {
       this.setNetOutcome({ blocked: message.blocked, error: message.error });
+    } else if (message.t === 'evidence') {
+      const evidence: AgentEvidence = {
+        evidenceSeq: message.evidenceSeq,
+        ts: message.ts,
+        kind: message.kind,
+        data: message.data,
+        ...(message.screenshot ? { screenshot: message.screenshot } : {}),
+      };
+      for (const listener of this.evidenceListeners) listener(evidence);
     } else if (message.t === 'system.check.result') {
       this.pending.get(message.reqSeq)?.(message);
       this.pending.delete(message.reqSeq);
@@ -243,6 +290,23 @@ export class AgentClient implements AgentLink {
     if (!this.wantedNet) return;
     const { blocked, allow } = this.wantedNet;
     this.send({ t: 'net.set', seq: this.nextSeq(), blocked, allow });
+  }
+
+  private sendWindow(): void {
+    if (!this.examWindow) return;
+    const { hwnd, pid } = this.examWindow;
+    this.send({ t: 'exam.window', seq: this.nextSeq(), hwnd, pid });
+  }
+
+  /** Tells the agent to monitor, or (once) to stop when the app stopped while the link was down. */
+  private sendMonitor(): void {
+    if (this.wantedMonitor) {
+      const { examStudentId, policy } = this.wantedMonitor;
+      this.send({ t: 'monitor.start', seq: this.nextSeq(), examStudentId, policy });
+    } else if (this.stopPending) {
+      this.send({ t: 'monitor.stop', seq: this.nextSeq() });
+      this.stopPending = false;
+    }
   }
 
   private setNetOutcome(outcome: InternetOutcome): void {

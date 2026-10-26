@@ -34,7 +34,10 @@ export interface StudentAppDeps {
     terminalLogs: TerminalLogRepo;
     answers: AnswerIntakeDeps;
     examId: () => string | null;
-  } & Pick<StudentSocketDeps, 'sessionState' | 'submissions' | 'now' | 'helloTimeoutMs' | 'idleMs'>;
+  } & Pick<
+    StudentSocketDeps,
+    'sessionState' | 'submissions' | 'evidence' | 'now' | 'helloTimeoutMs' | 'idleMs'
+  >;
 }
 
 /** Student-facing HTTPS app: `/info`, join and the `/ws` session socket. */

@@ -3,6 +3,7 @@ import { ExamCreateBodySchema, ExamUpdateBodySchema } from '@examguard/shared';
 import type { ExamRepo } from '../db/exam-repo.js';
 import type { QuestionRepo } from '../db/question-repo.js';
 import type { ExamFileService } from '../exam-files/exam-file-service.js';
+import type { ScreenshotStore } from '../screenshots/screenshot-store.js';
 import { canTransition, isEditable } from '../exams/exam-state.js';
 import { readyProblems } from '../exams/ready-check.js';
 import { sendError } from './errors.js';
@@ -12,6 +13,8 @@ export interface ExamRoutesDeps {
   questions: QuestionRepo;
   /** The teacher's attached files; a copy and a delete carry them along. */
   examFiles?: ExamFileService;
+  /** Deleting an exam also deletes its screenshots. */
+  screenshots?: Pick<ScreenshotStore, 'removeExam'>;
   requireLogin: preHandlerAsyncHookHandler;
   now?: () => number;
 }
@@ -19,7 +22,7 @@ export interface ExamRoutesDeps {
 /** `/exams*`: list, create, edit settings, duplicate, delete and ready/unready. Hosting and more come later. */
 export function registerExamRoutes(
   app: FastifyInstance,
-  { exams, questions, examFiles, requireLogin, now = Date.now }: ExamRoutesDeps,
+  { exams, questions, examFiles, screenshots, requireLogin, now = Date.now }: ExamRoutesDeps,
 ): void {
   const guarded = { preHandler: requireLogin };
 
@@ -115,6 +118,7 @@ export function registerExamRoutes(
     }
     exams.delete(current.id);
     await examFiles?.removeExam(current.id);
+    screenshots?.removeExam(current.id);
     return { ok: true };
   });
 }

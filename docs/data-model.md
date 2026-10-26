@@ -151,7 +151,7 @@ PRIMARY KEY(exam_student_id, question_id)
 | id | INTEGER PK AUTOINCREMENT | |
 | exam_id | TEXT FK | |
 | exam_student_id | TEXT FK, nullable | null = exam-level |
-| type | TEXT | e.g. `focus_lost, focus_returned, title_changed, app_launched, processes_at_start, monitor_changed, secure_desktop, taskmgr_opened, paste_blocked, large_insertion, run_executed, agent_lost, app_relaunched, duplicate_login, network_lost, network_restored, terminal_opened, terminal_closed, terminal_command, package_installed, internet_blocked, internet_allowed, internet_block_failed` (the terminal types since M15b, the internet types with M21b) |
+| type | TEXT | e.g. `focus_lost, focus_returned, title_changed, still_outside, app_launched, processes_at_start, monitor_changed, secure_desktop, taskmgr_opened, paste_blocked, large_insertion, run_executed, agent_lost, app_relaunched, duplicate_login, network_lost, network_restored, terminal_opened, terminal_closed, terminal_command, package_installed, internet_blocked, internet_allowed, internet_block_failed` (the terminal types since M15b, the internet types with M21b) |
 | severity | TEXT | `low, medium, high, critical` (set by the server classifier) |
 | server_ts | INTEGER | |
 | client_ts | INTEGER | when it happened on the student PC |

@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react';
 import type { SessionState, SessionStatus } from '@examguard/shared';
 import { useRestoreAnswers } from '@/lib/restoreAnswers';
+import { useSessionExit } from '@/lib/useSessionExit';
 import { ExamEndedScreen } from './ExamEndedScreen';
 import { ExamScreen } from './ExamScreen';
 import { LobbyScreen } from './LobbyScreen';
 import { ReceiptScreen } from './ReceiptScreen';
 import { RestoringScreen } from './RestoringScreen';
+import { SessionOverScreen } from './SessionOverScreen';
+
+/** Still taking the exam: not submitted and not ended by the teacher. */
+const studentWorking = (exam: SessionState | null) =>
+  exam?.studentState !== 'submitted' && exam?.studentState !== 'ended_by_teacher';
 
 interface Props {
   name: string;
@@ -33,7 +39,19 @@ export function SessionScreen({ name, examTitle, onLeave }: Props) {
   const examOpen =
     exam?.examState === 'running' && !!exam.questions && exam.deadline !== null && !exam.receipt;
   const restore = useRestoreAnswers(examOpen);
+  const exit = useSessionExit(exam, status, examOpen && studentWorking(exam));
 
+  if (exit) {
+    return (
+      <SessionOverScreen
+        name={name}
+        examTitle={examTitle}
+        exit={exit}
+        reason={status.reason}
+        onLeave={onLeave}
+      />
+    );
+  }
   if (examOpen && restore.state.name !== 'ready') {
     return (
       <RestoringScreen

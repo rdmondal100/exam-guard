@@ -1,5 +1,7 @@
 import {
   AuthOkSchema,
+  EventsResponseSchema,
+  TEACHER_TOKEN_HEADER,
   ExamsSchema,
   ExamSummarySchema,
   HostingInfoSchema,
@@ -7,6 +9,7 @@ import {
   StartResultSchema,
   TerminalActionResultSchema,
   TerminalLogResponseSchema,
+  type EventRow,
   type ExamCreateBody,
   type ExamSummary,
   type ExamUpdateBody,
@@ -17,7 +20,8 @@ import {
   type TerminalActionResult,
   type TerminalLogResponse,
 } from '@examguard/shared';
-import { call, TeacherApiError, type FetchFn } from './teacherApi';
+import { jpegDataUrl } from './eventsView';
+import { apiError, call, TeacherApiError, type FetchFn } from './teacherApi';
 
 export interface ExamApi {
   list(): Promise<ExamSummary[]>;
@@ -43,6 +47,16 @@ export interface ExamApi {
   setInternet(id: string, allowed: boolean): Promise<InternetActionResult>;
   /** One student's terminal events and transcript, in any exam state. */
   terminalLog(id: string, studentId: string): Promise<TerminalLogResponse>;
+  /** What the agents saw, newest first. `after` is the id of the newest event already shown. */
+  events(id: string, options?: EventsOptions): Promise<EventRow[]>;
+  /** The picture of an event as a `data:` URL; rejects `not_found` when it has none. */
+  screenshot(eventId: number): Promise<string>;
+}
+
+export interface EventsOptions {
+  studentId?: string;
+  after?: number;
+  limit?: number;
 }
 
 export function createExamApi(connection: ServerConnection, fetchFn: FetchFn = fetch): ExamApi {
@@ -88,6 +102,26 @@ export function createExamApi(connection: ServerConnection, fetchFn: FetchFn = f
         `${path(id)}/students/${encodeURIComponent(studentId)}/terminal`,
         TerminalLogResponseSchema,
       ),
+    events: async (id, options = {}) => {
+      const query = new URLSearchParams({ source: 'agent' });
+      if (options.studentId) query.set('studentId', options.studentId);
+      if (options.after !== undefined) query.set('after', String(options.after));
+      if (options.limit !== undefined) query.set('limit', String(options.limit));
+      const response = await call(
+        connection,
+        fetchFn,
+        `${path(id)}/events?${query.toString()}`,
+        EventsResponseSchema,
+      );
+      return response.events;
+    },
+    screenshot: async (eventId) => {
+      const res = await fetchFn(`${connection.baseUrl}/api/v1/screenshots/${eventId}`, {
+        headers: { [TEACHER_TOKEN_HEADER]: connection.token },
+      });
+      if (!res.ok) throw apiError(res.status, await res.json().catch(() => null));
+      return jpegDataUrl(await res.arrayBuffer());
+    },
     remove: async (id) => {
       await call(connection, fetchFn, path(id), AuthOkSchema, undefined, 'DELETE');
     },

@@ -1,5 +1,11 @@
 import type { AgentLinkStatus } from '@examguard/shared';
-import { unlinked, type AgentLink, type InternetOutcome } from './agent-link.js';
+import {
+  unlinked,
+  type AgentEvidence,
+  type AgentLink,
+  type InternetOutcome,
+  type MonitoringRequest,
+} from './agent-link.js';
 
 /** `EG_FAKE_AGENT_FAIL`: which part of the fake agent reports a failure. */
 export type FakeFailure = 'helper' | 'capture' | 'down' | null;
@@ -77,5 +83,33 @@ export class FakeAgent implements AgentLink {
   onInternet(listener: (outcome: InternetOutcome) => void): () => void {
     this.netListeners.add(listener);
     return () => this.netListeners.delete(listener);
+  }
+
+  /** What the app last asked for; the fake watches nothing, so no evidence comes by itself. */
+  monitoring: MonitoringRequest | null = null;
+  examWindow: { hwnd: number; pid: number } | null = null;
+  acked = 0;
+  private evidenceListeners = new Set<(evidence: AgentEvidence) => void>();
+
+  setMonitoring(request: MonitoringRequest | null): void {
+    this.monitoring = request;
+  }
+
+  setExamWindow(hwnd: number, pid: number): void {
+    this.examWindow = { hwnd, pid };
+  }
+
+  onEvidence(listener: (evidence: AgentEvidence) => void): () => void {
+    this.evidenceListeners.add(listener);
+    return () => this.evidenceListeners.delete(listener);
+  }
+
+  ackEvidence(upTo: number): void {
+    this.acked = Math.max(this.acked, upTo);
+  }
+
+  /** For tests and manual trials: pretend the agent saw something. */
+  emitEvidence(evidence: AgentEvidence): void {
+    for (const listener of this.evidenceListeners) listener(evidence);
   }
 }

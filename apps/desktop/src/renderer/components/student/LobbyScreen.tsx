@@ -19,7 +19,7 @@ export const LINK_TEXT: Record<SessionStatus['link'], string> = {
   failed: 'Disconnected',
 };
 
-const REASON_TEXT: Record<string, string> = {
+export const REASON_TEXT: Record<string, string> = {
   replaced: 'This student signed in on another window or computer.',
   unauthorized: 'Your sign-in expired. Leave this exam and join again.',
   protocol_mismatch: "Update ExamGuard to match the teacher's version.",

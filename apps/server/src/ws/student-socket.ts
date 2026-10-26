@@ -5,6 +5,7 @@ import {
   STUDENT_IDLE_MS,
   StudentMessageSchema,
   WS_CLOSE,
+  isAgentEventType,
   isProtocolCompatible,
   type ServerToStudent,
   type SessionState,
@@ -14,6 +15,7 @@ import type { EventRepo } from '../db/event-repo.js';
 import type { ExamStudentRepo } from '../db/exam-student-repo.js';
 import type { TerminalLogRepo } from '../db/terminal-log-repo.js';
 import { hashToken } from '../join/join-service.js';
+import type { EvidenceIntake } from '../screenshots/evidence-intake.js';
 import type { SubmissionService } from '../submissions/submission-service.js';
 import type { SessionHub, StudentConn } from './session-hub.js';
 
@@ -26,6 +28,8 @@ export interface StudentSocketDeps {
   answers: AnswerIntakeDeps;
   /** Makes a student's answers final (M18). */
   submissions: Pick<SubmissionService, 'submit'>;
+  /** What the agent saw: screenshot chunks (binary frames) and the events that name them (M22). */
+  evidence: Pick<EvidenceIntake, 'chunk' | 'report' | 'forget'>;
   /** The state the client should show; also activates a late joiner. */
   sessionState: (studentId: string) => SessionState;
   /** The hosted exam id, or `null` when nothing is hosted. */
@@ -35,10 +39,10 @@ export interface StudentSocketDeps {
   idleMs?: number;
 }
 
-const text = (data: RawData): string =>
-  Array.isArray(data)
-    ? Buffer.concat(data).toString('utf8')
-    : Buffer.from(data as Buffer).toString('utf8');
+const bytes = (data: RawData): Buffer =>
+  Array.isArray(data) ? Buffer.concat(data) : Buffer.from(data as Buffer);
+
+const text = (data: RawData): string => bytes(data).toString('utf8');
 
 /** `GET /ws` on the student listener: hello → welcome, then ping/pong and the connected flag. */
 export function registerStudentSocket(app: FastifyInstance, deps: StudentSocketDeps): void {
@@ -74,8 +78,13 @@ export function registerStudentSocket(app: FastifyInstance, deps: StudentSocketD
       Math.max(50, Math.min(1000, Math.floor(idleMs / 3))),
     );
 
-    socket.on('message', (data: RawData) => {
+    socket.on('message', (data: RawData, isBinary: boolean) => {
       lastFrame = now();
+      if (isBinary) {
+        // The only binary frames are screenshot chunks, and only from a signed-in student.
+        if (!studentId) return refuse(WS_CLOSE.badHello, 'hello_first', 'Send hello first');
+        return deps.evidence.chunk(studentId, bytes(data));
+      }
       let raw: unknown;
       try {
         raw = JSON.parse(text(data));
@@ -93,6 +102,10 @@ export function registerStudentSocket(app: FastifyInstance, deps: StudentSocketD
       if (message.t === 'event') {
         if (!studentId || !examId)
           return refuse(WS_CLOSE.badHello, 'hello_first', 'Send hello first');
+        if (isAgentEventType(message.type)) {
+          deps.evidence.report(examId, studentId, message);
+          return send({ t: 'event.ack', id: message.id });
+        }
         // App events are low until the classifier (M31) grades them. The key is namespaced so
         // an app id can never collide with agent evidence keys.
         deps.events.insert({
@@ -171,7 +184,10 @@ export function registerStudentSocket(app: FastifyInstance, deps: StudentSocketD
     socket.on('close', () => {
       clearTimeout(helloTimer);
       clearInterval(sweep);
-      if (studentId) deps.hub.detach(studentId, conn);
+      if (studentId) {
+        deps.evidence.forget(studentId);
+        deps.hub.detach(studentId, conn);
+      }
     });
     socket.on('error', () => socket.terminate());
   });

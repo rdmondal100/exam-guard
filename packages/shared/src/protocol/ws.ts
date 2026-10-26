@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { ProtocolVersionSchema } from './protocol-version.js';
 import { AgentStatusSchema, StudentStateSchema } from './join.js';
+import {
+  EVIDENCE_KINDS,
+  EvidenceKindSchema,
+  MonitorPolicySchema,
+  type EvidenceKind,
+} from './agent-pipe.js';
 import { ExamStateSchema } from './exams.js';
 import { StudentQuestionSchema } from './questions.js';
 import { InternetStateSchema, TerminalStateSchema } from './actions.js';
@@ -42,7 +48,7 @@ export type Hello = z.infer<typeof HelloSchema>;
 export const PingSchema = z.object({ t: z.literal('ping'), clientSent: z.number() });
 export type Ping = z.infer<typeof PingSchema>;
 
-/** Event types the student app reports itself. Agent evidence types join with monitoring. */
+/** Event types the student app reports itself. */
 export const APP_EVENT_TYPES = [
   'run_executed',
   'terminal_opened',
@@ -56,14 +62,28 @@ export const APP_EVENT_TYPES = [
 export const AppEventTypeSchema = z.enum(APP_EVENT_TYPES);
 export type AppEventType = z.infer<typeof AppEventTypeSchema>;
 
+/** Event types that come from the agent's evidence and are relayed by the app (M22). */
+export const AGENT_EVENT_TYPES = EVIDENCE_KINDS;
+export const AgentEventTypeSchema = EvidenceKindSchema;
+export type AgentEventType = EvidenceKind;
+
+export const ReportedEventTypeSchema = z.union([AppEventTypeSchema, AgentEventTypeSchema]);
+export type ReportedEventType = z.infer<typeof ReportedEventTypeSchema>;
+
+export function isAgentEventType(type: string): type is AgentEventType {
+  return (AGENT_EVENT_TYPES as readonly string[]).includes(type);
+}
+
 export const EventReportSchema = z.object({
   t: z.literal('event'),
   id: z.string().min(1).max(100),
   /** Unique per event; the server stores a key once, so a resend is harmless. */
   dedupeKey: z.string().min(1).max(200),
   clientTs: z.number(),
-  type: AppEventTypeSchema,
+  type: ReportedEventTypeSchema,
   details: z.record(z.string(), z.unknown()),
+  /** Names the binary screenshot chunks (kind 2) sent before this event; agent events only. */
+  screenshotRef: z.string().min(1).max(100).optional(),
 });
 export type EventReport = z.infer<typeof EventReportSchema>;
 
@@ -112,12 +132,16 @@ export const SessionStateSchema = z.object({
   examState: ExamStateSchema,
   studentState: StudentStateSchema,
   deadline: z.number().nullable(),
+  /** Seconds after the deadline in which saves still count; the client uses it to know when the server has finalized it. */
+  graceSec: z.number().int().min(0).max(600).optional(),
   /** Sent once the exam is running. */
   questions: z.array(StudentQuestionSchema).optional(),
   /** The newest stored version of each buffer; the client continues its `clientSeq` after these. */
   saved: z.array(SavedAnswerSchema),
   locked: z.boolean(),
   monitoring: z.boolean(),
+  /** What the agent does while the exam runs; set together with `monitoring: true` (M22). */
+  monitoringPolicy: MonitorPolicySchema.optional(),
   /** The teacher's exam terminal switch (server-authoritative). */
   terminal: TerminalStateSchema,
   /** The teacher's internet switch (server-authoritative; M21b). */
