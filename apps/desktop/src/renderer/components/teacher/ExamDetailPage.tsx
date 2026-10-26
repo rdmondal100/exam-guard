@@ -13,6 +13,7 @@ import { useQuestions } from '@/lib/useQuestions';
 import { QuestionEditor } from './QuestionEditor';
 import { QuestionList } from './QuestionList';
 import { EndedTerminalLogs } from './EndedTerminalLogs';
+import { EventsPanel } from './EventsPanel';
 import { ExamFilesSection } from './ExamFilesSection';
 import { HostingPanel } from './HostingPanel';
 import { ReadyPanel } from './ReadyPanel';
@@ -169,6 +170,9 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
             <p role="status" className="rounded-md border border-border p-4">
               This exam has ended. Students can no longer join or submit.
             </p>
+          )}
+          {(exam.state === 'running' || AFTER_EXAM.has(exam.state)) && examApi && (
+            <EventsPanel examId={exam.id} api={examApi} />
           )}
           {AFTER_EXAM.has(exam.state) && examApi && (
             <EndedTerminalLogs examId={exam.id} api={examApi} />

@@ -48,10 +48,11 @@ if (!app.requestSingleInstanceLock()) {
       if (examLock.shouldBlockClose()) return event.preventDefault();
       server.stop();
     });
-    registerIpc(state, server, examLock);
+    const ipc = registerIpc(state, server, examLock);
     installCsp();
     window = createMainWindow(`ExamGuard AI (${profile})`);
     examLock.attach(window);
+    ipc.announceWindow(window);
     if (state.mode === 'teacher') server.start();
   });
 }

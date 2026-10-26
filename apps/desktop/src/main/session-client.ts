@@ -5,9 +5,11 @@ import {
   STUDENT_PING_MS,
   ServerToStudentSchema,
   WS_CLOSE,
+  encodeScreenshotFrames,
   type AnswerSave,
   type AnswerSaveRequest,
   type AnswerStatus,
+  type AgentEventType,
   type AgentStatus,
   type AppEventType,
   type EventReport,
@@ -75,6 +77,12 @@ export class SessionClient {
   private readonly pending = new Map<string, EventReport>();
   /** Sent transcript chunks waiting for `transcript.ack`, in send order. */
   private readonly pendingTranscript = new Map<string, TranscriptChunk>();
+  /**
+   * The events in `pending` that came from the agent (M22): their screenshot, sent as binary frames
+   * just before the event, and what to do once the server stored them. The agent keeps its evidence
+   * until then, so these are not written to the offline queue.
+   */
+  private readonly evidence = new Map<string, { jpeg?: Uint8Array; onAcked: () => void }>();
 
   /** Autosaves waiting for `answer.ack`, and the counter that numbers them. */
   private readonly answers: AnswerOutbox;
@@ -150,14 +158,59 @@ export class SessionClient {
     };
     this.pending.set(id, event);
     this.queue?.add(event);
-    if (this.pending.size > MAX_PENDING_EVENTS) {
-      const oldest = this.pending.keys().next().value;
-      if (oldest !== undefined) {
-        this.pending.delete(oldest);
-        this.queue?.remove(`e${oldest}`);
-      }
-    }
+    this.trimPending();
     if (this.welcomed) this.sendFrame(this.welcomed, event);
+  }
+
+  /**
+   * Reports something the agent saw. `key` is its dedupe key and its screenshot reference. It is
+   * re-sent after every reconnect until the server acks it, then `onAcked` runs. Giving the same key
+   * again (the agent replays what is unacked) changes nothing.
+   */
+  sendEvidence(
+    evidence: {
+      key: string;
+      type: AgentEventType;
+      clientTs: number;
+      details: Record<string, unknown>;
+      jpeg?: Uint8Array;
+    },
+    onAcked: () => void,
+  ): void {
+    const { key, type, clientTs, details, jpeg } = evidence;
+    if (this.pending.has(key)) return;
+    const event: EventReport = {
+      t: 'event',
+      id: key,
+      dedupeKey: key,
+      clientTs,
+      type,
+      details,
+      ...(jpeg ? { screenshotRef: key } : {}),
+    };
+    this.pending.set(key, event);
+    this.evidence.set(key, { ...(jpeg ? { jpeg } : {}), onAcked });
+    this.trimPending();
+    if (this.welcomed) this.sendEventFrames(this.welcomed, event);
+  }
+
+  /** Keeps the memory bounded: the oldest unacked events go first. */
+  private trimPending(): void {
+    if (this.pending.size <= MAX_PENDING_EVENTS) return;
+    const oldest = this.pending.keys().next().value;
+    if (oldest === undefined) return;
+    this.pending.delete(oldest);
+    this.evidence.delete(oldest);
+    this.queue?.remove(`e${oldest}`);
+  }
+
+  /** An event, preceded by its screenshot when it has one (the server waits for the pieces). */
+  private sendEventFrames(ws: WebSocket, event: EventReport): void {
+    const jpeg = this.evidence.get(event.id)?.jpeg;
+    if (jpeg && ws.readyState === WebSocket.OPEN) {
+      for (const frame of encodeScreenshotFrames(event.id, jpeg)) ws.send(frame, { binary: true });
+    }
+    this.sendFrame(ws, event);
   }
 
   /** Sends a piece of the terminal transcript; re-sent after reconnects until acked. */
@@ -240,6 +293,9 @@ export class SessionClient {
 
   private halt(): void {
     this.settleSubmit({ ok: false, reason: 'stopped' });
+    // Evidence belongs to the session that saw it; the agent keeps what was not acked.
+    for (const id of this.evidence.keys()) this.pending.delete(id);
+    this.evidence.clear();
     this.generation += 1;
     this.target = null;
     this.clearTimers();
@@ -332,7 +388,7 @@ export class SessionClient {
       }
       this.answers.continueAfter(message.state.saved);
       for (const save of this.answers.unacked()) this.sendFrame(ws, save);
-      for (const event of this.pending.values()) this.sendFrame(ws, event);
+      for (const event of this.pending.values()) this.sendEventFrames(ws, event);
       for (const chunk of this.pendingTranscript.values()) this.sendFrame(ws, chunk);
       // After the saves on the same ordered socket, so the server sees them first.
       if (message.state.receipt) this.settleSubmit({ ok: true });
@@ -340,6 +396,9 @@ export class SessionClient {
     } else if (message.t === 'event.ack') {
       this.pending.delete(message.id);
       this.queue?.remove(`e${message.id}`);
+      const evidence = this.evidence.get(message.id);
+      this.evidence.delete(message.id);
+      evidence?.onAcked();
     } else if (message.t === 'answer.ack') {
       this.answers.ack(message.clientSeq, Date.now());
       this.queue?.remove(`s${message.clientSeq}`);

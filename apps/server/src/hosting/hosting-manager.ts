@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import {
   STUDENT_API_PORT,
   WS_CLOSE,
+  monitorPolicyFor,
   toStudentQuestion,
   type HostingInfo,
   type SessionState,
@@ -11,6 +12,9 @@ import type { StudentDeadlines } from '../exams/student-deadlines.js';
 import type { FinalAnswerRepo } from '../db/final-answer-repo.js';
 import type { SubmissionService } from '../submissions/submission-service.js';
 import type { AnswerWriter } from '../answers/answer-writer.js';
+import { createDropLogger } from '../answers/drop-logger.js';
+import { EvidenceIntake } from '../screenshots/evidence-intake.js';
+import { ScreenshotStore } from '../screenshots/screenshot-store.js';
 import type { AnswerRepo } from '../db/answer-repo.js';
 import type { EventRepo } from '../db/event-repo.js';
 import type { ExamFileService } from '../exam-files/exam-file-service.js';
@@ -213,10 +217,12 @@ export class HostingManager {
       examState: exam?.state ?? 'hosting',
       studentState: state,
       deadline: running ? this.deps.deadlines.forStudent(student.examId, studentId) : null,
+      graceSec: Math.round(this.deps.deadlines.graceMs(student.examId) / 1000),
       questions: running ? questions.list(student.examId).map(toStudentQuestion) : undefined,
       saved: this.deps.answers.savedFor(studentId),
       locked: state === 'locked',
-      monitoring: false,
+      monitoring: running,
+      ...(running && exam ? { monitoringPolicy: monitorPolicyFor(exam.monitoring) } : {}),
       terminal: this.terminal.state(student.examId),
       internet: this.internet.state(student.examId),
       filesEnabled: exam?.filesEnabled ?? true,
@@ -291,11 +297,18 @@ export class HostingManager {
           deadlines: this.deps.deadlines,
           writer: this.deps.answerWriter,
           now: this.now,
-          onDropped: (reason, save) =>
-            console.warn(`dropped a save of question ${save.questionId}: ${reason}`),
+          onDropped: createDropLogger((line) => console.warn(line), this.now),
         },
         sessionState: (id) => this.sessionState(id),
         submissions: this.deps.submissions,
+        evidence: new EvidenceIntake({
+          events: this.deps.events,
+          students: this.deps.students,
+          screenshots: new ScreenshotStore(this.deps.dataDir),
+          monitoring: (id) => this.deps.exams.get(id)?.monitoring,
+          changed: (id) => this.deps.hub.changed(id),
+          now: this.now,
+        }),
         examId: () => (this.active?.examId === examId ? examId : null),
         now: this.now,
         ...this.deps.socketTimings,

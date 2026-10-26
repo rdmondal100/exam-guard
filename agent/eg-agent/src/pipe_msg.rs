@@ -4,6 +4,62 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Screenshot and outside-time rules (`MonitorPolicySchema` in the shared package).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MonitorPolicy {
+    #[serde(rename = "screenshotOnSwitch")]
+    pub screenshot_on_switch: bool,
+    #[serde(rename = "titleChangeShots")]
+    pub title_change_shots: bool,
+    /// A shot this often while the student stays outside; 0 = off.
+    #[serde(rename = "periodicOutsideSec")]
+    pub periodic_outside_sec: u32,
+    #[serde(rename = "minShotGapSec")]
+    pub min_shot_gap_sec: u32,
+    #[serde(rename = "maxWidth")]
+    pub max_width: u32,
+    #[serde(rename = "jpegQuality")]
+    pub jpeg_quality: u8,
+}
+
+/// What the helper saw about a window.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EvidenceData {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exe: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pid: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(
+        default,
+        rename = "durationMs",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub duration_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Screenshot {
+    #[serde(rename = "jpegBase64")]
+    pub jpeg_base64: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// One observation, as the helper reports it and the app receives it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EvidenceBody {
+    /// Unix ms on this PC.
+    pub ts: u64,
+    pub kind: String,
+    pub data: EvidenceData,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub screenshot: Option<Screenshot>,
+}
+
 /// App → agent. Anything else on the wire fails to parse and is answered with an `error`.
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 #[serde(tag = "t")]
@@ -29,6 +85,23 @@ pub enum FromApp {
         seq: u64,
         blocked: bool,
         allow: Vec<String>,
+    },
+    #[serde(rename = "monitor.start")]
+    MonitorStart {
+        seq: u64,
+        #[serde(rename = "examStudentId")]
+        exam_student_id: String,
+        policy: MonitorPolicy,
+    },
+    #[serde(rename = "monitor.stop")]
+    MonitorStop { seq: u64 },
+    #[serde(rename = "exam.window")]
+    ExamWindow { seq: u64, hwnd: u64, pid: u32 },
+    #[serde(rename = "evidence.ack")]
+    EvidenceAck {
+        seq: u64,
+        #[serde(rename = "upTo")]
+        up_to: u64,
     },
 }
 
@@ -74,6 +147,14 @@ pub enum ToApp {
         blocked: bool,
         error: Option<String>,
     },
+    #[serde(rename = "evidence")]
+    Evidence {
+        seq: u64,
+        #[serde(rename = "evidenceSeq")]
+        evidence_seq: u64,
+        #[serde(flatten)]
+        body: EvidenceBody,
+    },
     #[serde(rename = "error")]
     Error {
         seq: u64,
@@ -88,6 +169,12 @@ pub enum ToApp {
 pub enum ToHelper {
     #[serde(rename = "check")]
     Check { seq: u64 },
+    #[serde(rename = "monitor.start")]
+    MonitorStart { policy: MonitorPolicy },
+    #[serde(rename = "monitor.stop")]
+    MonitorStop,
+    #[serde(rename = "exam.window")]
+    ExamWindow { hwnd: u64, pid: u32 },
 }
 
 /// Helper → service.
@@ -100,6 +187,11 @@ pub enum FromHelper {
         #[serde(rename = "captureOk")]
         capture_ok: bool,
         monitors: u32,
+    },
+    #[serde(rename = "evidence")]
+    Evidence {
+        #[serde(flatten)]
+        body: EvidenceBody,
     },
 }
 
@@ -163,9 +255,92 @@ mod tests {
         assert!(clean["error"].is_null());
     }
 
+    const POLICY: &str = r#"{"screenshotOnSwitch":true,"titleChangeShots":false,"periodicOutsideSec":20,"minShotGapSec":5,"maxWidth":1600,"jpegQuality":60}"#;
+
+    #[test]
+    fn monitoring_messages_parse_like_the_shared_schema() {
+        let start: FromApp = serde_json::from_str(&format!(
+            r#"{{"t":"monitor.start","seq":1,"examStudentId":"s","policy":{POLICY}}}"#
+        ))
+        .unwrap();
+        let FromApp::MonitorStart { policy, .. } = start else {
+            panic!("not a monitor.start");
+        };
+        assert!(policy.screenshot_on_switch && !policy.title_change_shots);
+        assert_eq!(policy.periodic_outside_sec, 20);
+        assert_eq!(policy.jpeg_quality, 60);
+
+        let window: FromApp =
+            serde_json::from_str(r#"{"t":"exam.window","seq":2,"hwnd":66012,"pid":4100}"#).unwrap();
+        assert_eq!(
+            window,
+            FromApp::ExamWindow {
+                seq: 2,
+                hwnd: 66012,
+                pid: 4100
+            }
+        );
+        let ack: FromApp =
+            serde_json::from_str(r#"{"t":"evidence.ack","seq":3,"upTo":12}"#).unwrap();
+        assert_eq!(ack, FromApp::EvidenceAck { seq: 3, up_to: 12 });
+        assert!(
+            serde_json::from_str::<FromApp>(r#"{"t":"exam.window","seq":2,"hwnd":1}"#).is_err()
+        );
+    }
+
+    fn body() -> EvidenceBody {
+        EvidenceBody {
+            ts: 1_700_000_000_000,
+            kind: "focus_lost".into(),
+            data: EvidenceData {
+                exe: Some("chrome.exe".into()),
+                pid: Some(77),
+                ..EvidenceData::default()
+            },
+            screenshot: Some(Screenshot {
+                jpeg_base64: "/9j/".into(),
+                width: 800,
+                height: 450,
+            }),
+        }
+    }
+
+    #[test]
+    fn evidence_reaches_the_app_flat_with_its_sequence_number() {
+        let wire = serde_json::to_value(ToApp::Evidence {
+            seq: 5,
+            evidence_seq: 9,
+            body: body(),
+        })
+        .unwrap();
+        assert_eq!(
+            wire,
+            serde_json::json!({
+                "t":"evidence","seq":5,"evidenceSeq":9,"ts":1_700_000_000_000u64,"kind":"focus_lost",
+                "data":{"exe":"chrome.exe","pid":77},
+                "screenshot":{"jpegBase64":"/9j/","width":800,"height":450}
+            })
+        );
+    }
+
+    #[test]
+    fn evidence_and_commands_survive_the_helper_pipe() {
+        let evidence = FromHelper::Evidence { body: body() };
+        let json = serde_json::to_string(&evidence).unwrap();
+        assert_eq!(serde_json::from_str::<FromHelper>(&json).unwrap(), evidence);
+        let start: ToHelper =
+            serde_json::from_str(&format!(r#"{{"t":"monitor.start","policy":{POLICY}}}"#)).unwrap();
+        assert!(matches!(start, ToHelper::MonitorStart { .. }));
+        let stop = serde_json::to_string(&ToHelper::MonitorStop).unwrap();
+        assert_eq!(stop, r#"{"t":"monitor.stop"}"#);
+        let window = serde_json::to_string(&ToHelper::ExamWindow { hwnd: 5, pid: 6 }).unwrap();
+        assert_eq!(window, r#"{"t":"exam.window","hwnd":5,"pid":6}"#);
+    }
+
     #[test]
     fn an_unknown_type_or_a_missing_field_does_not_parse() {
         assert!(serde_json::from_str::<FromApp>(r#"{"t":"monitor.start","seq":1}"#).is_err());
+        assert!(serde_json::from_str::<FromApp>(r#"{"t":"monitor.pause","seq":1}"#).is_err());
         assert!(serde_json::from_str::<FromApp>(r#"{"t":"system.check"}"#).is_err());
         assert!(serde_json::from_str::<FromApp>("not json").is_err());
     }

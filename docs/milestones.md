@@ -1,6 +1,6 @@
 # Milestones
 
-Build order for Stage 1, organised by the phases in `requirements.md` §10. Each milestone fits one focused session. **[D]** = deferrable to Stage 2 if time runs short (decided at the checkpoint after Phase 4). **SPIKE** = proof of concept; keep the code if it's usable, otherwise record what you learned in `progress.md`.
+Build order for Stage 1, organised by the phases in `requirements.md` §10. Each milestone fits one focused session. **[D]** = deferrable to Stage 2 if time runs short (decided at the checkpoint after Phase 4). **SPIKE** = proof of concept; keep the code if it's usable, otherwise record what you learned in `decisions.md`.
 
 Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safety") and the **second laptop** on the same LAN. Design details are in `architecture.md`, `protocol.md` and `data-model.md`. Milestones only reference them.
 
@@ -112,7 +112,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 ### M15a SPIKE — Exam terminal (node-pty + xterm.js)
 - **Goal:** prove a real terminal works in the student window and that packages install without admin rights.
 - **Touches:** node-pty (ConPTY) in student main (native module under Electron 44: prebuilt or rebuild), xterm.js tab under the editor, IPC stream main ↔ renderer (no Node in renderer), workspace `%LOCALAPPDATA%\ExamGuard\run\<examStudentId>\workspace`, PATH with the bundled tools, the terminal's processes in a Job Object (killed on close), MSYS2 `pacman` alongside WinLibs (or MSYS2's own UCRT gcc instead, decided here), bundled `npm` with a `node` shim (`node.cmd` → ExamGuard.exe as Node), **MinGW trimmed to C/C++** in `fetch-toolchains` (drop Fortran/Objective-C/Ada/docs; keep gcc, g++, binutils) with the size recorded.
-- **Accept:** in a dev run, `npm i lodash` and `pacman -S mingw-w64-ucrt-x86_64-freeglut` work as a standard user; a GLUT program builds from the terminal; closing the terminal kills a running `ping -t`. Result and the toolchain choice recorded in progress.md.
+- **Accept:** in a dev run, `npm i lodash` and `pacman -S mingw-w64-ucrt-x86_64-freeglut` work as a standard user; a GLUT program builds from the terminal; closing the terminal kills a running `ping -t`. Result and the toolchain choice are in decisions.md (M15a).
 - **Manual test:** open the terminal in an exam, install one npm package and one pacman library, build and run a small program, close the terminal.
 
 ### M15b Teacher terminal toggle + command logging
@@ -156,7 +156,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** student `queue/` (encrypted JSONL), reconnect with backoff, `hello.resume`, session file, restore of buffers and the selected language, server-side `network_lost/restored` events.
 - **Accept:** unplugging the laptop's network for 60 s while typing, then reconnecting → every edit arrives. Killing the student app and relaunching → resumes into the exam on the same PC.
 - **Manual test:** do exactly the above on the laptop, then compare the final version with what was on screen.
-- **Built (2026-10-23):** `main/resume/` (`offline-queue`, `session-store`, `secret-box`, `restore-merge`, `restore-answers`, `resume-ipc`), `GET /answers/latest`, `ConnectionEvents` (server `network_lost` / `network_restored`), a socket watchdog, `StudentFlow` resume step, `RestoringScreen`, Leave button in the lobby. `hello.resume.lastServerSeq` stays 0 (no `serverSeq` commands yet). Manual steps are in progress.md.
+- **Built (2026-10-23):** `main/resume/` (`offline-queue`, `session-store`, `secret-box`, `restore-merge`, `restore-answers`, `resume-ipc`), `GET /answers/latest`, `ConnectionEvents` (server `network_lost` / `network_restored`), a socket watchdog, `StudentFlow` resume step, `RestoringScreen`, Leave button in the lobby. `hello.resume.lastServerSeq` stays 0 (no `serverSeq` commands yet). Decisions are in decisions.md (M17).
 
 ### M18 Submit, auto-submit, receipt, student-sim v2 — **Phase 3 demo**
 - **Goal:** final submission with a hash + receipt, auto-submit at the deadline with grace.
@@ -186,27 +186,28 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** `agent/.../pipe.rs` (peer verification), shared pipe schemas, `apps/desktop/main/agent-client.ts` + fake agent (`EG_FAKE_AGENT=1`), system-check screen, `/join` enforcement, `agent.status` WS message.
 - **Accept:** join is refused with the agent stopped (admin-stopped) or the helper missing. A fake client process (e.g. PowerShell pipe client) is rejected.
 - **Manual test:** on the laptop, stop the service as admin → the join screen shows "Monitoring agent not running". Start it → join works.
-- **Built (2026-10-24):** Rust `pipe_frame` / `pipe_msg` / `pipe_conn` / `pipe_security` / `pipe_server` / `system_check` / `helper_link` / `helper_client` / `link`; shared `protocol/agent-pipe.ts`, `agentProblem`, WS `agent.status`; desktop `main/agent/{agent-client,agent-verify,pipe-frames,agent-link,fake-agent,create-agent-link}`; `JoinClient` takes a fresh check; server `JoinService` enforcement and the hub's `agentOk`; the `AgentGate` now blocks only before joining. Manual steps are in progress.md.
+- **Built (2026-10-24):** Rust `pipe_frame` / `pipe_msg` / `pipe_conn` / `pipe_security` / `pipe_server` / `system_check` / `helper_link` / `helper_client` / `link`; shared `protocol/agent-pipe.ts`, `agentProblem`, WS `agent.status`; desktop `main/agent/{agent-client,agent-verify,pipe-frames,agent-link,fake-agent,create-agent-link}`; `JoinClient` takes a fresh check; server `JoinService` enforcement and the hub's `agentOk`; the `AgentGate` now blocks only before joining. Decisions are in decisions.md (M21).
 
 ### M21a SPIKE — Internet block with WFP (laptop only)
 - **Goal:** the agent service blocks outbound internet while keeping the teacher PC reachable, and can never leave the PC offline.
 - **Touches:** `agent/eg-agent` WFP code (dynamic session, permit loopback/DHCP/teacher address, block other outbound on all interfaces), lease timer, cleanup on service start/stop, a CLI test switch in `--console` mode.
 - **Accept:** with filters on, a browser and `curl https://example.com` fail while the exam (HTTPS/WSS to the teacher) keeps working; killing the service process restores internet at once; the lease restores it after the app goes silent. Run **only on the second laptop** (manual, admin).
 - **Manual test:** as above, plus reboot the laptop mid-block → internet is back after boot.
-- **Built (2026-10-24):** `eg-agent` `net_rules` / `wfp_filter` / `wfp_engine` / `net_block`; `scripts/dev-net-probe.ps1`. Unit-tested only; the laptop run is pending. Its `--net-block` console switch was removed in M21b; the same checks run from the teacher dashboard (steps in progress.md, M21b decisions).
+- **Built (2026-10-24):** `eg-agent` `net_rules` / `wfp_filter` / `wfp_engine` / `net_block`; `scripts/dev-net-probe.ps1`. Run on the laptop (checked 2026-10-25). Its `--net-block` console switch was removed in M21b; the same checks run from the teacher dashboard (see decisions.md, M21b).
 
 ### M21b Teacher internet toggle
 - **Goal:** the teacher turns student internet off/on per exam from the dashboard.
 - **Touches:** shared `state.internet`, `POST /exams/:id/actions {type:'internet', enabled}` + `teacher_actions`, pipe `net.set {blocked, allow}` (teacher address from the pinned session), app relays on welcome/state, removal on submit/end/`monitor.stop`, `internet_blocked|internet_allowed` events, dashboard toggle with "applied on N of M PCs".
 - **Accept:** toggling off blocks internet on the laptop within 2 s and the event shows; ending the exam or submitting restores it; a late joiner gets the current state; the fake agent (`EG_FAKE_AGENT=1`) acknowledges without touching the network.
 - **Manual test:** laptop as student: toggle off → browser fails, exam still works; toggle on → browser works; end exam while off → internet returns.
-- **Built (2026-10-24):** migration 0011, `InternetSwitch` + `/actions {type:'internet'}`, `state.internet`, `internet.status` + roster `internetBlocked`, pipe `net.set` / `net.status` (the app repeats `net.set` with each heartbeat as the lease), Rust `NetControl`, student `InternetController`, dashboard `InternetControl` with "applied on N of M PCs", the student "Internet off" chip, the three events. The real-filter run on the laptop is pending; steps in progress.md.
+- **Built (2026-10-24):** migration 0011, `InternetSwitch` + `/actions {type:'internet'}`, `state.internet`, `internet.status` + roster `internetBlocked`, pipe `net.set` / `net.status` (the app repeats `net.set` with each heartbeat as the lease), Rust `NetControl`, student `InternetController`, dashboard `InternetControl` with "applied on N of M PCs", the student "Internet off" chip, the three events. The real-filter run on the laptop was checked 2026-10-25; decisions are in decisions.md (M21b).
 
 ### M22 Focus tracking, outside time, screenshots → events
 - **Goal:** switches away from ExamGuard produce events with screenshots following the policy (switch, title change, every 20 s, ≥5 s gap).
 - **Touches:** helper `focus.rs`, `capture.rs`, `policy.rs`, `exam.window` handling, evidence forwarding app → server, binary screenshot upload, server event store + screenshot files (severity from a simple placeholder rule until M31), minimal teacher "Events" list with a screenshot viewer.
 - **Accept:** a switch to Chrome → `focus_lost` with exe/title + screenshot. Switching tabs → a title-change shot. Returning → `focus_returned` with duration. Outside totals add up.
 - **Manual test:** on the laptop, open Chrome to a site for 45 s → about 4 screenshots, and the teacher list shows them.
+- **Built (2026-10-26):** Rust `policy` / `focus` / `process_tree` / `evidence_queue` (+ `helper_client`, `helper_link`, `pipe_server`, `link` carrying `monitor.start/stop`, `exam.window`, `evidence`, `evidence.ack`); shared `MonitorPolicy`, evidence pipe messages, `AGENT_EVENT_TYPES`, binary screenshot frames, `EventRow`, `SessionState.monitoringPolicy`; desktop `MonitorController`, `AgentLink.setMonitoring/setExamWindow/onEvidence/ackEvidence`, `SessionClient.sendEvidence`; server `EvidenceIntake`, `ScreenshotStore`, `ChunkAssembler`, placeholder severity, `GET /exams/:id/events` and `/screenshots/:eventId`; teacher `EventsPanel` + `ScreenshotDialog`, roster "Outside" time. Decisions in decisions.md (M22).
 
 ### M23 App launches + processes at start
 - **Goal:** every new user process is reported, and the process list is captured at exam start.
@@ -243,7 +244,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** fixes only. Update `architecture.md` §3 with what the spike/agent work taught.
 - **Accept / demo:** a student on the laptop opens Chrome and WhatsApp (web or desktop) → the teacher sees logged events with screenshots, and nothing is lost if ExamGuard is killed.
 
-> **CHECKPOINT after Phase 4.** Compare progress with available time. If behind, move [D] milestones (M26, M27, M34, M41, M44) to Stage 2 and log the decision in `progress.md`.
+> **CHECKPOINT after Phase 4.** Compare progress with available time. If behind, move [D] milestones (M26, M27, M34, M41, M44) to Stage 2 and log the decision in `decisions.md`.
 
 ---
 
@@ -357,7 +358,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 
 ### M45 Installer: build + install type
 - **Goal:** electron-builder NSIS installer with a Teacher/Student page and a silent `/TYPE=student|teacher`, bundling MinGW (C/C++ only) + MSYS2 pacman, npm, Python + pip, node-pty, eg-runner and eg-agent. One installer always contains everything.
-- **Touches:** `apps/desktop/electron-builder.yml`, `build/installer.nsh`, registry `InstallType`, fuses config (RunAsNode kept on, see progress.md).
+- **Touches:** `apps/desktop/electron-builder.yml`, `build/installer.nsh`, registry `InstallType`, fuses config (RunAsNode kept on, see decisions.md).
 - **Accept:** a student install hides Teacher mode. A silent install works from an admin cmd. Installer and installed sizes are recorded in progress.md (target download ≤ 450 MB).
 - **Manual test:** install both types on the laptop (uninstalling in between).
 

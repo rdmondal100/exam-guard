@@ -114,12 +114,23 @@ export async function pinnedRequest(
         let body = '';
         res.setEncoding('utf8');
         res.on('data', (chunk: string) => (body += chunk));
-        res.on('end', () => resolve({ status: res.statusCode ?? 0, body, fingerprint }));
-        res.on('error', (e) => reject(new PinError('unreachable', e.message)));
+        // The socket is ours (createConnection); close it so a kept-alive connection can't hold
+        // up closing the listener on the other side.
+        res.on('end', () => {
+          socket.destroy();
+          resolve({ status: res.statusCode ?? 0, body, fingerprint });
+        });
+        res.on('error', (e) => {
+          socket.destroy();
+          reject(new PinError('unreachable', e.message));
+        });
       },
     );
     req.setTimeout(target.timeoutMs ?? 5000, () => req.destroy(new Error('The request timed out')));
-    req.on('error', (e) => reject(new PinError('unreachable', e.message)));
+    req.on('error', (e) => {
+      socket.destroy();
+      reject(new PinError('unreachable', e.message));
+    });
     req.end(payload);
   });
 }

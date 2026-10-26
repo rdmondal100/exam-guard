@@ -6,7 +6,11 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { SessionStatus } from '@examguard/shared';
+import {
+  SCREENSHOT_CHUNK_BYTES,
+  decodeScreenshotFrame,
+  type SessionStatus,
+} from '@examguard/shared';
 import { OfflineQueue } from './resume/offline-queue.js';
 import type { SecretBox } from './resume/secret-box.js';
 import { SessionClient, reconnectDelay } from './session-client.js';
@@ -36,7 +40,13 @@ beforeAll(async () => {
   wss = new WebSocketServer({ server: https, path: '/ws' });
   wss.on('connection', (socket) => {
     clients.push(socket);
-    socket.on('message', (data) => {
+    socket.on('message', (data, isBinary) => {
+      if (isBinary) {
+        const bytes = new Uint8Array(data as Buffer);
+        const chunk = decodeScreenshotFrame(bytes);
+        frames.push({ t: 'binary', header: chunk?.header, size: chunk?.payload.length });
+        return;
+      }
       const message = JSON.parse(data.toString()) as {
         t: string;
         clientSent?: number;
@@ -278,6 +288,103 @@ describe('SessionClient events', () => {
     await until(() => events().length === 3);
     expect(events()[2]?.details).toEqual({ n: 2 });
     expect(events()[2]?.id).toBe(events()[1]?.id);
+  });
+});
+
+describe('SessionClient evidence', () => {
+  interface Sent {
+    t: string;
+    id: string;
+    dedupeKey: string;
+    type: string;
+    screenshotRef?: string;
+    details: object;
+  }
+  const events = () => (frames as Sent[]).filter((f) => f.t === 'event');
+  const binary = () =>
+    (
+      frames as {
+        t: string;
+        header?: { ref: string; index: number; total: number };
+        size: number;
+      }[]
+    ).filter((f) => f.t === 'binary');
+  const evidence = (key: string, jpeg?: Uint8Array) => ({
+    key,
+    type: 'focus_lost' as const,
+    clientTs: 5,
+    details: { exe: 'chrome.exe' },
+    ...(jpeg ? { jpeg } : {}),
+  });
+
+  it('sends the screenshot as binary chunks before the event that names it', async () => {
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    const jpeg = new Uint8Array(SCREENSHOT_CHUNK_BYTES + 100).fill(7);
+    client.sendEvidence(evidence('s1:5', jpeg), () => undefined);
+    await until(() => events().length === 1);
+    expect(events()[0]).toMatchObject({
+      id: 's1:5',
+      dedupeKey: 's1:5',
+      type: 'focus_lost',
+      screenshotRef: 's1:5',
+    });
+    expect(binary().map((b) => b.header)).toEqual([
+      { ref: 's1:5', index: 0, total: 2 },
+      { ref: 's1:5', index: 1, total: 2 },
+    ]);
+    expect(binary().map((b) => b.size)).toEqual([SCREENSHOT_CHUNK_BYTES, 100]);
+    // The chunks arrived first on the ordered socket.
+    const order = frames
+      .map((f) => (f as { t: string }).t)
+      .filter((t) => t === 'binary' || t === 'event');
+    expect(order).toEqual(['binary', 'binary', 'event']);
+  });
+
+  it('calls back when the server acks, and an event without a picture has no reference', async () => {
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    let acked = 0;
+    client.sendEvidence(evidence('s1:6'), () => (acked += 1));
+    await until(() => acked === 1);
+    expect(events()[0]?.screenshotRef).toBeUndefined();
+    expect(binary()).toHaveLength(0);
+  });
+
+  it('sends the same key only once while it is in flight', async () => {
+    ackEvents = false;
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    client.sendEvidence(evidence('s1:7'), () => undefined);
+    client.sendEvidence(evidence('s1:7'), () => undefined);
+    await until(() => events().length === 1);
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(events()).toHaveLength(1);
+  });
+
+  it('sends picture and event again after a reconnect until acked', async () => {
+    ackEvents = false;
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    client.sendEvidence(evidence('s1:8', new Uint8Array(500).fill(1)), () => undefined);
+    await until(() => events().length === 1);
+    for (const c of clients) c.terminate();
+    await until(() => events().length === 2);
+    expect(binary()).toHaveLength(2);
+    expect(events()[1]?.id).toBe('s1:8');
+  });
+
+  it('forgets evidence when the session is stopped, and keeps it off the disk queue', async () => {
+    ackEvents = false;
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    client.sendEvidence(evidence('s1:9'), () => undefined);
+    await until(() => events().length === 1);
+    client.stop();
+    client.start(target(), TOKEN);
+    await until(() => links().filter((l) => l === 'connected').length === 2);
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(events()).toHaveLength(1);
   });
 });
 

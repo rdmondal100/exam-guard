@@ -379,6 +379,129 @@ describe('AgentClient', () => {
     });
   });
 
+  describe('monitoring', () => {
+    const policy = {
+      screenshotOnSwitch: true,
+      titleChangeShots: true,
+      periodicOutsideSec: 20,
+      minShotGapSec: 5,
+      maxWidth: 1600,
+      jpegQuality: 60,
+    };
+    const of = (c: Conversation | undefined, type: string) =>
+      (c?.received ?? []).filter((m) => m['t'] === type);
+
+    it('tells the agent the exam window and then to monitor, once linked', async () => {
+      await agent.listen();
+      behaveLikeAgent();
+      const link = make();
+      link.setExamWindow(66012, 4100);
+      link.setMonitoring({ examStudentId: 's1', policy });
+      link.start();
+      await until('ok', () => link.status().ok);
+      const received = agent.conversations[0]?.received.map((m) => m['t']) ?? [];
+      expect(received.indexOf('exam.window')).toBeGreaterThan(0);
+      expect(received.indexOf('monitor.start')).toBeGreaterThan(received.indexOf('exam.window'));
+      expect(of(agent.conversations[0], 'exam.window')[0]).toMatchObject({
+        hwnd: 66012,
+        pid: 4100,
+      });
+      expect(of(agent.conversations[0], 'monitor.start')[0]).toMatchObject({
+        examStudentId: 's1',
+        policy,
+      });
+    });
+
+    it('sends monitor.stop when monitoring ends and repeats the request after a reconnect', async () => {
+      await agent.listen();
+      behaveLikeAgent();
+      const link = make();
+      link.start();
+      await until('ok', () => link.status().ok);
+      link.setMonitoring({ examStudentId: 's1', policy });
+      await until('start', () => of(agent.conversations[0], 'monitor.start').length === 1);
+      agent.conversations[0]?.socket.destroy();
+      await until('start again', () => of(agent.conversations[1], 'monitor.start').length === 1);
+      link.setMonitoring(null);
+      await until('stop', () => of(agent.conversations[1], 'monitor.stop').length === 1);
+    });
+
+    it('owes the agent a stop when monitoring ended while the link was down', async () => {
+      await agent.listen();
+      behaveLikeAgent();
+      const link = make();
+      link.start();
+      await until('ok', () => link.status().ok);
+      link.setMonitoring({ examStudentId: 's1', policy });
+      await until('start', () => of(agent.conversations[0], 'monitor.start').length === 1);
+      agent.conversations[0]?.socket.destroy();
+      await until('down', () => !link.status().verified);
+      link.setMonitoring(null);
+      await until(
+        'stop after reconnect',
+        () => of(agent.conversations[1], 'monitor.stop').length === 1,
+      );
+      expect(of(agent.conversations[1], 'monitor.start')).toHaveLength(0);
+    });
+
+    it('says the request again when a heartbeat reports that monitoring is off', async () => {
+      await agent.listen();
+      behaveLikeAgent();
+      const link = make();
+      link.start();
+      await until('ok', () => link.status().ok);
+      link.setMonitoring({ examStudentId: 's1', policy });
+      await until('start', () => of(agent.conversations[0], 'monitor.start').length === 1);
+      agent.conversations[0]?.send({
+        t: 'heartbeat',
+        seq: 3,
+        hbSeq: 0,
+        helper: true,
+        monitoring: false,
+      });
+      await until('start again', () => of(agent.conversations[0], 'monitor.start').length === 2);
+      agent.conversations[0]?.send({
+        t: 'heartbeat',
+        seq: 4,
+        hbSeq: 1,
+        helper: true,
+        monitoring: true,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      expect(of(agent.conversations[0], 'monitor.start')).toHaveLength(2);
+    });
+
+    it('passes evidence on without the pipe fields and acks what the app confirmed', async () => {
+      await agent.listen();
+      behaveLikeAgent();
+      const link = make();
+      const seen: unknown[] = [];
+      link.onEvidence((e) => seen.push(e));
+      link.start();
+      await until('ok', () => link.status().ok);
+      agent.conversations[0]?.send({
+        t: 'evidence',
+        seq: 7,
+        evidenceSeq: 1500,
+        ts: 1_700_000_000_000,
+        kind: 'focus_lost',
+        data: { exe: 'chrome.exe', title: 'Google' },
+        screenshot: { jpegBase64: '/9j/', width: 8, height: 4 },
+      });
+      await until('evidence', () => seen.length === 1);
+      expect(seen[0]).toEqual({
+        evidenceSeq: 1500,
+        ts: 1_700_000_000_000,
+        kind: 'focus_lost',
+        data: { exe: 'chrome.exe', title: 'Google' },
+        screenshot: { jpegBase64: '/9j/', width: 8, height: 4 },
+      });
+      link.ackEvidence(1500);
+      await until('ack', () => of(agent.conversations[0], 'evidence.ack').length === 1);
+      expect(of(agent.conversations[0], 'evidence.ack')[0]).toMatchObject({ upTo: 1500 });
+    });
+  });
+
   it('goes down and comes back when the service closes the pipe', async () => {
     await agent.listen();
     behaveLikeAgent();

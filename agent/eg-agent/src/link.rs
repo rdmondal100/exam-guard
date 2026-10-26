@@ -2,13 +2,15 @@
 //! to it) and the helper pipe (the helper reports to it). Shared by the service and `--console`.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::config;
+use crate::evidence_queue::{EvidenceQueue, Stored};
 use crate::helper_link::HelperLink;
 use crate::net_control::{NetControl, NetStatus};
+use crate::pipe_msg::MonitorPolicy;
 use crate::pipe_security::{allowed_app, SDDL_APP_PIPE};
 use crate::pipe_server::{Health, PipeServer, ServerConfig};
 use crate::supervisor::Platform;
@@ -23,6 +25,18 @@ type Net = NetControl<WfpBackend>;
 struct AgentHealth {
     helper: Arc<HelperLink>,
     net: Arc<Net>,
+    evidence: Arc<EvidenceQueue>,
+    /// The student the evidence in the queue belongs to.
+    student: Mutex<Option<String>>,
+}
+
+/// The first evidence number of this run. Counting up from the start time keeps the numbers (and the
+/// dedupe keys built from them) unique across restarts of the agent.
+fn first_evidence_seq() -> u64 {
+    let ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(0));
+    ms.saturating_mul(1000)
 }
 
 impl Health for AgentHealth {
@@ -36,6 +50,36 @@ impl Health for AgentHealth {
 
     fn net_set(&self, blocked: bool, allow: &[String]) -> NetStatus {
         self.net.set(blocked, allow, Instant::now())
+    }
+
+    fn monitor_start(&self, exam_student_id: &str, policy: &MonitorPolicy) {
+        let mut student = self.student.lock().unwrap_or_else(PoisonError::into_inner);
+        if student.as_deref() != Some(exam_student_id) {
+            // Another student's evidence must never reach this one's session.
+            self.evidence.clear();
+            *student = Some(exam_student_id.to_string());
+        }
+        self.helper.set_monitor(Some(policy.clone()));
+    }
+
+    fn monitor_stop(&self) {
+        self.helper.set_monitor(None);
+    }
+
+    fn exam_window(&self, hwnd: u64, pid: u32) {
+        self.helper.set_window(hwnd, pid);
+    }
+
+    fn monitoring(&self) -> bool {
+        self.helper.monitoring()
+    }
+
+    fn evidence_after(&self, after: u64) -> Vec<Stored> {
+        self.evidence.after(after)
+    }
+
+    fn evidence_ack(&self, up_to: u64) {
+        self.evidence.ack(up_to);
     }
 }
 
@@ -76,9 +120,11 @@ fn spawn_lease_timer(net: Arc<Net>, stop: Arc<AtomicBool>) -> JoinHandle<()> {
 
 impl Link {
     pub fn start(platform: &Platform) -> Result<Self, String> {
+        let evidence = Arc::new(EvidenceQueue::new(first_evidence_seq()));
         let helper = Arc::new(HelperLink::start(
             config::HELPER_PIPE,
             platform.helper_pipe_sddl,
+            evidence.clone(),
         )?);
         let allow_env = platform.allow_env_app;
         let server = ServerConfig {
@@ -94,6 +140,8 @@ impl Link {
         let health = Arc::new(AgentHealth {
             helper: helper.clone(),
             net: net.clone(),
+            evidence,
+            student: Mutex::new(None),
         });
         match PipeServer::start(server, health) {
             Ok(app) => {

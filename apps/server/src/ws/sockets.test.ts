@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import WebSocket from 'ws';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_MONITORING, encodeScreenshotFrames, monitorPolicyFor } from '@examguard/shared';
 import type { Db } from '../db/connection.js';
 import { initDatabase } from '../db/database.js';
 import type { HostingManager } from '../hosting/hosting-manager.js';
@@ -311,6 +312,90 @@ describe('app events', () => {
   });
 });
 
+describe('agent evidence', () => {
+  const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 9, 8, 7, 6, 5]);
+  const agentEvent = (id: string, over: object = {}) =>
+    JSON.stringify({
+      t: 'event',
+      id,
+      dedupeKey: id,
+      clientTs: 5,
+      type: 'focus_lost',
+      details: { exe: 'chrome.exe', title: 'Google' },
+      ...over,
+    });
+  const acked = (c: Client, n: number) => c.messages.filter((m) => m.t === 'event.ack').length >= n;
+  const get = (url: string) =>
+    app.inject({ method: 'GET', url: `/api/v1${url}`, headers: HEADERS });
+
+  it('stores the picture sent before the event and serves both to the teacher', async () => {
+    const token = await joinStudent('1');
+    const c = await studentWs();
+    c.ws.send(hello(token));
+    await c.waitFor(() => has(c, 'welcome'));
+    for (const frame of encodeScreenshotFrames('dev:1', JPEG)) c.ws.send(frame);
+    c.ws.send(agentEvent('dev:1', { screenshotRef: 'dev:1' }));
+    await c.waitFor(() => acked(c, 1));
+
+    const listed = (await get(`/exams/${examId}/events?source=agent`)).json() as {
+      events: {
+        id: number;
+        type: string;
+        severity: string;
+        studentCode: string;
+        hasScreenshot: boolean;
+      }[];
+    };
+    expect(listed.events).toHaveLength(1);
+    expect(listed.events[0]).toMatchObject({
+      type: 'focus_lost',
+      severity: 'medium',
+      studentCode: '1',
+      hasScreenshot: true,
+    });
+    const picture = await get(`/screenshots/${listed.events[0]?.id}`);
+    expect(picture.statusCode).toBe(200);
+    expect(picture.headers['content-type']).toBe('image/jpeg');
+    expect(Buffer.from(picture.rawPayload).equals(JPEG)).toBe(true);
+  });
+
+  it('shows the time away on the roster once the student is back', async () => {
+    const token = await joinStudent('1');
+    const teacher = await teacherWs();
+    const c = await studentWs();
+    c.ws.send(hello(token));
+    await c.waitFor(() => has(c, 'welcome'));
+    c.ws.send(agentEvent('dev:2', { type: 'focus_returned', details: { durationMs: 7000 } }));
+    await teacher.waitFor(() =>
+      (teacher.messages.at(-1)?.students ?? []).some(
+        (s) => s.studentCode === '1' && (s as { outsideMs?: number }).outsideMs === 7000,
+      ),
+    );
+  });
+
+  it('closes a socket that sends a picture before saying hello', async () => {
+    const c = await studentWs();
+    for (const frame of encodeScreenshotFrames('dev:3', JPEG)) c.ws.send(frame);
+    expect(await c.closed).toBe(4400);
+  });
+
+  it('tells a student of a running exam to monitor, with the exam policy', async () => {
+    const token = await joinStudent('1');
+    const c = await studentWs();
+    c.ws.send(hello(token));
+    await c.waitFor(() => has(c, 'welcome'));
+    expect((last(c, 'welcome')?.state as { monitoring?: boolean }).monitoring).toBe(false);
+    await app.inject({ method: 'POST', url: `/api/v1/exams/${examId}/start`, headers: HEADERS });
+    await c.waitFor(() => has(c, 'state'));
+    const pushed = last(c, 'state')?.state as unknown as {
+      monitoring: boolean;
+      monitoringPolicy: object;
+    };
+    expect(pushed.monitoring).toBe(true);
+    expect(pushed.monitoringPolicy).toEqual(monitorPolicyFor(DEFAULT_MONITORING));
+  });
+});
+
 describe('agent status', () => {
   const status = (over: object = {}) =>
     JSON.stringify({
@@ -432,6 +517,8 @@ describe('starting the exam', () => {
       examState: 'running',
       studentState: 'active',
       deadline,
+      // The exam's monitoring grace, so the client knows when the server has finalized it.
+      graceSec: DEFAULT_MONITORING.graceSec,
     });
     const e = await studentWs();
     e.ws.send(hello(early));

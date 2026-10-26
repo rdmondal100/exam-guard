@@ -1,13 +1,15 @@
 import { z } from 'zod';
 
-/** Why a version was written. `final` is the server's own (submit and auto-submit, M18). */
+/**
+ * Why a version was written. The final answers live in `final_answers` and point at a version,
+ * so there is no reason for them (the DB CHECK in migration 0009 still allows `final`).
+ */
 export const SAVE_REASONS = [
   'interval',
   'run',
   'switch_question',
   'switch_language',
   'submit',
-  'final',
 ] as const;
 export const SaveReasonSchema = z.enum(SAVE_REASONS);
 export type SaveReason = z.infer<typeof SaveReasonSchema>;

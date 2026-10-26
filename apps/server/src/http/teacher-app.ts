@@ -18,6 +18,7 @@ import { StudentDeadlines } from '../exams/student-deadlines.js';
 import { SubmissionService } from '../submissions/submission-service.js';
 import { ExamFileService } from '../exam-files/exam-file-service.js';
 import { ExamFileStore } from '../exam-files/exam-file-store.js';
+import { ScreenshotStore } from '../screenshots/screenshot-store.js';
 import { ConnectionEvents } from '../hosting/connection-events.js';
 import { HostingManager, type HostingManagerDeps } from '../hosting/hosting-manager.js';
 import { QuestionRepo } from '../db/question-repo.js';
@@ -29,6 +30,7 @@ import { registerActionRoutes } from './action-routes.js';
 import { registerAuthRoutes } from './auth-routes.js';
 import { registerClassListRoutes } from './class-list-routes.js';
 import { sendError } from './errors.js';
+import { registerEventRoutes } from './event-routes.js';
 import { registerExamFileRoutes } from './exam-file-routes.js';
 import { registerExamRoutes } from './exam-routes.js';
 import { registerHostingRoutes } from './hosting-routes.js';
@@ -149,7 +151,15 @@ export function buildTeacherApp({
   const examFiles = examFilesDir
     ? new ExamFileService(new ExamFileRepo(db), new ExamFileStore(examFilesDir))
     : undefined;
-  registerExamRoutes(app, { exams, questions, examFiles, requireLogin: state.requireLogin, now });
+  const screenshots = hostingOptions && new ScreenshotStore(hostingOptions.dataDir);
+  registerExamRoutes(app, {
+    exams,
+    questions,
+    examFiles,
+    ...(screenshots ? { screenshots } : {}),
+    requireLogin: state.requireLogin,
+    now,
+  });
   if (examFiles) {
     registerExamFileRoutes(app, { exams, files: examFiles, requireLogin: state.requireLogin, now });
   }
@@ -159,6 +169,12 @@ export function buildTeacherApp({
   const events = new EventRepo(db);
   const terminalLogs = new TerminalLogRepo(db);
   const answers = new AnswerRepo(db);
+  registerEventRoutes(app, {
+    exams,
+    events,
+    ...(screenshots ? { screenshots } : {}),
+    requireLogin: state.requireLogin,
+  });
   registerTerminalLogRoutes(app, {
     students,
     events,
