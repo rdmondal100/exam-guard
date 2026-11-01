@@ -9,9 +9,17 @@ Scope: how the pieces fit together. Tables are in `data-model.md`, message shape
 |---|---|
 | Electron main (`apps/desktop/src/main`) | Window, teacher login gate, `safeStorage` (API key, secrets), power-save blocker while hosting, starts/restarts the server |
 | Renderer (teacher UI) | React app. Talks to the server over **loopback HTTP/WS** (`127.0.0.1:47821`) with a teacher token handed over by preload |
-| Server (`apps/server`, Electron `utilityProcess`) | Fastify. Two listeners: student HTTPS/WSS `0.0.0.0:47820` (on only while hosting) and teacher loopback `127.0.0.1:47821` (always on). Owns SQLite, mDNS advertising, the exam timer, event classification, risk score, thumbnail fan-out, WebRTC signaling and the grading pipeline |
+| Server (`apps/server`, Electron `utilityProcess`) | Express 5 + `ws`. Two listeners: student HTTPS/WSS `0.0.0.0:47820` (on only while hosting) and teacher loopback `127.0.0.1:47821` (always on). Owns SQLite, mDNS advertising, the exam timer, event classification, risk score, thumbnail fan-out, WebRTC signaling and the grading pipeline |
 
 Main restarts the server on exit with backoff (1 s, 2 s, 5 s, then every 10 s). Each restart is logged and shown as a banner. If main itself crashes, students reconnect after the teacher relaunches the app (§6).
+
+**Server layout (`apps/server/src`).** `server.ts` is the utilityProcess entry. `container.ts` builds every repository and service once. `app.ts` (teacher, `http.createServer`) and `studentApp.ts` (student, `https.createServer`) are the Express apps. A request passes:
+1. `middlewares/`: `cors` and `teacherToken` first (teacher only), then the body parsers.
+2. `routes/*.routes.ts`: one Router per resource; `routes/index.ts` mounts the teacher ones under `/api/v1`. Guarded routes add `requireLogin`; student routes that need a session add `verifyStudent`.
+3. `controllers/*.controller.ts`: validate with the shared Zod schemas, call services and repositories, and `throw new ApiError(...)` to refuse.
+4. `services/<domain>/` (hosting, join, exams, answers, submissions, screenshots, exam-files, auth) and `db/repositories/*.repo.ts` (all SQL).
+
+`error.middleware.ts` turns every error into the `{ error: { code, message, details? } }` envelope: `ApiError` subclasses (`HostingError`, `JoinError`, `ExamFileError`), body-parser errors (`invalid_json` 400, `payload_too_large` 413) and unknown routes (`not_found` 404). Anything else is a 500 `internal`. Each listener's `/ws` upgrade is served by `sockets/wsServer.ts` (`ws` with `noServer`) and never reaches Express. Route tests call `inject()` from `src/testing/inject.ts` (supertest), so no port is opened.
 
 ### Student PC (install type = Student; locked to Student mode)
 | Process | Runs as | Role |
@@ -98,7 +106,7 @@ Main restarts the server on exit with backoff (1 s, 2 s, 5 s, then every 10 s). 
   - The bundled MSYS2 tree is never written, so it can live read-only under Program Files. Tested with a read-and-execute-only ACL and a standard-user token.
 - Toolchain choice (M15a): WinLibs gcc stays, and MSYS2 is used only as a package manager into the workspace. MSYS2's own UCRT gcc would still need a per-student root (the install folder is read-only), and it would replace the pinned gcc.
 - Teacher switch (M15b): the terminal exists only while the exam is `running` and the server's `state.terminal` is on. Off by default.
-  - The server keeps the switch on `exams` (`TerminalSwitch`, `hosting/terminal-switch.ts`) and pushes every change to all connected students. "On for N minutes" chosen before Start counts from Start. Chosen while running, it counts from now. A timer at `until` (with the 1 s deadline watcher as a backstop, both re-armed on resume) turns it off.
+  - The server keeps the switch on `exams` (`TerminalSwitch`, `services/hosting/terminal-switch.ts`) and pushes every change to all connected students. "On for N minutes" chosen before Start counts from Start. Chosen while running, it counts from now. A timer at `until` (with the 1 s deadline watcher as a backstop, both re-armed on resume) turns it off.
   - Student main (`terminal-gate.ts`) closes the pty as soon as a state no longer allows it, with exit reason `turned_off`. It also keeps its own timer at `until` (local clock + offset) in case the push is late. The Job Object then kills everything started from it. Measured under 1 s with a background `ping -t`.
 - Command logging (M15b): PowerShell starts with `-NoExit -Command ". '<.examguard\init.ps1>'"`. The script is rewritten on every open with a random nonce (`terminal/shell-init.ts`).
   - The script sets a PSReadLine `AddToHistoryHandler`. The handler writes `ESC ] 6973 ; <nonce> ; <base64 UTF-8 line> BEL` for each accepted line: as finished by Tab completion, history recall or Ctrl+R, and before it runs. `HistoryNoDuplicates` is off, so a repeated line is reported again. History is not saved. Without PSReadLine, a `prompt` function reports the last history entry instead.
@@ -135,7 +143,7 @@ Main restarts the server on exit with backoff (1 s, 2 s, 5 s, then every 10 s). 
 ```
 GradingProvider { id; gradeAnswer(input: GradingInput, opts): Promise<ProviderResult /* raw text + usage */> }
 ```
-- `apps/server/src/grading/`: `providers/gemini.ts` (`@google/genai`, JSON response schema, temperature 0.1), `providers/fake.ts` (replays fixtures from `fixtures/grading/*.json`, used by all tests), `prompt.ts` (versioned template, `PROMPT_VERSION`), `validate.ts` (Zod + rules: each `awarded ≤ max`, half-unit steps, criteria names match the guide, total = sum), `pipeline.ts`.
+- `apps/server/src/services/grading/`: `providers/gemini.ts` (`@google/genai`, JSON response schema, temperature 0.1), `providers/fake.ts` (replays fixtures from `fixtures/grading/*.json`, used by all tests), `prompt.ts` (versioned template, `PROMPT_VERSION`), `validate.ts` (Zod + rules: each `awarded ≤ max`, half-unit steps, criteria names match the guide, total = sum), `pipeline.ts`.
 - **Flow:** "Evaluate with AI" → one `grading_jobs` row per question → for each question, every final answer goes through a p-limit queue (concurrency 4, configurable) → retries with exponential backoff on 429/5xx (3×) → invalid output gets 2 retries with a repair hint → after that the answer is `needs_manual`. Each attempt stores an `evaluations` row (provider, model, prompt version, raw response).
 - **Input** has only an anonymous ID (`exam_student.anon_id`), never name or student ID.
 - The API key is decrypted in main and sent to the server over the utilityProcess message port at grading time. It's never written to the DB or logs.
@@ -150,7 +158,9 @@ GradingProvider { id; gradeAnswer(input: GradingInput, opts): Promise<ProviderRe
 | Zustand | Small local UI state (student exam state, dashboard selections) |
 | TanStack Query / Table | Server data caching and big sortable tables (200-row rosters, review) |
 | @monaco-editor/react | Monaco embedding with local workers (no CDN) |
-| Fastify + @fastify/websocket | Fast HTTP with schema hooks. WS on the same TLS server |
+| Express 5 + ws | Familiar routing (routes → controllers → middlewares), async errors handled natively. `ws` serves `/ws` on the same HTTP(S) server through its `upgrade` event |
+| Turborepo | Runs build/test/typecheck in dependency order with a local cache |
+| supertest | Route tests without opening a port (`src/testing/inject.ts`) |
 | zod | Single source of truth for message validation and types |
 | better-sqlite3 | Sync, fast, WAL. The server is the single writer |
 | bonjour-service | Pure-JS mDNS advertise/browse |

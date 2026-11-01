@@ -36,7 +36,7 @@ Everything else for students goes over WS.
 | Results | `POST /exams/:id/finalize`, `GET /exams/:id/export.csv` |
 | Settings | `GET/PATCH /settings`, `POST /settings/backup`, `POST /settings/regenerate-cert` |
 
-Errors everywhere: `{ error: { code: string, message: string, details?: unknown } }` with the right HTTP status.
+Errors everywhere: `{ error: { code: string, message: string, details?: unknown } }` with the right HTTP status. This includes the generic ones: 404 `not_found` (unknown route), 400 `invalid_json`, 413 `payload_too_large` (JSON bodies over 1 MB; 2 MB for the class-list import) and 500 `internal`.
 
 ## 3. WebSocket messages
 Envelope for every JSON frame: `{ t: string; id?: string /* for acks */; ...payload }`. Binary frames: `[u8 kind][u16 headerLen][header JSON][payload]`, where kind 1 = thumbnail and kind 2 = screenshot chunk.

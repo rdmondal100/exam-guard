@@ -1,6 +1,6 @@
 # Data model
 
-SQLite on the teacher PC only, accessed by the server process (better-sqlite3, `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`). Migrations are numbered SQL files in `apps/server/src/db/migrations/` (`0001_init.sql`, ...), applied in a transaction at startup, with the version kept in `PRAGMA user_version`.
+SQLite on the teacher PC only, accessed by the server process (better-sqlite3, `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`). Migrations are numbered SQL files in `apps/server/src/db/migrations/` (opened and applied by `db/connectDb.ts`; SQL lives in `db/repositories/*.repo.ts`) (`0001_init.sql`, ...), applied in a transaction at startup, with the version kept in `PRAGMA user_version`.
 
 **Conventions**
 - IDs: `TEXT` UUIDv7 (time-sortable) unless noted.

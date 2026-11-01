@@ -54,7 +54,7 @@ ExamGuard AI is a Windows desktop examination platform for university computer l
 |---|---|
 | App | **One Electron + TypeScript desktop app** with two modes: **Teacher mode** and **Student mode** |
 | UI | React 18, electron-vite, Tailwind, shadcn/ui, Zustand, TanStack Query/Table |
-| Exam server | Node.js + TypeScript (Fastify for HTTPS, WebSocket for real-time), runs **inside the teacher app as a separate background process** (Electron `utilityProcess`), auto-restarted if it crashes |
+| Exam server | Node.js + TypeScript (Express 5 for HTTPS, `ws` WebSocket for real-time), runs **inside the teacher app as a separate background process** (Electron `utilityProcess`), auto-restarted if it crashes |
 | Database | **SQLite** (better-sqlite3, WAL mode) on the teacher PC; files (screenshots, exports) in an app data folder |
 | Shared code | A shared package with TypeScript types and Zod schemas for every API and message |
 | Monitoring agent | **Rust**, runs as a **Windows service** on student PCs (plus a helper in the user session where needed, since a service can't see the desktop). **Observes and reports; its only change to the PC is the teacher's internet toggle** (temporary Windows Filtering Platform filters, always removed when the exam ends or the agent stops). Talks to the student app over a local authenticated channel (named pipe) |
@@ -63,7 +63,7 @@ ExamGuard AI is a Windows desktop examination platform for university computer l
 | Exam terminal | A real shell (ConPTY via node-pty, shown with xterm.js) in the student exam window, in the student's exam workspace, so students install the packages they need. The teacher turns it on/off |
 | Screens | Small JPEG thumbnails over WebSocket for the grid; **WebRTC peer-to-peer** (signaled through the exam server) for the single live view |
 | AI grading | Behind a **provider interface**; **Google Gemini** adapter first, others (e.g. OpenAI) later. Called from the teacher PC after the exam; teacher enters their API key; model name configurable |
-| Repo | Monorepo (pnpm workspaces + Cargo workspace): `apps/desktop`, `apps/server`, `packages/shared`, `agent/` (Rust), `tools/student-sim` |
+| Repo | Monorepo (pnpm workspaces + Turborepo + Cargo workspace): `apps/desktop`, `apps/server`, `packages/shared`, `agent/` (Rust), `tools/student-sim` |
 
 ---
 
