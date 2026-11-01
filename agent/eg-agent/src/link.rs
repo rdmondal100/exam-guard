@@ -13,6 +13,7 @@ use crate::net_control::{NetControl, NetStatus};
 use crate::pipe_msg::MonitorPolicy;
 use crate::pipe_security::{allowed_app, SDDL_APP_PIPE};
 use crate::pipe_server::{Health, PipeServer, ServerConfig};
+use crate::procwatch::ProcWatch;
 use crate::supervisor::Platform;
 use crate::system_check::{evaluate, CheckResult};
 use crate::wfp_engine::WfpBackend;
@@ -26,8 +27,19 @@ struct AgentHealth {
     helper: Arc<HelperLink>,
     net: Arc<Net>,
     evidence: Arc<EvidenceQueue>,
+    /// Which session is the student's (the process watcher looks only there).
+    session: fn() -> Option<u32>,
+    monitor: Mutex<MonitorState>,
+}
+
+#[derive(Default)]
+struct MonitorState {
     /// The student the evidence in the queue belongs to.
-    student: Mutex<Option<String>>,
+    student: Option<String>,
+    /// Running while monitoring is on.
+    watch: Option<ProcWatch>,
+    /// The exam app's process, from `exam.window`.
+    exam_pid: u32,
 }
 
 /// The first evidence number of this run. Counting up from the start time keeps the numbers (and the
@@ -53,20 +65,37 @@ impl Health for AgentHealth {
     }
 
     fn monitor_start(&self, exam_student_id: &str, policy: &MonitorPolicy) {
-        let mut student = self.student.lock().unwrap_or_else(PoisonError::into_inner);
-        if student.as_deref() != Some(exam_student_id) {
+        let mut state = self.monitor.lock().unwrap_or_else(PoisonError::into_inner);
+        if state.student.as_deref() != Some(exam_student_id) {
             // Another student's evidence must never reach this one's session.
             self.evidence.clear();
-            *student = Some(exam_student_id.to_string());
+            state.watch = None;
+            state.student = Some(exam_student_id.to_string());
+        }
+        // A repeated start (the app reconnected) keeps the running watch and its baseline.
+        if state.watch.is_none() {
+            let watch = ProcWatch::start(self.evidence.clone(), self.session);
+            watch.set_exam_pid(state.exam_pid);
+            state.watch = Some(watch);
         }
         self.helper.set_monitor(Some(policy.clone()));
     }
 
     fn monitor_stop(&self) {
+        self.monitor
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .watch = None;
         self.helper.set_monitor(None);
     }
 
     fn exam_window(&self, hwnd: u64, pid: u32) {
+        let mut state = self.monitor.lock().unwrap_or_else(PoisonError::into_inner);
+        state.exam_pid = pid;
+        if let Some(watch) = &state.watch {
+            watch.set_exam_pid(pid);
+        }
+        drop(state);
         self.helper.set_window(hwnd, pid);
     }
 
@@ -141,7 +170,8 @@ impl Link {
             helper: helper.clone(),
             net: net.clone(),
             evidence,
-            student: Mutex::new(None),
+            session: platform.active_session,
+            monitor: Mutex::new(MonitorState::default()),
         });
         match PipeServer::start(server, health) {
             Ok(app) => {

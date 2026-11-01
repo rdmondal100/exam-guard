@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { EventRow, Severity } from '@examguard/shared';
 import type { ExamApi } from '@/lib/examApi';
-import { describeEvent } from '@/lib/eventsView';
+import { describeEvent, programCounts } from '@/lib/eventsView';
 import { clockTime } from '@/lib/terminalLog';
 import { useEvents } from '@/lib/useEvents';
 import { ScreenshotDialog } from './ScreenshotDialog';
@@ -23,6 +23,7 @@ export function EventsPanel({ examId, api }: Props) {
   const { events, error } = useEvents(examId, api);
   const [student, setStudent] = useState('');
   const [shown, setShown] = useState<EventRow | null>(null);
+  const [listed, setListed] = useState<number | null>(null);
 
   const students = useMemo(() => {
     const seen = new Map<string, string>();
@@ -70,7 +71,7 @@ export function EventsPanel({ examId, api }: Props) {
       {visible.length > 0 && (
         <ol aria-label="Events" className="max-h-80 divide-y divide-border overflow-auto">
           {visible.map((e) => (
-            <li key={e.id} className="flex items-center gap-3 py-1.5 text-sm">
+            <li key={e.id} className="flex flex-wrap items-center gap-3 py-1.5 text-sm">
               <span className="w-16 shrink-0 font-mono text-muted">{clockTime(e.serverTs)}</span>
               <span className="w-40 shrink-0 truncate">
                 <span className="font-mono">{e.studentCode}</span> {e.studentName}
@@ -78,6 +79,16 @@ export function EventsPanel({ examId, api }: Props) {
               <span className={`flex-1 truncate ${SEVERITY_STYLE[e.severity]}`}>
                 {describeEvent(e)}
               </span>
+              {e.type === 'processes_at_start' && programCounts(e.details).length > 0 && (
+                <button
+                  type="button"
+                  aria-expanded={listed === e.id}
+                  className="rounded-md border px-2 py-0.5 text-xs"
+                  onClick={() => setListed(listed === e.id ? null : e.id)}
+                >
+                  Programs
+                </button>
+              )}
               {e.hasScreenshot && (
                 <button
                   type="button"
@@ -86,6 +97,19 @@ export function EventsPanel({ examId, api }: Props) {
                 >
                   Screenshot
                 </button>
+              )}
+              {listed === e.id && (
+                <ul
+                  aria-label="Programs running at the start"
+                  className="w-full columns-2 pl-20 text-xs"
+                >
+                  {programCounts(e.details).map(({ exe, count }) => (
+                    <li key={exe} className="font-mono">
+                      {exe}
+                      {count > 1 ? ` ×${count}` : ''}
+                    </li>
+                  ))}
+                </ul>
               )}
             </li>
           ))}

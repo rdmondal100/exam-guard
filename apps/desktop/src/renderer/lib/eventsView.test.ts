@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { EventRow } from '@examguard/shared';
 import { createExamApi } from './examApi';
-import { describeEvent, formatDuration, jpegDataUrl } from './eventsView';
+import { describeEvent, formatDuration, jpegDataUrl, programCounts } from './eventsView';
 
 const event = (type: string, details: Record<string, unknown>): EventRow => ({
   id: 1,
@@ -14,6 +14,45 @@ const event = (type: string, details: Record<string, unknown>): EventRow => ({
   clientTs: 1,
   details,
   hasScreenshot: true,
+});
+
+describe('process watcher events', () => {
+  it('says what was started and by whom', () => {
+    expect(
+      describeEvent(event('app_launched', { exe: 'notepad.exe', parentExe: 'explorer.exe' })),
+    ).toBe('Started notepad.exe (from explorer.exe)');
+    expect(describeEvent(event('app_launched', { exe: 'notepad.exe' }))).toBe(
+      'Started notepad.exe',
+    );
+    expect(describeEvent(event('app_launched', {}))).toBe('Started a program');
+  });
+
+  it('counts the programs running at the start by name', () => {
+    const processes = [
+      { exe: 'Spotify.exe', pid: 1 },
+      { exe: 'discord.exe', pid: 2 },
+      { exe: 'discord.exe', pid: 3 },
+      { exe: 7, pid: 4 },
+    ];
+    expect(programCounts({ processes })).toEqual([
+      { exe: 'discord.exe', count: 2 },
+      { exe: 'Spotify.exe', count: 1 },
+    ]);
+    expect(describeEvent(event('processes_at_start', { processes }))).toBe(
+      'Running at the start: 2 programs',
+    );
+    expect(describeEvent(event('processes_at_start', { processes: [processes[0]] }))).toBe(
+      'Running at the start: 1 program',
+    );
+  });
+
+  it('copes with a missing or odd list', () => {
+    expect(programCounts({})).toEqual([]);
+    expect(programCounts({ processes: 'x' })).toEqual([]);
+    expect(describeEvent(event('processes_at_start', {}))).toBe(
+      'No programs were running at the start',
+    );
+  });
 });
 
 describe('formatDuration', () => {

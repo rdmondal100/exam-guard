@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AgentToAppSchema, AppToAgentSchema } from './agent-pipe.js';
+import { AgentToAppSchema, AppToAgentSchema, MAX_START_PROCESSES } from './agent-pipe.js';
 import { DEFAULT_MONITORING } from './exams.js';
 import { monitorPolicyFor } from './events.js';
 import { ReportedEventTypeSchema, EventReportSchema, isAgentEventType } from './ws.js';
@@ -51,7 +51,34 @@ describe('monitoring messages on the pipe', () => {
       screenshot: { jpegBase64: '/9j/4AAQ', width: 800, height: 450 },
     };
     expect(AgentToAppSchema.safeParse(withShot).success).toBe(true);
-    expect(AgentToAppSchema.safeParse({ ...evidence, kind: 'app_launched' }).success).toBe(false);
+    expect(AgentToAppSchema.safeParse({ ...evidence, kind: 'clipboard' }).success).toBe(false);
+  });
+
+  it('accepts the process watcher evidence of M23', () => {
+    const base = { t: 'evidence', seq: 6, evidenceSeq: 2, ts: 1_700_000_000_000 };
+    const launched = {
+      ...base,
+      kind: 'app_launched',
+      data: {
+        exe: 'notepad.exe',
+        path: String.raw`C:\Windows\notepad.exe`,
+        pid: 9,
+        parentExe: 'explorer.exe',
+        parentPid: 4,
+      },
+    };
+    expect(AgentToAppSchema.safeParse(launched).success).toBe(true);
+    const start = {
+      ...base,
+      kind: 'processes_at_start',
+      data: { processes: [{ exe: 'Spotify.exe', pid: 11 }] },
+    };
+    expect(AgentToAppSchema.safeParse(start).success).toBe(true);
+    const tooMany = { exe: 'a.exe', pid: 1 };
+    const flood = { ...start, data: { processes: Array(MAX_START_PROCESSES + 1).fill(tooMany) } };
+    expect(AgentToAppSchema.safeParse(flood).success).toBe(false);
+    const bad = { ...start, data: { processes: [{ exe: 'a.exe' }] } };
+    expect(AgentToAppSchema.safeParse(bad).success).toBe(false);
   });
 });
 
@@ -68,7 +95,10 @@ describe('agent event reports', () => {
     };
     expect(EventReportSchema.safeParse(report).success).toBe(true);
     expect(ReportedEventTypeSchema.safeParse('run_executed').success).toBe(true);
-    expect(ReportedEventTypeSchema.safeParse('app_launched').success).toBe(false);
+    expect(ReportedEventTypeSchema.safeParse('app_launched').success).toBe(true);
+    expect(ReportedEventTypeSchema.safeParse('processes_at_start').success).toBe(true);
+    expect(ReportedEventTypeSchema.safeParse('paste_blocked').success).toBe(false);
+    expect(isAgentEventType('app_launched')).toBe(true);
     expect(isAgentEventType('title_changed')).toBe(true);
     expect(isAgentEventType('run_executed')).toBe(false);
   });

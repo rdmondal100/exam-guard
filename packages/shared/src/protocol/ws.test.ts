@@ -164,7 +164,7 @@ describe('events', () => {
   });
 
   it.each([
-    { ...event, type: 'app_launched' },
+    { ...event, type: 'paste_blocked' },
     { ...event, dedupeKey: '' },
     { ...event, details: 'x' },
   ])('rejects %j', (message) => {

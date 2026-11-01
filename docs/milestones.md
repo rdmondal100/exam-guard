@@ -214,6 +214,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** service `procwatch.rs`, `processes_at_start` evidence, teacher events list shows them.
 - **Accept:** launching Notepad (even without focus) logs `app_launched`. The start snapshot lists the running apps.
 - **Manual test:** start the exam with Spotify/Discord open, then launch Notepad mid-exam.
+- **Built (2026-10-26):** Rust `proc_snapshot` (ToolHelp list, session and token-owner check) and `procwatch` (pure `Tracker` + polling thread, started and stopped by `monitor.start/stop` in `link.rs`); `EvidenceData` gets `parentExe`, `parentPid`, `processes`; shared `EVIDENCE_KINDS` + `app_launched`, `processes_at_start`; teacher `describeEvent` lines and a "Programs" list in `EventsPanel`. The manual test was marked done by the user on 2026-10-26 (not run in the coding session). Decisions in decisions.md (M23).
 
 ### M24 Evidence buffer, app relaunch, tamper lock
 - **Goal:** evidence survives an app kill or reboot. Heartbeat loss locks the student.

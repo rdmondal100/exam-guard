@@ -39,6 +39,21 @@ pub struct EvidenceData {
         skip_serializing_if = "Option::is_none"
     )]
     pub duration_ms: Option<u64>,
+    /// `app_launched`: the program that started it, when it is still running.
+    #[serde(default, rename = "parentExe", skip_serializing_if = "Option::is_none")]
+    pub parent_exe: Option<String>,
+    #[serde(default, rename = "parentPid", skip_serializing_if = "Option::is_none")]
+    pub parent_pid: Option<u32>,
+    /// `processes_at_start`: the user's programs running when monitoring began.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub processes: Option<Vec<ProcessRef>>,
+}
+
+/// A running program in `processes_at_start`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProcessRef {
+    pub exe: String,
+    pub pid: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -178,6 +193,8 @@ pub enum ToHelper {
 }
 
 /// Helper → service.
+// A few messages a minute at most; boxing the body would only add an indirection at every use.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "t")]
 pub enum FromHelper {

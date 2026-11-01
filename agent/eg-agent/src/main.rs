@@ -43,7 +43,11 @@ mod pipe_server;
 #[cfg(windows)]
 mod policy;
 #[cfg(windows)]
+mod proc_snapshot;
+#[cfg(windows)]
 mod process_tree;
+#[cfg(windows)]
+mod procwatch;
 #[cfg(windows)]
 mod service;
 #[cfg(windows)]

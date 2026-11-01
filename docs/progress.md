@@ -3,10 +3,10 @@
 Read this first every session, and keep it under about 8 KB. Decisions are in `docs/decisions.md` (grep it, never read it whole), the session log in `docs/session-log.md` (append only), old reviews in `docs/archive/`.
 
 ## Current status
-- **Stage 1, Phase 4 (Monitoring agent) in progress.** Last milestone built: M22 (focus tracking, outside time, screenshots → events). **The laptop run of M22 has not been done yet**: automated tests and a standalone helper start pass, the real Chrome trial is pending (manual test: `docs/milestones.md` M22).
+- **Stage 1, Phase 4 (Monitoring agent) in progress.** Last milestone built: M23 (app launches + process list at start); its manual test was marked done by the user on 2026-10-26 (not run in the coding session). **The laptop run of M22 has not been recorded as done**: automated tests and a standalone helper start pass, the real Chrome trial is pending (manual test: `docs/milestones.md` M22).
 - **Manual checks:** the user ran M02–M13 (2026-10-21) and M14–M21b (2026-10-25: real WFP filters and the installed agent service on the laptop) and reports them good; details were not recorded. Phase 2 accepted.
-- **Next step:** run M22 on the laptop and fix what it shows; then M23 (app launches + process list at start). If the M21a/M21b laptop run is repeated, write what it shows (established connections, DHCP, IPv6, group policy, whether the lease and a killed service lift the block) into `docs/decisions.md` (M21a) and architecture §3.
-- **M22 notes:** the installed agent service must be rebuilt and reinstalled (`pnpm dev:student:agent`) to get the new helper. The "What the agent saw" chip (M19) still works from `helper.log` but shows 0 pictures; remove it with the next agent-chip cleanup. `submit-socket.test.ts` "auto-submits after the grace…" failed once in a full `pnpm test` run (timing) and passes alone: watch for a flake.
+- **Next step:** M24 (evidence buffer, app relaunch, tamper lock); first record the M22 laptop run if it is still open. If the M21a/M21b laptop run is repeated, write what it shows (established connections, DHCP, IPv6, group policy, whether the lease and a killed service lift the block) into `docs/decisions.md` (M21a) and architecture §3.
+- **M22/M23 notes:** the installed agent service must be rebuilt and reinstalled (`pnpm dev:student:agent`) to get the new helper and the process watcher. The "What the agent saw" chip (M19) still works from `helper.log` but shows 0 pictures; remove it with the next agent-chip cleanup. `submit-socket.test.ts` "auto-submits after the grace…" failed once in a full `pnpm test` run (timing) and passes alone: watch for a flake.
 
 ## Completed milestones
 `M## name — date — note`. Details: `docs/decisions.md` (grep the milestone), `docs/milestones.md`, `git log`.
@@ -40,6 +40,7 @@ Read this first every session, and keep it under about 8 KB. Decisions are in `d
 - M21a SPIKE Internet block with WFP — 2026-10-24 — filters run on the laptop; findings not recorded.
 - M21b Teacher internet toggle — 2026-10-24 — teacher switch → server → app → agent lease → WFP.
 - M22 Focus tracking, outside time, screenshots → events — 2026-10-26 — helper hooks + policy, evidence over the pipe, binary screenshot frames, events list; laptop run pending.
+- M23 App launches + processes at start — 2026-10-26 — service process watcher (`app_launched`, `processes_at_start`), exam-app descendants and Windows hosts skipped; manual test marked done by the user.
 
 ## Known issues / open questions
 Cleaned up 2026-10-25 after the user's report that the manual tests up to M21b are good; what is left is real limitations and later work (details of that pass: `docs/decisions.md`, "Known-issues pass").
@@ -54,7 +55,7 @@ Cleaned up 2026-10-25 after the user's report that the manual tests up to M21b a
 Moved to `docs/limitations.md` (read it when you touch that area).
 
 ### Deferred to a named milestone
-- **M23–M24 (agent):** `app_launched`, `processes_at_start`, the encrypted evidence buffer, app relaunch and the heartbeat-loss lock are not built (evidence is held in the service's memory only, see limitations); the agent's logs still go to `%ProgramData%\ExamGuard\spike`.
+- **M24 (agent):** `taskmgr_opened` (the M23 watcher could report it; not in any acceptance list yet, add it with the secure-desktop checks or M26+), the encrypted evidence buffer, app relaunch and the heartbeat-loss lock are not built (evidence is held in the service's memory only, see limitations); the agent's logs still go to `%ProgramData%\ExamGuard\spike`.
 - **M31+ (classifier):** the severity of agent events is a placeholder (`screenshots/placeholder-severity.ts`); `riskScore` is still 0; Alt-Tab/Start-menu `explorer.exe` flicker should be filtered there; a WS `alert` push to the teacher is not built (the Events list polls every 3 s).
 - **M31+ (events UI):** `run_executed`, `network_*` and terminal events are stored but not shown to the teacher; to look, query the `events` table. The roster has no terminal column and the dashboard does not show where the terminal switch took effect (add with the monitor grid, M26+/M32).
 - **M35–M36 (teacher actions):** a teacher "reset session" (clears `token_hash` and `device_id` so a student can re-join from another PC) and extensions (`extension_sec`, `global_extension_sec` are read in the deadline but nothing sets them yet). A WS rate limit per token is not built (the 512 KB frame limit and 15 s idle drop are in).

@@ -238,6 +238,7 @@ fn evidence_data(observation: &Observation) -> EvidenceData {
         pid: Some(window.pid),
         title: Some(truncate(&window.title, MAX_TITLE_CHARS)),
         duration_ms: observation.duration_ms,
+        ..EvidenceData::default()
     }
 }
 

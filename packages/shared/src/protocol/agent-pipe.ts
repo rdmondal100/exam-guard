@@ -142,13 +142,21 @@ export const PipeNetStatusSchema = z.object({
 });
 export type PipeNetStatus = z.infer<typeof PipeNetStatusSchema>;
 
-/** Evidence kinds the helper reports so far (M22). `still_outside` is the periodic shot while away. */
+/**
+ * Evidence kinds the agent reports so far. `still_outside` is the periodic shot while away (M22);
+ * `app_launched` and `processes_at_start` come from the service's process watcher (M23).
+ */
 export const EVIDENCE_KINDS = [
   'focus_lost',
   'focus_returned',
   'title_changed',
   'still_outside',
+  'app_launched',
+  'processes_at_start',
 ] as const;
+
+/** Most programs `processes_at_start` lists. */
+export const MAX_START_PROCESSES = 300;
 export const EvidenceKindSchema = z.enum(EVIDENCE_KINDS);
 export type EvidenceKind = z.infer<typeof EvidenceKindSchema>;
 
@@ -171,6 +179,14 @@ export const PipeEvidenceSchema = z.object({
     title: z.string().max(500).optional(),
     /** `focus_returned`: how long the student was outside. */
     durationMs: z.number().int().nonnegative().optional(),
+    /** `app_launched`: the program that started it, when it was still running. */
+    parentExe: z.string().max(260).optional(),
+    parentPid: z.number().int().nonnegative().optional(),
+    /** `processes_at_start`: the user's programs running when monitoring began. */
+    processes: z
+      .array(z.object({ exe: z.string().max(260), pid: z.number().int().nonnegative() }))
+      .max(MAX_START_PROCESSES)
+      .optional(),
   }),
   screenshot: z
     .object({

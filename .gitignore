@@ -21,6 +21,7 @@ apps/desktop/resources/toolchains/
 *.sqlite-*
 *.db
 screenshots/
+!apps/server/src/screenshots/
 exports/
 backups/
 

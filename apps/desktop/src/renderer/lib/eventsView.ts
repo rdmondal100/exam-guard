@@ -13,6 +13,21 @@ export function formatDuration(ms: number): string {
 
 const text = (value: unknown): string => (typeof value === 'string' ? value : '');
 
+/** The programs of a `processes_at_start` event, one entry per name with how many are running. */
+export function programCounts(details: Record<string, unknown>): { exe: string; count: number }[] {
+  const list = details['processes'];
+  if (!Array.isArray(list)) return [];
+  const counts = new Map<string, number>();
+  for (const item of list) {
+    const exe =
+      item && typeof item === 'object' ? text((item as Record<string, unknown>)['exe']) : '';
+    if (exe) counts.set(exe, (counts.get(exe) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([exe, count]) => ({ exe, count }))
+    .sort((a, b) => a.exe.localeCompare(b.exe, undefined, { sensitivity: 'base' }));
+}
+
 /** One line for the teacher's event list. */
 export function describeEvent(event: EventRow): string {
   const { details } = event;
@@ -30,6 +45,16 @@ export function describeEvent(event: EventRow): string {
       const away = details['durationMs'];
       const back = typeof away === 'number' ? ` after ${formatDuration(away)}` : '';
       return `Came back${back}${exe ? ` from ${exe}` : ''}`;
+    }
+    case 'app_launched': {
+      const parent = text(details['parentExe']);
+      return `Started ${exe || 'a program'}${parent ? ` (from ${parent})` : ''}`;
+    }
+    case 'processes_at_start': {
+      const programs = programCounts(details);
+      return programs.length === 0
+        ? 'No programs were running at the start'
+        : `Running at the start: ${programs.length} program${programs.length === 1 ? '' : 's'}`;
     }
     default:
       return event.type;
