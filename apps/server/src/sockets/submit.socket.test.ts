@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { request } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { FastifyInstance } from 'fastify';
+import { withInject, type Injectable } from '../testing/inject.js';
+import type { TeacherApp } from '../app.js';
 import WebSocket from 'ws';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_MONITORING, buildReceiptAnswers } from '@examguard/shared';
@@ -25,7 +26,7 @@ interface Msg {
   state?: { studentState?: string; examState?: string; receipt?: Msg['receipt'] };
 }
 
-let app: FastifyInstance;
+let app: Injectable<TeacherApp>;
 let db: Db;
 let dir: string;
 let studentPort: number;
@@ -61,7 +62,7 @@ async function setup(graceSec: number): Promise<void> {
       advertise: () => () => {},
     },
   });
-  app = built.app;
+  app = withInject(built);
   await app.listen({ host: '127.0.0.1', port: 0 });
   const call = (url: string, payload?: object) =>
     app.inject({ method: 'POST', url: `/api/v1${url}`, headers: HEADERS, payload });
@@ -359,8 +360,10 @@ describe('time-up', () => {
     await vi.waitFor(() => expect(studentRow('1').state).toBe('submitted'), { timeout: 6000 });
     expect(finals('1').find((r) => r.question_id === writtenId)?.content).toBe('on time');
     await vi.waitFor(() => expect(examState()).toBe('ended'), { timeout: 3000 });
-    const pushed = c.messages.filter((m) => m.t === 'state' && m.state?.receipt);
-    expect(pushed.length).toBeGreaterThan(0);
+    // The push travels over the socket, so it can land just after the database change.
+    await vi.waitFor(() =>
+      expect(c.messages.some((m) => m.t === 'state' && m.state?.receipt)).toBe(true),
+    );
   });
 
   it('drops a save that arrives after the grace', async () => {

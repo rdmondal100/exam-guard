@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { request } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { FastifyInstance } from 'fastify';
+import { withInject, type Injectable } from '../testing/inject.js';
+import type { TeacherApp } from '../app.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Db } from '../db/connectDb.js';
 import { initDatabase } from '../db/connectDb.js';
@@ -16,7 +17,7 @@ const PROTOCOL = { major: 1, minor: 0 };
 const CSV = 'a,b\n1,2\n';
 const PNG = Buffer.from([137, 80, 78, 71, 0, 255, 0, 1]);
 
-let app: FastifyInstance;
+let app: Injectable<TeacherApp>;
 let hosting: HostingManager;
 let db: Db;
 let dir: string;
@@ -99,7 +100,7 @@ beforeEach(async () => {
       advertise: () => () => {},
     },
   });
-  app = built.app;
+  app = withInject(built);
   hosting = built.hosting as HostingManager;
   await app.listen({ host: '127.0.0.1', port: 0 });
   await call('/auth/setup', { password: 'correct horse battery' });

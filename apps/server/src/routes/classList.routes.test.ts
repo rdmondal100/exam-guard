@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { FastifyInstance } from 'fastify';
+import { withInject, type Injectable } from '../testing/inject.js';
+import type { TeacherApp } from '../app.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,14 +12,14 @@ const TOKEN = 't'.repeat(40);
 const HEADERS = { 'x-teacher-token': TOKEN };
 const CSV = 'id,name\n1,Ada\n,Bob\n2,Alan\n1,Dup\n';
 
-let app: FastifyInstance;
+let app: Injectable<TeacherApp>;
 let db: Db;
 let dir: string;
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'eg-cl-'));
   db = initDatabase(dir);
-  app = buildTeacherApp({ token: TOKEN, db, now: () => 5000 }).app;
+  app = withInject(buildTeacherApp({ token: TOKEN, db, now: () => 5000 }));
   await app.inject({
     method: 'POST',
     url: '/api/v1/auth/setup',

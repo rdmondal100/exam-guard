@@ -1,7 +1,8 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { FastifyInstance } from 'fastify';
+import { withInject, type Injectable } from '../testing/inject.js';
+import type { StudentApp } from '../studentApp.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ClassListRepo } from '../db/repositories/classList.repo.js';
 import type { Db } from '../db/connectDb.js';
@@ -15,7 +16,7 @@ import { buildStudentApp } from '../studentApp.js';
 
 let dir: string;
 let db: Db;
-let app: FastifyInstance;
+let app: Injectable<StudentApp>;
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'eg-joinroutes-'));
@@ -30,11 +31,14 @@ beforeEach(async () => {
     events: new EventRepo(db),
     target: () => ({ examId: exam.id, pin: '123456', fingerprint: cert.fingerprint }),
   });
-  app = buildStudentApp({
-    cert,
-    join: joinService,
-    current: () => ({ examTitle: 'Midterm', state: 'hosting' }),
-  });
+  app = withInject(
+    buildStudentApp({
+      cert,
+      students: new ExamStudentRepo(db),
+      join: joinService,
+      current: () => ({ examTitle: 'Midterm', state: 'hosting' }),
+    }),
+  );
 });
 afterEach(async () => {
   await app.close();

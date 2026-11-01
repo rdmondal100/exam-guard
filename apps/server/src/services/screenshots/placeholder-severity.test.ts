@@ -20,8 +20,12 @@ describe('placeholderSeverity', () => {
 
   it('rates a started program low, or high when the teacher listed it', () => {
     expect(placeholderSeverity('app_launched', { exe: 'notepad.exe' }, [])).toBe('low');
-    expect(placeholderSeverity('app_launched', { exe: 'Discord.exe' }, ['discord.exe'])).toBe('high');
-    expect(placeholderSeverity('processes_at_start', { processes: [] }, ['discord.exe'])).toBe('low');
+    expect(placeholderSeverity('app_launched', { exe: 'Discord.exe' }, ['discord.exe'])).toBe(
+      'high',
+    );
+    expect(placeholderSeverity('processes_at_start', { processes: [] }, ['discord.exe'])).toBe(
+      'low',
+    );
   });
 
   it('ignores an exe that is not text', () => {

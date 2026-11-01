@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { FastifyInstance } from 'fastify';
+import { withInject, type Injectable } from '../testing/inject.js';
+import type { TeacherApp } from '../app.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,7 +11,7 @@ const TOKEN = 't'.repeat(40);
 const PASSWORD = 'correct horse battery';
 const HEADERS = { 'x-teacher-token': TOKEN };
 
-let app: FastifyInstance;
+let app: Injectable<TeacherApp>;
 let cleanup: (() => void) | undefined;
 let clock = 1_000_000;
 
@@ -18,8 +19,7 @@ function build() {
   const dir = mkdtempSync(join(tmpdir(), 'eg-auth-'));
   const db = initDatabase(dir);
   const built = buildTeacherApp({ token: TOKEN, db, now: () => clock });
-  built.app.get('/api/v1/secret', { preHandler: built.requireLogin }, async () => ({ secret: 1 }));
-  app = built.app;
+  app = withInject(built);
   cleanup = () => {
     db.close();
     rmSync(dir, { recursive: true, force: true });
@@ -103,7 +103,8 @@ describe('auth routes', () => {
 
   it('keeps routes behind requireLogin closed until login and after logout', async () => {
     build();
-    const secret = () => app.inject({ url: '/api/v1/secret', headers: HEADERS });
+    // Any route behind requireLogin.
+    const secret = () => app.inject({ url: '/api/v1/class-lists', headers: HEADERS });
     await post('setup', { password: PASSWORD });
     await post('logout', {});
 

@@ -1,7 +1,8 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { FastifyInstance } from 'fastify';
+import { withInject, type Injectable } from '../testing/inject.js';
+import type { TeacherApp } from '../app.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Db } from '../db/connectDb.js';
 import { initDatabase } from '../db/connectDb.js';
@@ -12,7 +13,7 @@ import { buildTeacherApp } from '../app.js';
 const TOKEN = 't'.repeat(40);
 const HEADERS = { 'x-teacher-token': TOKEN };
 
-let app: FastifyInstance;
+let app: Injectable<TeacherApp>;
 let db: Db;
 let dir: string;
 let events: EventRepo;
@@ -21,11 +22,13 @@ let examId: string;
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'eg-events-'));
   db = initDatabase(dir);
-  app = buildTeacherApp({
-    token: TOKEN,
-    db,
-    hosting: { dataDir: dir, host: '127.0.0.1', port: 0, addresses: () => ['127.0.0.1'] },
-  }).app;
+  app = withInject(
+    buildTeacherApp({
+      token: TOKEN,
+      db,
+      hosting: { dataDir: dir, host: '127.0.0.1', port: 0, addresses: () => ['127.0.0.1'] },
+    }),
+  );
   const call = (url: string, payload?: object) =>
     app.inject({ method: 'POST', url: `/api/v1${url}`, headers: HEADERS, payload });
   await call('/auth/setup', { password: 'correct horse battery' });

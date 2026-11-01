@@ -2,17 +2,14 @@ import { createHash } from 'node:crypto';
 import type { ReadStream } from 'node:fs';
 import { EXAM_FILE_LIMITS, checkFileName, type ExamFile } from '@examguard/shared';
 import type { ExamFileRepo } from '../../db/repositories/examFile.repo.js';
+import { ApiError } from '../../utils/ApiError.js';
 import { newId } from '../../utils/ids.js';
 import type { ExamFileStore } from './exam-file-store.js';
 
-/** A refusal with the HTTP status and error code the route sends. */
-export class ExamFileError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
+/** A refusal with the HTTP status and error code the error middleware sends. */
+export class ExamFileError extends ApiError {
+  constructor(status: number, code: string, message: string) {
+    super(status, code, message);
     this.name = 'ExamFileError';
   }
 }

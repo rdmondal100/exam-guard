@@ -2,7 +2,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { request } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { FastifyInstance } from 'fastify';
+import { withInject, type Injectable } from '../testing/inject.js';
+import type { TeacherApp } from '../app.js';
 import WebSocket from 'ws';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AnswerRepo } from '../db/repositories/answer.repo.js';
@@ -23,7 +24,7 @@ interface Msg {
   };
 }
 
-let app: FastifyInstance;
+let app: Injectable<TeacherApp>;
 let db: Db;
 let dir: string;
 let studentPort: number;
@@ -59,7 +60,7 @@ beforeEach(async () => {
       networkGraceMs: 150,
     },
   });
-  app = built.app;
+  app = withInject(built);
   await app.listen({ host: '127.0.0.1', port: 0 });
   const call = (url: string, payload?: object) =>
     app.inject({ method: 'POST', url: `/api/v1${url}`, headers: HEADERS, payload });

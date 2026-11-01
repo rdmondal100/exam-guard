@@ -2,7 +2,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { request } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { FastifyInstance } from 'fastify';
+import { withInject, type Injectable } from '../testing/inject.js';
+import type { TeacherApp } from '../app.js';
 import WebSocket from 'ws';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_MONITORING, encodeScreenshotFrames, monitorPolicyFor } from '@examguard/shared';
@@ -34,7 +35,7 @@ interface Msg {
   state?: { examState?: string; studentState: string; locked: boolean; deadline: number | null };
 }
 
-let app: FastifyInstance;
+let app: Injectable<TeacherApp>;
 let hosting: HostingManager;
 let db: Db;
 let dir: string;
@@ -59,7 +60,7 @@ beforeEach(async () => {
       socketTimings: { helloTimeoutMs: 300, idleMs: 600 },
     },
   });
-  app = built.app;
+  app = withInject(built);
   hosting = built.hosting as HostingManager;
   await app.listen({ host: '127.0.0.1', port: 0 });
   teacherPort = (app.server.address() as { port: number }).port;

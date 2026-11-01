@@ -9,17 +9,13 @@ import {
 import type { EventRepo } from '../../db/repositories/event.repo.js';
 import type { ExamRepo } from '../../db/repositories/exam.repo.js';
 import type { ExamStudentRepo } from '../../db/repositories/examStudent.repo.js';
+import { ApiError } from '../../utils/ApiError.js';
 import { JoinLimiter } from './join-limiter.js';
 
-/** A refusal the routes turn into an HTTP error. */
-export class JoinError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
-    readonly details?: unknown,
-  ) {
-    super(message);
+/** A refusal the error middleware turns into an HTTP error. */
+export class JoinError extends ApiError {
+  constructor(status: number, code: string, message: string, details?: unknown) {
+    super(status, code, message, details);
     this.name = 'JoinError';
   }
 }

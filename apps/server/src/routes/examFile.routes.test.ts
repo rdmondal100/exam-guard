@@ -2,7 +2,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { FastifyInstance } from 'fastify';
+import { withInject, type Injectable } from '../testing/inject.js';
+import type { TeacherApp } from '../app.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { EXAM_FILE_LIMITS } from '@examguard/shared';
 import type { Db } from '../db/connectDb.js';
@@ -12,7 +13,7 @@ import { buildTeacherApp } from '../app.js';
 const TOKEN = 't'.repeat(40);
 const HEADERS = { 'x-teacher-token': TOKEN };
 
-let app: FastifyInstance;
+let app: Injectable<TeacherApp>;
 let db: Db;
 let dir: string;
 let filesDir: string;
@@ -23,7 +24,7 @@ beforeEach(async () => {
   filesDir = join(dir, 'exam-files');
   db = initDatabase(dir);
   clock = 1000;
-  app = buildTeacherApp({ token: TOKEN, db, filesDir, now: () => clock++ }).app;
+  app = withInject(buildTeacherApp({ token: TOKEN, db, filesDir, now: () => clock++ }));
   await app.inject({
     method: 'POST',
     url: '/api/v1/auth/setup',

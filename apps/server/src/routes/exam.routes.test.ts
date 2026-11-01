@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { FastifyInstance } from 'fastify';
+import { withInject, type Injectable } from '../testing/inject.js';
+import type { TeacherApp } from '../app.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,7 +12,7 @@ import { buildTeacherApp } from '../app.js';
 const TOKEN = 't'.repeat(40);
 const HEADERS = { 'x-teacher-token': TOKEN };
 
-let app: FastifyInstance;
+let app: Injectable<TeacherApp>;
 let db: Db;
 let dir: string;
 let clock = 1000;
@@ -20,7 +21,7 @@ beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'eg-ex-'));
   db = initDatabase(dir);
   clock = 1000;
-  app = buildTeacherApp({ token: TOKEN, db, now: () => clock++ }).app;
+  app = withInject(buildTeacherApp({ token: TOKEN, db, now: () => clock++ }));
   await app.inject({
     method: 'POST',
     url: '/api/v1/auth/setup',

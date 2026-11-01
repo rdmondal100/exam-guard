@@ -102,14 +102,24 @@ describe('EvidenceIntake', () => {
 
   it('stores the process watcher events with their details and no picture', () => {
     const processes = [{ exe: 'Spotify.exe', pid: 11 }];
-    intake.report('e1', 's1', report('s1:20', { type: 'processes_at_start', details: { processes } }));
+    intake.report(
+      'e1',
+      's1',
+      report('s1:20', { type: 'processes_at_start', details: { processes } }),
+    );
     highApps = ['discord.exe'];
-    intake.report('e1', 's1', report('s1:21', { type: 'app_launched', details: { exe: 'Discord.exe', pid: 5 } }));
+    intake.report(
+      'e1',
+      's1',
+      report('s1:21', { type: 'app_launched', details: { exe: 'Discord.exe', pid: 5 } }),
+    );
     expect(rows().map((r) => [r.type, r.severity, r.source, r.screenshot_path])).toEqual([
       ['processes_at_start', 'low', 'agent', null],
       ['app_launched', 'high', 'agent', null],
     ]);
-    const stored = db.prepare('SELECT details_json FROM events ORDER BY id').all() as { details_json: string }[];
+    const stored = db.prepare('SELECT details_json FROM events ORDER BY id').all() as {
+      details_json: string;
+    }[];
     expect(JSON.parse(stored[0]?.details_json ?? '{}')).toEqual({ processes });
     expect(outside()).toBe(0);
   });

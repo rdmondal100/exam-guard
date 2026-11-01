@@ -1,12 +1,9 @@
-/** A refusal the routes turn into an HTTP error. */
-export class HostingError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
-    readonly details?: unknown,
-  ) {
-    super(message);
+import { ApiError } from '../../utils/ApiError.js';
+
+/** A refusal the error middleware turns into an HTTP error. */
+export class HostingError extends ApiError {
+  constructor(status: number, code: string, message: string, details?: unknown) {
+    super(status, code, message, details);
     this.name = 'HostingError';
   }
 }

@@ -1,12 +1,28 @@
-import type { FastifyReply } from 'fastify';
+import type { Response } from 'express';
 
-/** Sends the `{ error: { code, message, details? } }` envelope from docs/protocol.md. */
+/**
+ * An error a controller throws to answer with a status and a code. The error middleware turns it
+ * into the `{ error: { code, message, details? } }` envelope from docs/protocol.md.
+ */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+    readonly details?: unknown,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+/** Sends the error envelope. For middlewares that answer without throwing. */
 export function sendError(
-  reply: FastifyReply,
+  res: Response,
   status: number,
   code: string,
   message: string,
   details?: unknown,
-): FastifyReply {
-  return reply.code(status).send({ error: { code, message, details } });
+): void {
+  res.status(status).json({ error: { code, message, details } });
 }

@@ -11,18 +11,20 @@
   },
   "dependencies": {
     "@examguard/shared": "workspace:*",
-    "@fastify/websocket": "^11.3.4",
     "better-sqlite3": "^13.0.3",
     "bonjour-service": "^1.4.4",
-    "fastify": "^5.8.0",
+    "express": "^5.3.0",
     "papaparse": "^5.7.0",
     "selfsigned": "^5.5.0",
+    "ws": "^8.22.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
+    "@types/express": "^5.0.6",
     "@types/papaparse": "^5.5.2",
+    "@types/supertest": "^7.2.1",
     "@types/ws": "^8.18.2",
-    "ws": "^8.22.0"
+    "supertest": "^7.3.1"
   }
 }

@@ -1,257 +1,73 @@
-import { timingSafeEqual } from 'node:crypto';
-import { join } from 'node:path';
-import websocket from '@fastify/websocket';
-import Fastify, { type FastifyInstance } from 'fastify';
-import { PROTOCOL_VERSION, TEACHER_TOKEN_HEADER } from '@examguard/shared';
-import { AuthState } from './services/auth/auth-state.js';
-import { LoginLimiter } from './services/auth/login-limiter.js';
-import { ClassListRepo } from './db/repositories/classList.repo.js';
-import type { Db } from './db/connectDb.js';
-import { AnswerWriter } from './services/answers/answer-writer.js';
-import { AnswerRepo } from './db/repositories/answer.repo.js';
-import { EventRepo } from './db/repositories/event.repo.js';
-import { ExamFileRepo } from './db/repositories/examFile.repo.js';
-import { ExamRepo } from './db/repositories/exam.repo.js';
-import { ExamStudentRepo } from './db/repositories/examStudent.repo.js';
-import { FinalAnswerRepo } from './db/repositories/finalAnswer.repo.js';
-import { StudentDeadlines } from './services/exams/student-deadlines.js';
-import { SubmissionService } from './services/submissions/submission-service.js';
-import { ExamFileService } from './services/exam-files/exam-file-service.js';
-import { ExamFileStore } from './services/exam-files/exam-file-store.js';
-import { ScreenshotStore } from './services/screenshots/screenshot-store.js';
-import { ConnectionEvents } from './services/hosting/connection-events.js';
-import { HostingManager, type HostingManagerDeps } from './services/hosting/hosting-manager.js';
-import { QuestionRepo } from './db/repositories/question.repo.js';
-import { TeacherActionRepo } from './db/repositories/teacherAction.repo.js';
-import { TerminalLogRepo } from './db/repositories/terminalLog.repo.js';
-import { TerminalRepo } from './db/repositories/terminal.repo.js';
-import { TeacherRepo } from './db/repositories/teacher.repo.js';
-import { registerActionRoutes } from './routes/action.routes.js';
-import { registerAuthRoutes } from './routes/auth.routes.js';
-import { registerClassListRoutes } from './routes/classList.routes.js';
-import { sendError } from './utils/ApiError.js';
-import { registerEventRoutes } from './routes/event.routes.js';
-import { registerExamFileRoutes } from './routes/examFile.routes.js';
-import { registerExamRoutes } from './routes/exam.routes.js';
-import { registerHostingRoutes } from './routes/hosting.routes.js';
-import { registerQuestionRoutes } from './routes/question.routes.js';
-import { registerRosterRoutes } from './routes/roster.routes.js';
-import { registerTerminalLogRoutes } from './routes/terminalLog.routes.js';
-import { SessionHub } from './sockets/sessionHub.js';
-import { registerTeacherSocket } from './sockets/teacher.socket.js';
+import { createServer } from 'node:http';
+import express, { type Express, type RequestHandler } from 'express';
+import { createContainer, type ContainerOptions } from './container.js';
+import { cors } from './middlewares/cors.middleware.js';
+import { errorHandler, notFound } from './middlewares/error.middleware.js';
+import { requireLogin as requireLoginFor } from './middlewares/requireLogin.middleware.js';
+import { tokenMatches, verifyTeacherToken } from './middlewares/teacherToken.middleware.js';
+import { teacherRoutes } from './routes/index.js';
+import type { HostingManager } from './services/hosting/hosting-manager.js';
+import { onTeacherSocket } from './sockets/teacher.socket.js';
+import { attachWebSocket } from './sockets/wsServer.js';
+import { httpListener, type HttpListener } from './utils/httpListener.js';
 
-export interface TeacherAppOptions {
+export interface TeacherAppOptions extends ContainerOptions {
+  /** Per-launch token every call must carry. */
   token: string;
-  db: Db;
-  /** Clock for the login rate limiter and the teacher row; tests inject a fake. */
-  now?: () => number;
-  /** Where the teacher's exam files are kept. Defaults to `exam-files` in the hosting data folder. */
-  filesDir?: string;
-  /** Student listener settings. Without it the hosting routes are not registered. */
-  hosting?: Omit<
-    HostingManagerDeps,
-    | 'exams'
-    | 'questions'
-    | 'students'
-    | 'events'
-    | 'terminals'
-    | 'terminalLogs'
-    | 'answers'
-    | 'answerWriter'
-    | 'finals'
-    | 'deadlines'
-    | 'submissions'
-    | 'actions'
-    | 'examFiles'
-    | 'hub'
-    | 'connections'
-  > & {
-    /** How long a student may be offline before `network_lost`; tests shorten it. */
-    networkGraceMs?: number;
-  };
 }
 
-export interface TeacherApp {
-  app: FastifyInstance;
-  /** `preHandler` for every route that needs a logged-in teacher. */
-  requireLogin: AuthState['requireLogin'];
+export interface TeacherApp extends HttpListener {
+  app: Express;
+  /** Middleware for every route that needs a logged-in teacher. */
+  requireLogin: RequestHandler;
   /** Present when `hosting` options were given. */
   hosting?: HostingManager;
 }
 
-function tokenMatches(expected: string, received: unknown): boolean {
-  if (typeof received !== 'string') return false;
-  const a = Buffer.from(expected);
-  const b = Buffer.from(received);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
 /**
  * Loopback API for the teacher UI. Every route needs the per-launch token; routes other than
- * `/health` and `/auth/*` also need `requireLogin`.
+ * `/health` and `/auth/*` also need a logged-in teacher.
  */
-export function buildTeacherApp({
-  token,
-  db,
-  now,
-  filesDir,
-  hosting: hostingOptions,
-}: TeacherAppOptions): TeacherApp {
-  // Live sockets must not hold shutdown open.
-  const app = Fastify({ logger: false, forceCloseConnections: true });
-  const state = new AuthState();
+export function buildTeacherApp({ token, ...options }: TeacherAppOptions): TeacherApp {
+  const c = createContainer(options);
+  const requireLogin = requireLoginFor(c.state);
 
-  // The renderer is a different origin (dev server or file://), and the token header makes
-  // every call a preflighted request. The preflight carries no token, so answer it before the
-  // token check. The listener is loopback-only and every real call still needs the token.
-  app.addHook('onRequest', async (request, reply) => {
-    void reply.header('access-control-allow-origin', '*');
-    if (request.method === 'OPTIONS') {
-      return reply
-        .header('access-control-allow-methods', 'GET, POST, PATCH, DELETE, OPTIONS')
-        .header('access-control-allow-headers', `${TEACHER_TOKEN_HEADER}, content-type`)
-        .header('access-control-max-age', '600')
-        .code(204)
-        .send();
-    }
-    return undefined;
-  });
+  const app = express();
+  app.disable('x-powered-by');
+  app.set('etag', false);
+  app.use(cors);
+  app.use(verifyTeacherToken(token));
+  app.use('/api/v1', teacherRoutes(c, requireLogin));
+  app.use(notFound);
+  app.use(errorHandler);
 
-  app.addHook('onRequest', async (request, reply) => {
-    // `/ws` checks the token itself (a browser WebSocket cannot set headers).
-    if (request.url.split('?', 1)[0] === '/ws') return undefined;
-    if (!tokenMatches(token, request.headers[TEACHER_TOKEN_HEADER])) {
-      return sendError(reply, 401, 'unauthorized', 'Missing or invalid teacher token');
-    }
-    return undefined;
-  });
-
-  app.get('/api/v1/health', async () => ({
-    status: 'ok',
-    protocol: PROTOCOL_VERSION,
-    uptimeSec: Math.round(process.uptime()),
-  }));
-
-  registerAuthRoutes(app, {
-    teacher: new TeacherRepo(db),
-    state,
-    limiter: new LoginLimiter(now),
-    now,
-  });
-
-  registerClassListRoutes(app, {
-    classLists: new ClassListRepo(db),
-    requireLogin: state.requireLogin,
-    now,
-  });
-
-  const exams = new ExamRepo(db);
-  const questions = new QuestionRepo(db);
-  const examFilesDir = filesDir ?? (hostingOptions && join(hostingOptions.dataDir, 'exam-files'));
-  const examFiles = examFilesDir
-    ? new ExamFileService(new ExamFileRepo(db), new ExamFileStore(examFilesDir))
-    : undefined;
-  const screenshots = hostingOptions && new ScreenshotStore(hostingOptions.dataDir);
-  registerExamRoutes(app, {
-    exams,
-    questions,
-    examFiles,
-    ...(screenshots ? { screenshots } : {}),
-    requireLogin: state.requireLogin,
-    now,
-  });
-  if (examFiles) {
-    registerExamFileRoutes(app, { exams, files: examFiles, requireLogin: state.requireLogin, now });
-  }
-  registerQuestionRoutes(app, { exams, questions, requireLogin: state.requireLogin, now });
-
-  const students = new ExamStudentRepo(db);
-  const events = new EventRepo(db);
-  const terminalLogs = new TerminalLogRepo(db);
-  const answers = new AnswerRepo(db);
-  registerEventRoutes(app, {
-    exams,
-    events,
-    ...(screenshots ? { screenshots } : {}),
-    requireLogin: state.requireLogin,
-  });
-  registerTerminalLogRoutes(app, {
-    students,
-    events,
-    terminalLogs,
-    requireLogin: state.requireLogin,
-  });
-
-  let hosting: HostingManager | undefined;
-  if (hostingOptions && examFiles) {
-    const { networkGraceMs, ...managerOptions } = hostingOptions;
-    const connections = new ConnectionEvents({
-      students,
-      exams,
-      events,
-      now,
-      ...(networkGraceMs === undefined ? {} : { graceMs: networkGraceMs }),
-    });
-    const hub = new SessionHub({
-      students,
-      now,
-      onConnection: (id, connected) => connections.onConnection(id, connected),
-    });
-    const answerWriter = new AnswerWriter(answers, {
-      onRejected: (row, error) =>
-        console.warn(
-          `answer save ${row.clientSeq} refused: ${error instanceof Error ? error.message : String(error)}`,
-        ),
-    });
-    const finals = new FinalAnswerRepo(db);
-    hosting = new HostingManager({
-      connections,
-      exams,
-      questions,
-      students,
-      events,
-      terminals: new TerminalRepo(db),
-      terminalLogs,
-      answers,
-      answerWriter,
-      finals,
-      deadlines: new StudentDeadlines(exams, students),
-      submissions: new SubmissionService({
-        exams,
-        students,
-        questions,
-        answers,
-        finals,
-        writer: answerWriter,
-        hub,
-        now: now ?? Date.now,
+  const server = createServer(app);
+  const live = c.live;
+  const ws =
+    live &&
+    attachWebSocket(server, {}, (socket, request) =>
+      onTeacherSocket(socket, request, {
+        hub: live.hub,
+        allowed: (req) =>
+          c.state.isLoggedIn() &&
+          tokenMatches(token, new URL(req.url ?? '', 'http://x').searchParams.get('token')),
       }),
-      actions: new TeacherActionRepo(db),
-      examFiles,
-      hub,
-      now,
-      ...managerOptions,
-    });
-    registerHostingRoutes(app, { hosting, requireLogin: state.requireLogin });
-    registerRosterRoutes(app, { exams, students, requireLogin: state.requireLogin });
-    registerActionRoutes(app, { hosting, requireLogin: state.requireLogin });
-    void app.register(websocket);
-    // Inside a plugin so it loads after the websocket plugin.
-    void app.register(async (scope) => {
-      registerTeacherSocket(scope, {
-        hub,
-        allowed: (request) =>
-          state.isLoggedIn() &&
-          tokenMatches(token, new URL(request.url, 'http://x').searchParams.get('token')),
-      });
-    });
-    const manager = hosting;
-    app.addHook('onClose', async () => {
-      await manager.close();
-      connections.reset();
-      hub.dispose();
-    });
-  }
+    );
 
-  return { app, requireLogin: state.requireLogin, hosting };
+  const listener = httpListener(server, async () => {
+    if (!live) return;
+    await live.hosting.close();
+    live.connections.reset();
+    live.hub.dispose();
+  });
+  return {
+    ...listener,
+    close: async () => {
+      ws?.close();
+      await listener.close();
+    },
+    app,
+    requireLogin,
+    ...(live ? { hosting: live.hosting } : {}),
+  };
 }

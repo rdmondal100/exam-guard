@@ -1,4 +1,3 @@
-import type { FastifyInstance } from 'fastify';
 import {
   STUDENT_API_PORT,
   WS_CLOSE,
@@ -28,6 +27,7 @@ import { JoinService } from '../join/join-service.js';
 import { assertTransition } from '../exams/exam-state.js';
 import { readyProblems } from '../exams/ready-check.js';
 import { buildStudentApp } from '../../studentApp.js';
+import type { HttpListener } from '../../utils/httpListener.js';
 import { loadOrCreateCert } from '../../utils/tls/cert.js';
 import { lanAddresses } from '../../utils/tls/lanAddresses.js';
 import { advertiseOverMdns, type Advertise } from './mdns-advertiser.js';
@@ -83,7 +83,7 @@ interface Active {
   examId: string;
   pin: string;
   fpCode: string;
-  app: FastifyInstance;
+  app: HttpListener;
   port: number;
   stopAdvertising: () => void;
 }
@@ -278,8 +278,9 @@ export class HostingManager {
     const app = buildStudentApp({
       cert,
       join,
-      files: { exams: this.deps.exams, students: this.deps.students, files: this.deps.examFiles },
-      answers: { students: this.deps.students, answers: this.deps.answers },
+      students: this.deps.students,
+      files: { exams: this.deps.exams, files: this.deps.examFiles },
+      answers: this.deps.answers,
       current: () => {
         const exam = this.deps.exams.get(examId);
         if (!exam) return null;
