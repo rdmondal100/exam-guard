@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import type { EventRow, Severity } from '@examguard/shared';
-import type { ExamApi } from '@/lib/examApi';
+import type { ExamApi } from '@/api/examApi';
 import { describeEvent, programCounts } from '@/lib/eventsView';
 import { clockTime } from '@/lib/terminalLog';
-import { useEvents } from '@/lib/useEvents';
+import { useEvents } from '@/hooks/useEvents';
 import { ScreenshotDialog } from './ScreenshotDialog';
 
 interface Props {

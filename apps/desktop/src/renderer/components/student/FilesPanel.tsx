@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FileEntry, FilesList as FilesListData, FilesResult } from '@examguard/shared';
 import { formatSize, joinPath, movedPath, isWithin, parentOf } from '@/lib/filePaths';
-import { useRunStore } from '@/lib/runStore';
-import { useExamFilesStatus } from '@/lib/useExamFilesStatus';
+import { useRunStore } from '@/store/runStore';
+import { useExamFilesStatus } from '@/hooks/useExamFilesStatus';
 import { FileNameForm } from './FileNameForm';
 import { FileViewer } from './FileViewer';
 import { FilesList, type NameRequest } from './FilesList';

@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import type { AppInfo, ServerStatus } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
-import { ClassListsPage } from './ClassListsPage';
-import { ExamsPage } from './ExamsPage';
-import { ServerRestartBanner } from '../ServerRestartBanner';
-import { ServerStatusChip } from '../ServerStatusChip';
+import { ClassListsPage } from '../../pages/teacher/ClassListsPage';
+import { ExamsPage } from '../../pages/teacher/ExamsPage';
+import { ServerRestartBanner } from '../common/ServerRestartBanner';
+import { ServerStatusChip } from '../common/ServerStatusChip';
 
 const NAV = ['Home', 'Class lists', 'Exams', 'Settings'] as const;
 type Page = (typeof NAV)[number];

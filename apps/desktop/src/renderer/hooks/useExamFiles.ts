@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ExamFile } from '@examguard/shared';
-import { createExamFileApi, type ExamFileApi } from './examFileApi';
+import { createExamFileApi, type ExamFileApi } from '../api/examFileApi';
 
 /** One exam's attached files plus an API handle, loaded once the server connection is known. */
 export function useExamFiles(examId: string) {

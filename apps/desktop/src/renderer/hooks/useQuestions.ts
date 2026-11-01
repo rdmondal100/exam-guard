@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Question } from '@examguard/shared';
-import { createQuestionApi, type QuestionApi } from './questionApi';
+import { createQuestionApi, type QuestionApi } from '../api/questionApi';
 
 /** One exam's questions plus an API handle, loaded once the server connection is known. */
 export function useQuestions(examId: string) {

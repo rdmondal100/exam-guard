@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
-import { useAgentStatus } from '@/lib/useAgentStatus';
+import { useAgentStatus } from '@/hooks/useAgentStatus';
 import { AgentChip } from './AgentChip';
 
 const POLL_MS = 2000;

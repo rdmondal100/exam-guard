@@ -20,7 +20,7 @@ import {
   type TerminalActionResult,
   type TerminalLogResponse,
 } from '@examguard/shared';
-import { jpegDataUrl } from './eventsView';
+import { jpegDataUrl } from '../lib/eventsView';
 import { apiError, call, TeacherApiError, type FetchFn } from './teacherApi';
 
 export interface ExamApi {

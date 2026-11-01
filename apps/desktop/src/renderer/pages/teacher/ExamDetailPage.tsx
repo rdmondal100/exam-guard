@@ -7,16 +7,16 @@ import type {
   ReadyProblem,
 } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
-import { readyProblemsOf } from '@/lib/questionApi';
-import { useExams } from '@/lib/useExams';
-import { useQuestions } from '@/lib/useQuestions';
-import { QuestionEditor } from './QuestionEditor';
-import { QuestionList } from './QuestionList';
-import { EndedTerminalLogs } from './EndedTerminalLogs';
-import { EventsPanel } from './EventsPanel';
-import { ExamFilesSection } from './ExamFilesSection';
-import { HostingPanel } from './HostingPanel';
-import { ReadyPanel } from './ReadyPanel';
+import { readyProblemsOf } from '@/api/questionApi';
+import { useExams } from '@/hooks/useExams';
+import { useQuestions } from '@/hooks/useQuestions';
+import { QuestionEditor } from '../../components/teacher/QuestionEditor';
+import { QuestionList } from '../../components/teacher/QuestionList';
+import { EndedTerminalLogs } from '../../components/teacher/EndedTerminalLogs';
+import { EventsPanel } from '../../components/teacher/EventsPanel';
+import { ExamFilesSection } from '../../components/teacher/ExamFilesSection';
+import { HostingPanel } from '../../components/teacher/HostingPanel';
+import { ReadyPanel } from '../../components/teacher/ReadyPanel';
 
 type Editing = { question?: Question; type?: QuestionType } | null;
 

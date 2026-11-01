@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AuthStatus, ServerStatus } from '@examguard/shared';
-import { createAuthApi, type AuthApi } from './teacherApi';
+import { createAuthApi, type AuthApi } from '../api/teacherApi';
 
 export type AuthView =
   | { kind: 'loading' }

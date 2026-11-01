@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { EventRow } from '@examguard/shared';
-import type { ExamApi } from './examApi';
+import type { ExamApi } from '../api/examApi';
 
 const REFRESH_MS = 3000;
 

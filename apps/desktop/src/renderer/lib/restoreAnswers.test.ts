@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RestoreResult, RestoredAnswers } from '@examguard/shared';
-import { useAnswerStore } from './answerStore';
+import { useAnswerStore } from '../store/answerStore';
 import { restoreIntoStore } from './restoreAnswers';
 
 const state = () => useAnswerStore.getState();

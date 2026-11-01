@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { TerminalState } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import type { ExamApi } from '@/lib/examApi';
+import type { ExamApi } from '@/api/examApi';
 import { parseMinutes, terminalLabel } from '@/lib/terminalSwitch';
 
 interface Props {

@@ -3,7 +3,7 @@ import { MIN_PASSWORD_LENGTH } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import type { AuthApi } from '@/lib/teacherApi';
+import type { AuthApi } from '@/api/teacherApi';
 
 interface Props {
   api: AuthApi;

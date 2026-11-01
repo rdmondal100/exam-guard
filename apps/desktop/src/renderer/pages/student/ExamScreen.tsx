@@ -1,21 +1,21 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import type { SessionStatus, StudentQuestion } from '@examguard/shared';
-import { ANSWER_TEXT_KEY, answeredIds, getAnswer, useAnswerStore } from '@/lib/answerStore';
+import { ANSWER_TEXT_KEY, answeredIds, getAnswer, useAnswerStore } from '@/store/answerStore';
 import { pickLanguage } from '@/lib/languages';
 import { isTimeUp, submitAnswers, submitRefusalText } from '@/lib/submit';
-import { saveNow, useAnswerStatus, useAutosave } from '@/lib/useAutosave';
-import { useExamFilesStatus } from '@/lib/useExamFilesStatus';
-import { CodeAnswer } from './CodeAnswer';
-import { ExamFilesNotice } from './ExamFilesNotice';
-import { ExamTimer } from './ExamTimer';
+import { saveNow, useAnswerStatus, useAutosave } from '@/hooks/useAutosave';
+import { useExamFilesStatus } from '@/hooks/useExamFilesStatus';
+import { CodeAnswer } from '../../components/student/CodeAnswer';
+import { ExamFilesNotice } from '../../components/student/ExamFilesNotice';
+import { ExamTimer } from '../../components/student/ExamTimer';
 import { LINK_TEXT } from './LobbyScreen';
-import { QuestionNav } from './QuestionNav';
-import { SaveChip } from './SaveChip';
-import { SubmitDialog } from './SubmitDialog';
-import { WrittenAnswer } from './WrittenAnswer';
+import { QuestionNav } from '../../components/student/QuestionNav';
+import { SaveChip } from '../../components/student/SaveChip';
+import { SubmitDialog } from '../../components/student/SubmitDialog';
+import { WrittenAnswer } from '../../components/student/WrittenAnswer';
 
-const TerminalDock = lazy(() => import('./TerminalDock'));
-const FilesPanel = lazy(() => import('./FilesPanel'));
+const TerminalDock = lazy(() => import('../../components/student/TerminalDock'));
+const FilesPanel = lazy(() => import('../../components/student/FilesPanel'));
 
 interface Props {
   name: string;

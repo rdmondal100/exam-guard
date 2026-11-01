@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ClassListSummary } from '@examguard/shared';
-import { createClassListApi, type ClassListApi } from './classListApi';
+import { createClassListApi, type ClassListApi } from '../api/classListApi';
 
 /** The class lists plus an API handle, loaded once the server connection is known. */
 export function useClassLists() {

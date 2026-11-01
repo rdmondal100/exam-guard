@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { TeacherApiError, type AuthApi } from '@/lib/teacherApi';
+import { TeacherApiError, type AuthApi } from '@/api/teacherApi';
 
 interface Props {
   api: AuthApi;

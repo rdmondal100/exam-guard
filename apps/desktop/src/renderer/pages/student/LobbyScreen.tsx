@@ -1,7 +1,7 @@
 import type { SessionStatus } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
-import { useExamFilesStatus } from '@/lib/useExamFilesStatus';
-import { ExamFilesNotice } from './ExamFilesNotice';
+import { useExamFilesStatus } from '@/hooks/useExamFilesStatus';
+import { ExamFilesNotice } from '../../components/student/ExamFilesNotice';
 
 interface Props {
   name: string;

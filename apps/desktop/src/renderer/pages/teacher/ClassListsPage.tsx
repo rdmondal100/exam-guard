@@ -2,11 +2,11 @@ import { useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { ClassListSummary, ClassStudentRow } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
-import type { ClassListApi } from '@/lib/classListApi';
-import { TeacherApiError } from '@/lib/teacherApi';
-import { useClassLists } from '@/lib/useClassLists';
-import { DataTable } from './DataTable';
-import { ImportPreview } from './ImportPreview';
+import type { ClassListApi } from '@/api/classListApi';
+import { TeacherApiError } from '@/api/teacherApi';
+import { useClassLists } from '@/hooks/useClassLists';
+import { DataTable } from '../../components/teacher/DataTable';
+import { ImportPreview } from '../../components/teacher/ImportPreview';
 
 const studentColumns: ColumnDef<ClassStudentRow>[] = [
   { header: 'Student ID', accessorKey: 'studentCode' },

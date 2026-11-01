@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { EventRow } from '@examguard/shared';
-import { createExamApi } from './examApi';
+import { createExamApi } from '../api/examApi';
 import { describeEvent, formatDuration, jpegDataUrl, programCounts } from './eventsView';
 
 const event = (type: string, details: Record<string, unknown>): EventRow => ({

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { SessionState, SessionStatus } from '@examguard/shared';
 import { useRestoreAnswers } from '@/lib/restoreAnswers';
-import { useSessionExit } from '@/lib/useSessionExit';
+import { useSessionExit } from '@/hooks/useSessionExit';
 import { ExamEndedScreen } from './ExamEndedScreen';
 import { ExamScreen } from './ExamScreen';
 import { LobbyScreen } from './LobbyScreen';

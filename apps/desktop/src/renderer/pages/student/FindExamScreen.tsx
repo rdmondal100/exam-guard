@@ -2,9 +2,9 @@ import { useState } from 'react';
 import type { DiscoveredHost, ProbeResult } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
 import type { HostAddress } from '@/lib/hostAddress';
-import { useDiscovery } from '@/lib/useDiscovery';
-import { HostList } from './HostList';
-import { ManualIpForm } from './ManualIpForm';
+import { useDiscovery } from '@/hooks/useDiscovery';
+import { HostList } from '../../components/student/HostList';
+import { ManualIpForm } from '../../components/student/ManualIpForm';
 
 type Found = Extract<ProbeResult, { ok: true }>;
 

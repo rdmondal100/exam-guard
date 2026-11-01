@@ -1,9 +1,9 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import type { QuestionLanguage, RunResult } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
-import { useAnswerStore } from '@/lib/answerStore';
-import { runKey, useRunStore } from '@/lib/runStore';
-import { saveNow } from '@/lib/useAutosave';
+import { useAnswerStore } from '@/store/answerStore';
+import { runKey, useRunStore } from '@/store/runStore';
+import { saveNow } from '@/hooks/useAutosave';
 import { errorsText, statusLine, tabAfterRun, type RunTab } from '@/lib/runStatus';
 import { RunFlagsInput } from './RunFlagsInput';
 

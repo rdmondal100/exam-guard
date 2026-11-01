@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { RunResult } from '@examguard/shared';
 import { runKey, useRunStore } from './runStore';
-import { errorsText, statusLine, tabAfterRun } from './runStatus';
+import { errorsText, statusLine, tabAfterRun } from '../lib/runStatus';
 
 const result = (over: Partial<RunResult> = {}): RunResult => ({
   status: 'ok',

@@ -2,12 +2,12 @@ import { useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { ExamSummary } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
-import { TeacherApiError } from '@/lib/teacherApi';
-import { useClassLists } from '@/lib/useClassLists';
-import { useExams } from '@/lib/useExams';
-import { DataTable } from './DataTable';
+import { TeacherApiError } from '@/api/teacherApi';
+import { useClassLists } from '@/hooks/useClassLists';
+import { useExams } from '@/hooks/useExams';
+import { DataTable } from '../../components/teacher/DataTable';
 import { ExamDetailPage } from './ExamDetailPage';
-import { ExamSettingsForm, type ExamFormValues } from './ExamSettingsForm';
+import { ExamSettingsForm, type ExamFormValues } from '../../components/teacher/ExamSettingsForm';
 
 const STATE_LABEL: Record<ExamSummary['state'], string> = {
   draft: 'Draft',

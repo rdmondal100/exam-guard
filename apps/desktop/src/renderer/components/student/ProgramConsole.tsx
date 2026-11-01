@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { useRunStore } from '@/lib/runStore';
+import { useRunStore } from '@/store/runStore';
 
 const HINT = '\x1b[90mPress Run. Type here while the program runs.\x1b[0m';
 

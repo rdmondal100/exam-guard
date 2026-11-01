@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AnswerStatus, RestoredAnswers, SaveReason, StudentQuestion } from '@examguard/shared';
-import { useAnswerStore } from './answerStore';
-import { AUTOSAVE_MS, Autosaver } from './autosave';
+import { useAnswerStore } from '../store/answerStore';
+import { AUTOSAVE_MS, Autosaver } from '../lib/autosave';
 
 type Questions = readonly Pick<StudentQuestion, 'id' | 'type' | 'allowedLanguages'>[];
 

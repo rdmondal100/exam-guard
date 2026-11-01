@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { InternetState, RosterEntry } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
-import type { ExamApi } from '@/lib/examApi';
+import type { ExamApi } from '@/api/examApi';
 import { internetCoverage, internetLabel } from '@/lib/internetSwitch';
 
 interface Props {

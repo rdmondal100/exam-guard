@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ExamSummary, ServerConnection } from '@examguard/shared';
-import { createExamApi, type ExamApi } from './examApi';
+import { createExamApi, type ExamApi } from '../api/examApi';
 
 /** The exams plus an API handle, loaded once the server connection is known. */
 export function useExams() {

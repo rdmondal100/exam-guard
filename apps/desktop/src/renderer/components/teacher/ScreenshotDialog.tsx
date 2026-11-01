@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { EventRow } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
-import type { ExamApi } from '@/lib/examApi';
+import type { ExamApi } from '@/api/examApi';
 import { clockTime } from '@/lib/terminalLog';
 import { describeEvent } from '@/lib/eventsView';
 

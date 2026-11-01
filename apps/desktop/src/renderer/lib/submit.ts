@@ -1,6 +1,6 @@
 import type { SubmitOutcome } from '@examguard/shared';
 import { remainingMs } from './examClock';
-import { saveNow } from './useAutosave';
+import { saveNow } from '../hooks/useAutosave';
 
 /** The student's words for why the server refused a submit. */
 export function submitRefusalText(reason: string): string {

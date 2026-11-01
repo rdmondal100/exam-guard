@@ -4,7 +4,7 @@ import {
   applyTeacherMessage,
   parseTeacherFrame,
   type RosterState,
-} from './rosterState';
+} from '../lib/rosterState';
 
 export interface RosterView extends RosterState {
   /** `false` while the socket is down; the last known roster stays on screen. */
