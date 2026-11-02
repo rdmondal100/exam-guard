@@ -1,6 +1,5 @@
 import type {
   AgentChangeResult,
-  AgentReport,
   AgentServiceStatus,
   AnswerSaveRequest,
   PasteBlockedReport,
@@ -120,8 +119,4 @@ export interface ExamGuardApi {
   installAgent(): Promise<AgentChangeResult>;
   /** Dev builds only: removes the agent service again (one UAC prompt). */
   uninstallAgent(): Promise<AgentChangeResult>;
-  /** The agent's latest foreground and screenshot log lines. */
-  agentReport(): Promise<AgentReport>;
-  /** Opens the folder with the agent's screenshots and logs. */
-  openAgentFolder(): Promise<void>;
 }

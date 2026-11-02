@@ -3,11 +3,11 @@
 Read this first every session, and keep it under about 8 KB. Decisions are in `docs/decisions.md` (grep it, never read it whole), the session log in `docs/session-log.md` (append only), old reviews in `docs/archive/`.
 
 ## Current status
-- **Stage 1, Phase 4 (Monitoring agent) in progress.** Last milestone built: M25 (clipboard and paste control) on 2026-11-02; automated tests pass, its manual test is not run yet (steps in `docs/milestones.md` M25). The user reported the M24 test finished on 2026-11-02 (details not recorded). **The laptop run of M22 has not been recorded as done**: automated tests and a standalone helper start pass, the real Chrome trial is pending (manual test: `docs/milestones.md` M22).
+- **Stage 1, Phase 4 (Monitoring agent) in progress.** Last milestone built: M26 (second monitor + Task Manager / secure desktop) on 2026-11-02; automated tests pass, its laptop test is not run yet (steps in `docs/milestones.md` M26). **Manual tests still owed:** M25 (paste guard, dev PC) and the M22 laptop Chrome run. The user reported the M24 test finished on 2026-11-02 (details not recorded).
 - **Manual checks:** the user ran M02–M13 (2026-10-21) and M14–M21b (2026-10-25: real WFP filters and the installed agent service on the laptop) and reports them good; details were not recorded. Phase 2 accepted.
 - **Refactor 2026-11-01 (not a milestone):** Express 5 layered server, Turborepo, Vite-style renderer folders (decisions.md, "Refactor 2026-11-01").
-- **Next step:** run the M25 manual test, then M26 (second monitor + Task Manager / secure desktop). If the M21a/M21b laptop run is repeated, write what it shows (established connections, DHCP, IPv6, group policy, whether the lease and a killed service lift the block) into `docs/decisions.md` (M21a) and architecture §3.
-- **M22–M24 notes:** the installed agent service must be rebuilt and reinstalled (`pnpm dev:student:agent`) to get the helper, the process watcher, the buffer and the relaunch. In dev the relaunch only renders with a built app (limitations). The lock can be tried without the service: `EG_FAKE_AGENT_FAIL=lose pnpm dev:student`. The "What the agent saw" chip (M19) still works from `helper.log` but shows 0 pictures; remove it with the next agent-chip cleanup.
+- **Next step:** run the M26 laptop test (with the M22 Chrome trial in the same sitting) and the M25 test, then M27 (large text insertion). If the M21a/M21b laptop run is repeated, write what it shows (established connections, DHCP, IPv6, group policy, lease, killed service) into `docs/decisions.md` (M21a) and architecture §3.
+- **Agent notes:** rebuild and reinstall the service (`pnpm dev:student:agent`) to get each new agent feature (M22–M26). In dev the relaunch only renders with a built app (limitations). Without the service: `EG_FAKE_AGENT_FAIL=lose` tries the lock, `EG_FAKE_AGENT_MONITORS=2` the roster screen chip.
 
 ## Completed milestones
 `M## name — date — note`. Details: `docs/decisions.md` (grep the milestone), `docs/milestones.md`, `git log`.
@@ -44,6 +44,7 @@ Read this first every session, and keep it under about 8 KB. Decisions are in `d
 - M23 App launches + processes at start — 2026-10-26 — service process watcher (`app_launched`, `processes_at_start`), exam-app descendants and Windows hosts skipped; manual test marked done by the user.
 - M24 Evidence buffer, app relaunch, tamper lock — 2026-11-02 — AES-GCM disk buffer per student, service relaunches the app as the user (`app_relaunched`), `agent_lost` after 5 s → server `locked` + teacher Unlock stub; test finished per the user.
 - M25 Clipboard and paste control — 2026-11-02 — clipboard cleared at start, renderer paste guard over the whole exam window (outside paste/drop blocked, `paste_blocked` medium with a 200-char preview), teacher list via `events?view=monitoring`.
+- M26 Second monitor + Task Manager / secure desktop — 2026-11-02 — helper polls screens + input desktop (500 ms), `monitor_changed` / `secure_desktop` / `taskmgr_opened`, roster "N screens"; M19 spike report panel removed; laptop test pending.
 
 ## Known issues / open questions
 Cleaned up 2026-10-25 after the user's report that the manual tests up to M21b are good; what is left is real limitations and later work (details of that pass: `docs/decisions.md`, "Known-issues pass").
@@ -58,7 +59,7 @@ Cleaned up 2026-10-25 after the user's report that the manual tests up to M21b a
 Moved to `docs/limitations.md` (read it when you touch that area).
 
 ### Deferred to a named milestone
-- **M26 (agent):** `taskmgr_opened` (the M23 watcher could report it). The agent's logs still go to `%ProgramData%\ExamGuard\spike` (move them with the installer, M45).
+- **M45 (agent logs):** the agent's logs still go to `%ProgramData%\ExamGuard\spike` (move them with the installer).
 - **M31+ (classifier):** the severity of agent events is a placeholder (`services/screenshots/placeholder-severity.ts`); `riskScore` is still 0; Alt-Tab/Start-menu `explorer.exe` flicker should be filtered there; a WS `alert` push to the teacher is not built (the Events list polls every 3 s).
 - **M31+ (events UI):** `run_executed`, `network_*` and terminal events are stored but not shown to the teacher; to look, query the `events` table. The roster has no terminal column and the dashboard does not show where the terminal switch took effect (add with the monitor grid, M26+/M32).
 - **M35–M36 (teacher actions):** the teacher lock action (M24 built only `unlock` for an agent loss); a teacher "reset session" (clears `token_hash` and `device_id` so a student can re-join from another PC) and extensions (`extension_sec`, `global_extension_sec` are read in the deadline but nothing sets them yet). A WS rate limit per token is not built (the 512 KB frame limit and 15 s idle drop are in).

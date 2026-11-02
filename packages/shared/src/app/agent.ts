@@ -44,12 +44,3 @@ export const AgentChangeResultSchema = z.object({
   status: AgentServiceStatusSchema,
 });
 export type AgentChangeResult = z.infer<typeof AgentChangeResultSchema>;
-
-/** What the spike helper has logged lately, so a tester can see it works without opening files. */
-export const AgentReportSchema = z.object({
-  /** The newest `foreground` and `screenshot` log lines, oldest first. */
-  lines: z.array(z.string()),
-  shotsDir: z.string(),
-  shotCount: z.number().int().nonnegative(),
-});
-export type AgentReport = z.infer<typeof AgentReportSchema>;

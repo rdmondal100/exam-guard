@@ -76,6 +76,24 @@ export function describeEvent(event: EventRow): string {
     }
     case 'app_relaunched':
       return 'ExamGuard was closed and the agent started it again';
+    case 'monitor_changed': {
+      const now = details['monitors'];
+      const before = details['monitorsBefore'];
+      if (typeof now !== 'number') return 'Screens changed';
+      if (typeof before === 'number') return `Screens changed: ${before} → ${now}`;
+      return `${now} screen${now === 1 ? '' : 's'} connected at the start`;
+    }
+    case 'secure_desktop': {
+      const desktop = text(details['desktop']);
+      if (desktop && desktop.toLowerCase() !== 'winlogon') {
+        return `Another desktop took the screen: ${desktop}`;
+      }
+      return 'Security screen opened (Ctrl+Alt+Del, lock screen or UAC prompt)';
+    }
+    case 'taskmgr_opened': {
+      const parent = text(details['parentExe']);
+      return `Opened Task Manager${parent ? ` (from ${parent})` : ''}`;
+    }
     case 'agent_lost': {
       const reason = text(details['reason']);
       return `Monitoring agent lost, student locked${reason ? `: ${reason}` : ''}`;

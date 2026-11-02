@@ -39,6 +39,8 @@ export class SessionHub {
   /** Whether each student's monitoring agent was healthy at their last report. Not stored: a
    * restarted server hears it again from each student's welcome. */
   private readonly agentOk = new Map<string, boolean>();
+  /** How many screens each student's agent reported last (M26). */
+  private readonly monitors = new Map<string, number>();
   /** Whether each student's PC confirmed a blocked internet (`internet.status`, M21b). */
   private readonly internetBlocked = new Map<string, boolean>();
   private timer: NodeJS.Timeout | null = null;
@@ -74,8 +76,9 @@ export class SessionHub {
   /** What the student's app says about its agent (`agent.status`); the roster shows it. */
   setAgent(id: string, status: AgentStatus): void {
     const ok = agentProblem(status) === null;
-    if (this.agentOk.get(id) === ok) return;
+    if (this.agentOk.get(id) === ok && this.monitors.get(id) === status.monitors) return;
     this.agentOk.set(id, ok);
+    this.monitors.set(id, status.monitors);
     this.changed(id);
   }
 
@@ -91,6 +94,7 @@ export class SessionHub {
       ...entry,
       agentOk: this.agentOk.get(entry.id) ?? true,
       internetBlocked: this.internetBlocked.get(entry.id) ?? false,
+      monitors: this.monitors.get(entry.id) ?? 1,
     };
   }
 

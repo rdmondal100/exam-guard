@@ -3,7 +3,7 @@ import { AGENT_PIPE_NAME, type PipeLaunch } from '@examguard/shared';
 import { AgentClient } from './agent-client.js';
 import type { AgentLink } from './agent-link.js';
 import { installedAgentPath, verifyAgentService } from './agent-verify.js';
-import { FakeAgent, parseFakeFailure } from './fake-agent.js';
+import { FakeAgent, LOSE_AFTER_MS, parseFakeFailure, parseFakeMonitors } from './fake-agent.js';
 import type { RunCommand } from './run-command.js';
 
 export interface AgentLinkEnv {
@@ -24,7 +24,13 @@ export function isFakeAgent({ isPackaged, env }: AgentLinkEnv): boolean {
  * only) is for `eg-agent --console`, which is not a service, so there is no service to check.
  */
 export function createAgentLink(where: AgentLinkEnv, run: RunCommand): AgentLink {
-  if (isFakeAgent(where)) return new FakeAgent(parseFakeFailure(where.env['EG_FAKE_AGENT_FAIL']));
+  if (isFakeAgent(where)) {
+    return new FakeAgent(
+      parseFakeFailure(where.env['EG_FAKE_AGENT_FAIL']),
+      LOSE_AFTER_MS,
+      parseFakeMonitors(where.env['EG_FAKE_AGENT_MONITORS']),
+    );
+  }
   const withoutService = !where.isPackaged && where.env['EG_AGENT_CONSOLE'] === '1';
   return new AgentClient({
     connect: () => net.connect(AGENT_PIPE_NAME),

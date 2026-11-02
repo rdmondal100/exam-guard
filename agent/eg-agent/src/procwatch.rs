@@ -1,5 +1,6 @@
 //! Reports the programs the student starts while monitoring is on (`app_launched`), and the ones
-//! already running when it began (`processes_at_start`). Runs in the service and puts its evidence
+//! already running when it began (`processes_at_start`); Task Manager is `taskmgr_opened` (M26).
+//! Runs in the service and puts its evidence
 //! straight into the queue, so it needs neither the helper nor the foreground window.
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -135,7 +136,17 @@ pub fn start_body(ts: u64, running: &[Entry]) -> EvidenceBody {
     }
 }
 
-/// The `app_launched` evidence. `parent` is the starter's file name when it is still running.
+/// Task Manager is its own event (M26, medium); every other program is an `app_launched`.
+pub fn launch_kind(exe: &str) -> &'static str {
+    if exe.eq_ignore_ascii_case("taskmgr.exe") {
+        "taskmgr_opened"
+    } else {
+        "app_launched"
+    }
+}
+
+/// The `app_launched` (or `taskmgr_opened`) evidence. `parent` is the starter's file name when it
+/// is still running.
 pub fn launch_body(
     ts: u64,
     entry: &Entry,
@@ -144,7 +155,7 @@ pub fn launch_body(
 ) -> EvidenceBody {
     EvidenceBody {
         ts,
-        kind: "app_launched".into(),
+        kind: launch_kind(&entry.exe).into(),
         data: EvidenceData {
             exe: Some(cut(&entry.exe, MAX_EXE_CHARS)),
             path: path.map(|p| cut(p, MAX_PATH_CHARS)),
@@ -372,6 +383,16 @@ mod tests {
             .data
             .path
             .is_some_and(|p| p.to_lowercase().ends_with("ping.exe")));
+    }
+
+    #[test]
+    fn task_manager_is_reported_as_its_own_kind() {
+        assert_eq!(launch_kind("Taskmgr.exe"), "taskmgr_opened");
+        assert_eq!(launch_kind("notepad.exe"), "app_launched");
+        let body = launch_body(1, &entry(30, 4, "taskmgr.exe"), None, Some("winlogon.exe"));
+        assert_eq!(body.kind, "taskmgr_opened");
+        assert_eq!(body.data.exe.as_deref(), Some("taskmgr.exe"));
+        assert_eq!(body.data.parent_exe.as_deref(), Some("winlogon.exe"));
     }
 
     #[test]

@@ -13,6 +13,7 @@ const student = (over: Partial<RosterEntry>): RosterEntry => ({
   lastSeen: null,
   agentOk: true,
   internetBlocked: false,
+  monitors: 1,
   ...over,
 });
 

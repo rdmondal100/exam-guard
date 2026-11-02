@@ -29,6 +29,14 @@ export function RosterList({ students, onTerminalLog, onUnlock }: Props) {
               Outside {formatDuration(s.outsideMs)}
             </span>
           )}
+          {s.monitors > 1 && (
+            <span
+              className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800"
+              title="This PC shows its desktop on more than one screen"
+            >
+              {s.monitors} screens
+            </span>
+          )}
           <span className={s.state === 'locked' ? 'font-medium text-red-700' : 'text-muted'}>
             {s.connected ? s.state : `${s.state} · offline`}
           </span>

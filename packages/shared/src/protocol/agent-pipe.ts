@@ -163,7 +163,9 @@ export type PipeNetStatus = z.infer<typeof PipeNetStatusSchema>;
 /**
  * Evidence kinds the agent reports so far. `still_outside` is the periodic shot while away (M22);
  * `app_launched` and `processes_at_start` come from the service's process watcher (M23);
- * `app_relaunched` when the agent started the app again after it disappeared (M24).
+ * `app_relaunched` when the agent started the app again after it disappeared (M24);
+ * `monitor_changed` (a second screen at the start, or the count changed), `secure_desktop`
+ * (Ctrl+Alt+Del, lock screen, UAC prompt) and `taskmgr_opened` (M26).
  */
 export const EVIDENCE_KINDS = [
   'focus_lost',
@@ -173,6 +175,9 @@ export const EVIDENCE_KINDS = [
   'app_launched',
   'processes_at_start',
   'app_relaunched',
+  'monitor_changed',
+  'secure_desktop',
+  'taskmgr_opened',
 ] as const;
 
 /** Most programs `processes_at_start` lists. */
@@ -207,6 +212,11 @@ export const PipeEvidenceSchema = z.object({
       .array(z.object({ exe: z.string().max(260), pid: z.number().int().nonnegative() }))
       .max(MAX_START_PROCESSES)
       .optional(),
+    /** `monitor_changed`: screens now, and before the change (absent: more than one at the start). */
+    monitors: z.number().int().min(0).max(32).optional(),
+    monitorsBefore: z.number().int().min(0).max(32).optional(),
+    /** `secure_desktop`: the desktop that took the input (`Winlogon`), when the agent could read it. */
+    desktop: z.string().max(64).optional(),
   }),
   screenshot: z
     .object({
