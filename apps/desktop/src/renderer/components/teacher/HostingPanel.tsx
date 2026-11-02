@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import type { ExamApi } from '@/api/examApi';
 import { sortedStudents } from '@/lib/rosterState';
 import type { RosterView } from '@/hooks/useRoster';
+import { clockTime } from '@/lib/terminalLog';
+import { GlobalActionsPanel } from './GlobalActionsPanel';
 import { InternetControl } from './InternetControl';
 import { TerminalControl } from './TerminalControl';
 
@@ -21,8 +23,9 @@ interface Props {
 }
 
 /**
- * PIN, addresses and fingerprint code for a hosted exam, the counts, and the terminal and internet
- * switches. The students themselves are on the monitoring board (M32).
+ * PIN, addresses and fingerprint code for a hosted exam, the counts, the end time, the terminal and
+ * internet switches and the actions for everyone (M36). The students themselves are on the
+ * monitoring board (M32).
  */
 export function HostingPanel({ examId, api, roster, running, onStart, onStop, onEnd }: Props) {
   const [info, setInfo] = useState<HostingInfo | null>(null);
@@ -45,7 +48,8 @@ export function HostingPanel({ examId, api, roster, running, onStart, onStop, on
     return () => {
       cancelled = true;
     };
-  }, [api, examId, reloads]);
+    // Start sets the end time, so the details are fetched again then.
+  }, [api, examId, reloads, running]);
   const terminal = useMemo(
     () => info && { terminal: info.terminal, pendingMinutes: info.terminalPendingMinutes },
     [info],
@@ -129,12 +133,34 @@ export function HostingPanel({ examId, api, roster, running, onStart, onStop, on
               : '0 joined'}
             {!roster.live && <span className="ml-2 text-amber-700">(reconnecting…)</span>}
           </dd>
+          {info.deadline !== null && (
+            <>
+              <dt className="text-muted">Ends at</dt>
+              <dd>
+                {clockTime(info.deadline)}
+                {info.extensionMin > 0 && (
+                  <span className="ml-2 text-sm text-muted">
+                    (+{info.extensionMin} min for everyone; personal extra time on top)
+                  </span>
+                )}
+              </dd>
+            </>
+          )}
         </dl>
       ) : (
         !error && <p className="text-sm text-muted">Loading hosting details…</p>
       )}
       {terminal && (
         <TerminalControl examId={examId} api={api} initial={terminal} onExpired={reloadInfo} />
+      )}
+      {info && (
+        <GlobalActionsPanel
+          examId={examId}
+          api={api}
+          running={running}
+          counts={counts}
+          onExtended={reloadInfo}
+        />
       )}
       {info && (
         <InternetControl

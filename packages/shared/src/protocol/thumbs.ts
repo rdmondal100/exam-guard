@@ -40,6 +40,22 @@ export const ThumbsSubscribeSchema = z.object({
 });
 export type ThumbsSubscribe = z.infer<typeof ThumbsSubscribeSchema>;
 
+/**
+ * Fast thumbnail (M34 fallback for the WebRTC live view): the students whose detail is open
+ * stream a larger picture every second; replaces the previous list. `[]` ends it.
+ */
+export const ThumbsFocusSchema = z.object({
+  t: z.literal('thumbs.focus'),
+  examStudentIds: z.array(z.string().min(1).max(100)).max(2),
+});
+export type ThumbsFocus = z.infer<typeof ThumbsFocusSchema>;
+
+/** Fast thumbnail period and width (M34 fallback). */
+export const FAST_THUMB_INTERVAL_MS = 1000;
+export const FAST_THUMB_WIDTH = 960;
+/** A hidden fast view closes itself after this long (M34). */
+export const FAST_THUMB_HIDDEN_CLOSE_MS = 60_000;
+
 // ---- binary frames ----
 
 /** Header of a student → server thumbnail frame: when the student captured it (its clock). */

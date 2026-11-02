@@ -33,21 +33,61 @@ export const InternetActionSchema = z.object({
 });
 export type InternetAction = z.infer<typeof InternetActionSchema>;
 
-/** `POST /exams/:id/actions`: the exam-wide switches. */
-export const ExamActionSchema = z.discriminatedUnion('type', [
-  TerminalActionSchema,
-  InternetActionSchema,
-]);
-export type ExamAction = z.infer<typeof ExamActionSchema>;
-
-/** Why a student is locked: their agent link was lost (M24) or the teacher locked them (M35). */
-export const LockReasonSchema = z.enum(['agent', 'teacher']);
-export type LockReason = z.infer<typeof LockReasonSchema>;
-
 /** Longest teacher message or warning, in characters. */
 export const MAX_TEACHER_MESSAGE = 500;
 /** Most minutes one extension adds. */
 export const MAX_EXTENSION_MINUTES = 600;
+
+const MessageTextSchema = z.string().trim().min(1).max(MAX_TEACHER_MESSAGE);
+const ExtensionMinutesSchema = z.number().int().min(1).max(MAX_EXTENSION_MINUTES);
+
+/** Extra time for everyone (M36): added to the exam's shared end; personal extensions stay. */
+export const ExtendAllActionSchema = z.object({
+  type: z.literal('extend_all'),
+  minutes: ExtensionMinutesSchema,
+});
+export type ExtendAllAction = z.infer<typeof ExtendAllActionSchema>;
+
+/** A message or warning popup for every joined student (M36). */
+export const BroadcastActionSchema = z.object({
+  type: z.literal('broadcast'),
+  kind: z.enum(['info', 'warning']),
+  text: MessageTextSchema,
+});
+export type BroadcastAction = z.infer<typeof BroadcastActionSchema>;
+
+/** `POST /exams/:id/actions`: the exam-wide switches and the global actions (M36). */
+export const ExamActionSchema = z.discriminatedUnion('type', [
+  TerminalActionSchema,
+  InternetActionSchema,
+  ExtendAllActionSchema,
+  BroadcastActionSchema,
+]);
+export type ExamAction = z.infer<typeof ExamActionSchema>;
+
+/** Reply to `extend_all`. */
+export const ExtendAllResultSchema = z.object({
+  ok: z.literal(true),
+  /** The exam's shared end (server time) without personal extensions; `null` before Start. */
+  deadline: z.number().nullable(),
+  /** All the extra time everyone got so far, minutes. */
+  extensionMin: z.number().int().nonnegative(),
+});
+export type ExtendAllResult = z.infer<typeof ExtendAllResultSchema>;
+
+/** Reply to `broadcast`. */
+export const BroadcastResultSchema = z.object({
+  ok: z.literal(true),
+  /** Joined students it went to. */
+  sent: z.number().int().nonnegative(),
+  /** Of those, the ones whose app was connected (the rest get it when they reconnect). */
+  delivered: z.number().int().nonnegative(),
+});
+export type BroadcastResult = z.infer<typeof BroadcastResultSchema>;
+
+/** Why a student is locked: their agent link was lost (M24) or the teacher locked them (M35). */
+export const LockReasonSchema = z.enum(['agent', 'teacher']);
+export type LockReason = z.infer<typeof LockReasonSchema>;
 
 /**
  * `POST /exams/:id/students/:sid/actions` (M35). `message` is a popup (`kind: 'warning'` is logged
@@ -58,14 +98,11 @@ export const StudentActionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('message'),
     kind: z.enum(['info', 'warning']),
-    text: z.string().trim().min(1).max(MAX_TEACHER_MESSAGE),
+    text: MessageTextSchema,
   }),
   z.object({ type: z.literal('lock') }),
   z.object({ type: z.literal('unlock') }),
-  z.object({
-    type: z.literal('extend'),
-    minutes: z.number().int().min(1).max(MAX_EXTENSION_MINUTES),
-  }),
+  z.object({ type: z.literal('extend'), minutes: ExtensionMinutesSchema }),
   z.object({ type: z.literal('end') }),
   z.object({ type: z.literal('reset_session') }),
 ]);

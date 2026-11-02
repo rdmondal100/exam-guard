@@ -191,6 +191,14 @@ export class ExamStudentRepo {
     return rows.map((r) => ({ id: r.id, extensionSec: r.extension_sec }));
   }
 
+  /** Every student who joined the exam (accepted the notice), in any later state. */
+  joinedIds(examId: string): string[] {
+    const rows = this.db
+      .prepare("SELECT id FROM exam_students WHERE exam_id = ? AND state <> 'not_joined'")
+      .all(examId) as { id: string }[];
+    return rows.map((r) => r.id);
+  }
+
   /** The longest personal extension in the exam, seconds (the exam's real end uses it). */
   maxExtensionSec(examId: string): number {
     const row = this.db

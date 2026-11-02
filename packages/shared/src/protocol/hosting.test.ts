@@ -10,6 +10,8 @@ describe('HostingInfoSchema', () => {
       fpCode: '7K2M',
       terminal: { enabled: false, until: null },
       internet: 'allowed',
+      deadline: null,
+      extensionMin: 0,
       terminalPendingMinutes: null,
     };
     expect(HostingInfoSchema.parse(info)).toEqual(info);

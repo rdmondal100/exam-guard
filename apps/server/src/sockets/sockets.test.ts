@@ -675,7 +675,13 @@ describe('internet switch', () => {
 
     await action({ type: 'internet', enabled: true });
     await c.waitFor(() => internetOf(last(c, 'state')) === 'allowed');
-    expect(db.prepare('SELECT action, payload_json FROM teacher_actions').all()).toEqual([
+    expect(
+      db
+        .prepare(
+          `SELECT action, payload_json FROM teacher_actions WHERE action NOT IN ('host', 'start', 'stop_hosting', 'end_all')`,
+        )
+        .all(),
+    ).toEqual([
       { action: 'internet', payload_json: '{"enabled":false}' },
       { action: 'internet', payload_json: '{"enabled":true}' },
     ]);
@@ -772,9 +778,13 @@ describe('tamper lock (M24)', () => {
     expect(unlocked.json()).toMatchObject({ ok: true, studentState: 'active', delivered: true });
     await c.waitFor(() => last(c, 'state')?.state?.locked === false);
     await teacher.waitFor(() => entry(teacher, '1')?.state === 'active');
-    expect(db.prepare('SELECT action, exam_student_id FROM teacher_actions').all()).toEqual([
-      { action: 'unlock', exam_student_id: studentId() },
-    ]);
+    expect(
+      db
+        .prepare(
+          `SELECT action, exam_student_id FROM teacher_actions WHERE action NOT IN ('host', 'start', 'stop_hosting', 'end_all')`,
+        )
+        .all(),
+    ).toEqual([{ action: 'unlock', exam_student_id: studentId() }]);
 
     const again = await action(studentId(), { type: 'unlock' });
     expect(again.statusCode).toBe(409);
@@ -850,7 +860,11 @@ describe('exam terminal', () => {
       terminal: { enabled: true },
       terminalPendingMinutes: null,
     });
-    const logged = db.prepare('SELECT action, payload_json FROM teacher_actions').all();
+    const logged = db
+      .prepare(
+        `SELECT action, payload_json FROM teacher_actions WHERE action NOT IN ('host', 'start', 'stop_hosting', 'end_all')`,
+      )
+      .all();
     expect(logged).toEqual([{ action: 'terminal', payload_json: '{"enabled":true}' }]);
   });
 

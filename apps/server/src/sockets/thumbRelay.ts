@@ -1,4 +1,6 @@
 import {
+  FAST_THUMB_INTERVAL_MS,
+  FAST_THUMB_WIDTH,
   StudentThumbHeaderSchema,
   THUMB_INTERVAL_MS,
   THUMB_WIDTH,
@@ -27,17 +29,26 @@ export interface ThumbRelayDeps {
   width?: number;
 }
 
+/** How a student streams: the grid picture, or the larger one every second for an open detail (M34). */
+type Mode = 'grid' | 'fast';
+
+interface Watching {
+  page: ReadonlySet<string>;
+  focus: ReadonlySet<string>;
+}
+
 /**
  * Thumbnail fan-out (M29, M33; docs/architecture.md §5). Only the students some teacher socket
  * has on its visible page are told to stream (`thumb.start`); the rest get `thumb.stop`. The
  * latest frame per student is kept in memory only, forwarded to the viewers watching that student,
  * and sent at once to a viewer that switches to a page, so a page switch shows pictures straight
- * away.
+ * away. A student in some viewer's focus (the fast thumbnail, M34 fallback) streams a larger
+ * picture every second instead; the grid tile shows the same frames.
  */
 export class ThumbRelay {
-  private readonly viewers = new Map<ThumbViewer, ReadonlySet<string>>();
-  /** Students told to stream, who still have a socket. */
-  private readonly streaming = new Set<string>();
+  private readonly viewers = new Map<ThumbViewer, Watching>();
+  /** Students told to stream, who still have a socket, and how. */
+  private readonly streaming = new Map<string, Mode>();
   /** The newest frame per student, already encoded for the teacher. */
   private readonly latest = new Map<string, Uint8Array>();
   private readonly now: () => number;
@@ -51,14 +62,12 @@ export class ThumbRelay {
 
   /** The viewer's visible page; replaces what it watched before. `[]` watches nothing. */
   watch(viewer: ThumbViewer, ids: readonly string[]): void {
-    const set = new Set(ids);
-    if (set.size === 0) this.viewers.delete(viewer);
-    else this.viewers.set(viewer, set);
-    this.reconcile();
-    for (const id of set) {
-      const frame = this.latest.get(id);
-      if (frame) this.send(viewer, frame);
-    }
+    this.update(viewer, { page: new Set(ids) });
+  }
+
+  /** The students whose fast thumbnail the viewer shows (M34 fallback); `[]` ends it. */
+  focus(viewer: ThumbViewer, ids: readonly string[]): void {
+    this.update(viewer, { focus: new Set(ids) });
   }
 
   /** The teacher socket closed. */
@@ -72,7 +81,8 @@ export class ThumbRelay {
    */
   onWelcome(id: string): void {
     this.streaming.delete(id);
-    if (this.wanted().has(id)) this.start(id);
+    const mode = this.wanted().get(id);
+    if (mode) this.start(id, mode);
   }
 
   /** A student's last socket closed (the hub ignores a replaced one). */
@@ -91,7 +101,9 @@ export class ThumbRelay {
     this.counters.bytesIn += bytes.length;
     const out = encodeThumbFrame({ examStudentId: studentId, ts: this.now() }, decoded.jpeg);
     this.latest.set(studentId, out);
-    for (const [viewer, ids] of this.viewers) if (ids.has(studentId)) this.send(viewer, out);
+    for (const [viewer, w] of this.viewers) {
+      if (w.page.has(studentId) || w.focus.has(studentId)) this.send(viewer, out);
+    }
   }
 
   stats(): ThumbStats {
@@ -112,31 +124,59 @@ export class ThumbRelay {
     this.since = this.now();
   }
 
-  private wanted(): Set<string> {
-    const all = new Set<string>();
-    for (const ids of this.viewers.values()) for (const id of ids) all.add(id);
+  private update(viewer: ThumbViewer, change: Partial<Watching>): void {
+    const before = this.viewers.get(viewer) ?? {
+      page: new Set<string>(),
+      focus: new Set<string>(),
+    };
+    const next = { ...before, ...change };
+    if (next.page.size === 0 && next.focus.size === 0) this.viewers.delete(viewer);
+    else this.viewers.set(viewer, next);
+    this.reconcile();
+    // Newly watched students show their latest picture at once.
+    for (const id of new Set([...next.page, ...next.focus])) {
+      if (before.page.has(id) || before.focus.has(id)) continue;
+      const frame = this.latest.get(id);
+      if (frame) this.send(viewer, frame);
+    }
+  }
+
+  /** Every watched student and how: a focus anywhere wins over a grid page. */
+  private wanted(): Map<string, Mode> {
+    const all = new Map<string, Mode>();
+    for (const w of this.viewers.values()) {
+      for (const id of w.page) if (!all.has(id)) all.set(id, 'grid');
+      for (const id of w.focus) all.set(id, 'fast');
+    }
     return all;
   }
 
   private reconcile(): void {
     const wanted = this.wanted();
-    for (const id of [...this.streaming]) {
+    for (const id of [...this.streaming.keys()]) {
       if (wanted.has(id)) continue;
       this.streaming.delete(id);
       this.deps.students.sendTo(id, { t: 'thumb.stop' });
     }
-    for (const id of wanted) {
-      if (!this.streaming.has(id) && this.deps.students.isConnected(id)) this.start(id);
+    for (const [id, mode] of wanted) {
+      if (this.streaming.get(id) !== mode && this.deps.students.isConnected(id)) {
+        this.start(id, mode);
+      }
     }
   }
 
-  private start(id: string): void {
-    this.streaming.add(id);
-    this.deps.students.sendTo(id, {
-      t: 'thumb.start',
-      intervalMs: this.deps.intervalMs ?? THUMB_INTERVAL_MS,
-      width: this.deps.width ?? THUMB_WIDTH,
-    });
+  private start(id: string, mode: Mode): void {
+    this.streaming.set(id, mode);
+    this.deps.students.sendTo(
+      id,
+      mode === 'fast'
+        ? { t: 'thumb.start', intervalMs: FAST_THUMB_INTERVAL_MS, width: FAST_THUMB_WIDTH }
+        : {
+            t: 'thumb.start',
+            intervalMs: this.deps.intervalMs ?? THUMB_INTERVAL_MS,
+            width: this.deps.width ?? THUMB_WIDTH,
+          },
+    );
   }
 
   private send(viewer: ThumbViewer, frame: Uint8Array): void {

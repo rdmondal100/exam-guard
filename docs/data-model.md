@@ -168,7 +168,7 @@ UNIQUE(dedupe_key); INDEX(exam_id, server_ts); INDEX(exam_student_id, server_ts)
 | id | INTEGER PK AUTOINCREMENT | |
 | exam_id | TEXT FK | |
 | exam_student_id | TEXT FK, nullable | null = global action |
-| action | TEXT | `message, warn, lock, unlock, extend, end, reset_session, broadcast, extend_all, end_all, start, host, stop_hosting, terminal, grade_edit, finalize, ...`. `terminal` (M15b): payload `{enabled, minutes?}`, or `{enabled:false, reason:"time_up"}` when the window ran out (written by the server) |
+| action | TEXT | `message, warn, lock, unlock, extend, end, reset_session, broadcast, extend_all, end_all, start, host, stop_hosting, terminal, grade_edit, finalize, ...`. `terminal` (M15b): payload `{enabled, minutes?}`, or `{enabled:false, reason:"time_up"}` when the window ran out (written by the server). M36: `extend_all {minutes}`, `broadcast {kind, text, sent}`, `end_all {reason: manual|time_up}` (time_up is written by the server), `host`, `start`, `stop_hosting` `{}`; read by `GET /exams/:id/actions` |
 | payload_json | TEXT | |
 | ts | INTEGER | |
 INDEX(exam_id, ts)

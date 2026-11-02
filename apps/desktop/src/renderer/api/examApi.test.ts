@@ -81,6 +81,8 @@ describe('createExamApi', () => {
       terminal: { enabled: false, until: null },
       terminalPendingMinutes: null,
       internet: 'allowed',
+      deadline: null,
+      extensionMin: 0,
     };
 
     it('hosts with POST and validates the reply', async () => {
@@ -131,6 +133,38 @@ describe('createExamApi', () => {
       expect(url).toBe('http://127.0.0.1:47821/api/v1/exams/e1/students/s9/actions');
       expect(JSON.parse(String(init?.body))).toEqual({ type: 'extend', minutes: 5 });
       expect(result.deadline).toBe(5);
+    });
+
+    it('sends extend_all and broadcast to the exam actions route (M36)', async () => {
+      const extend = reply(200, { ok: true, deadline: 9, extensionMin: 10 });
+      expect(await createExamApi(CONNECTION, extend).extendAll('e1', 10)).toMatchObject({
+        deadline: 9,
+      });
+      const [url, init] = vi.mocked(extend).mock.calls[0] ?? [];
+      expect(url).toBe('http://127.0.0.1:47821/api/v1/exams/e1/actions');
+      expect(JSON.parse(String(init?.body))).toEqual({ type: 'extend_all', minutes: 10 });
+
+      const cast = reply(200, { ok: true, sent: 3, delivered: 2 });
+      await createExamApi(CONNECTION, cast).broadcast('e1', { kind: 'info', text: 'hi' });
+      const body: unknown = JSON.parse(String(vi.mocked(cast).mock.calls[0]?.[1]?.body));
+      expect(body).toEqual({ type: 'broadcast', kind: 'info', text: 'hi' });
+    });
+
+    it('reads the audit log with GET (M36)', async () => {
+      const row = {
+        id: 1,
+        action: 'start',
+        examStudentId: null,
+        studentCode: null,
+        studentName: null,
+        payload: {},
+        ts: 4,
+      };
+      const fetchFn = reply(200, { actions: [row] });
+      expect(await createExamApi(CONNECTION, fetchFn).auditLog('e1')).toEqual([row]);
+      const [url, init] = vi.mocked(fetchFn).mock.calls[0] ?? [];
+      expect(url).toBe('http://127.0.0.1:47821/api/v1/exams/e1/actions');
+      expect(init?.method ?? 'GET').toBe('GET');
     });
 
     it('asks for the monitoring view of the events', async () => {

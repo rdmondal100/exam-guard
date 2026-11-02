@@ -53,7 +53,7 @@ export function createHostingController({ hosting, exams, students }: HostingCon
       res.json(body);
     },
 
-    /** The exam-wide switches: `terminal` and `internet`. */
+    /** The exam-wide switches (`terminal`, `internet`) and global actions (`extend_all`, `broadcast`). */
     action(req: IdRequest, res: Response): void {
       const body = ExamActionSchema.safeParse(req.body);
       if (!body.success) throw new ApiError(400, 'invalid_body', 'Unknown or invalid action');
@@ -62,11 +62,16 @@ export function createHostingController({ hosting, exams, students }: HostingCon
       if (action.type === 'terminal' && !action.enabled && action.minutes !== undefined) {
         throw new ApiError(400, 'invalid_body', 'Minutes only apply when turning it on');
       }
-      res.json(
-        action.type === 'internet'
-          ? hosting.internet.set(examId, action.enabled)
-          : hosting.terminal.set(examId, action.enabled, action.minutes),
-      );
+      switch (action.type) {
+        case 'internet':
+          return void res.json(hosting.internet.set(examId, action.enabled));
+        case 'terminal':
+          return void res.json(hosting.terminal.set(examId, action.enabled, action.minutes));
+        case 'extend_all':
+          return void res.json(hosting.globalActions.extendAll(examId, action));
+        case 'broadcast':
+          return void res.json(hosting.globalActions.broadcast(examId, action));
+      }
     },
 
     /** One student: message or warning, lock, unlock, extend, end, reset session (M35). */

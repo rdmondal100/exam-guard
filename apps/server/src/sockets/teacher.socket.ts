@@ -6,8 +6,8 @@ import type { ThumbRelay, ThumbViewer } from './thumbRelay.js';
 
 export interface TeacherSocketDeps {
   hub: SessionHub;
-  /** Grid thumbnails for the visible page (M29, M33). */
-  thumbs?: Pick<ThumbRelay, 'watch' | 'unwatch'>;
+  /** Grid thumbnails for the visible page (M29, M33) and the fast thumbnail (M34). */
+  thumbs?: Pick<ThumbRelay, 'watch' | 'focus' | 'unwatch'>;
   /** Per-launch token (query string) and a logged-in teacher, the same bar as the HTTP routes. */
   allowed: (request: IncomingMessage) => boolean;
 }
@@ -55,6 +55,7 @@ export function onTeacherSocket(
     if (!parsed.success) return socket.close(4400, 'bad_frame');
     const message = parsed.data;
     if (message.t === 'thumbs.subscribe') return thumbs?.watch(viewer, message.examStudentIds);
+    if (message.t === 'thumbs.focus') return thumbs?.focus(viewer, message.examStudentIds);
     // A new subscribe replaces the previous one.
     unsubscribe?.();
     unsubscribe = hub.subscribe({ examId: message.examId, send });

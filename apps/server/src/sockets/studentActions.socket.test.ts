@@ -12,7 +12,11 @@ afterEach(async () => {
 const act = (sid: string, payload: object) =>
   live.call('POST', `/exams/${live.examId}/students/${sid}/actions`, payload);
 const logged = () =>
-  live.db.prepare('SELECT action, payload_json AS payload FROM teacher_actions ORDER BY id').all();
+  live.db
+    .prepare(
+      `SELECT action, payload_json AS payload FROM teacher_actions WHERE action NOT IN ('host', 'start', 'stop_hosting', 'end_all') ORDER BY id`,
+    )
+    .all();
 type State = {
   studentState?: string;
   locked?: boolean;

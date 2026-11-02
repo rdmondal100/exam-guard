@@ -104,3 +104,47 @@ describe('ThumbRelay', () => {
     expect(relay.stats()).toMatchObject({ cached: 0, framesIn: 0, streaming: 0, viewers: 1 });
   });
 });
+
+describe('ThumbRelay fast thumbnail (M34 fallback)', () => {
+  const startOf = (m: ServerToStudent | undefined) =>
+    m?.t === 'thumb.start' ? `${m.intervalMs}/${m.width}` : m?.t;
+
+  it('switches a focused student to the fast stream and back to the grid stream', () => {
+    const { relay, sent, viewer } = setup(['a', 'b']);
+    const { v, got } = viewer();
+    relay.watch(v, ['a', 'b']);
+    relay.focus(v, ['a']);
+    expect(sent.map((s) => `${s.id}:${startOf(s.message)}`)).toEqual([
+      'a:4000/320',
+      'b:4000/320',
+      'a:1000/960',
+    ]);
+    relay.frame('a', frame());
+    expect(got).toEqual(['a']);
+    relay.focus(v, []);
+    expect(`${sent.at(-1)?.id}:${startOf(sent.at(-1)?.message)}`).toBe('a:4000/320');
+  });
+
+  it('streams a focused student who is on no page, and stops when the focus ends', () => {
+    const { relay, sent, viewer } = setup(['a']);
+    const { v, got } = viewer();
+    relay.focus(v, ['a']);
+    relay.frame('a', frame());
+    expect(got).toEqual(['a']);
+    expect(relay.stats().streaming).toBe(1);
+    relay.focus(v, []);
+    expect(sent.at(-1)).toEqual({ id: 'a', message: { t: 'thumb.stop' } });
+    expect(relay.stats()).toMatchObject({ streaming: 0, viewers: 0 });
+  });
+
+  it('keeps the fast stream while another viewer focuses the same student', () => {
+    const { relay, sent, viewer } = setup(['a']);
+    const one = viewer();
+    const two = viewer();
+    relay.focus(one.v, ['a']);
+    relay.watch(two.v, ['a']);
+    expect(sent.map((s) => startOf(s.message))).toEqual(['1000/960']);
+    relay.unwatch(one.v);
+    expect(sent.map((s) => startOf(s.message))).toEqual(['1000/960', '4000/320']);
+  });
+});

@@ -1,3 +1,4 @@
+import type { AuditEntry } from '@examguard/shared';
 import type { Db } from '../connectDb.js';
 
 export interface TeacherAction {
@@ -8,7 +9,7 @@ export interface TeacherAction {
   ts: number;
 }
 
-/** `teacher_actions`: the audit log of what the teacher did. Insert only for now. */
+/** `teacher_actions`: the audit log of what the teacher did (and the server's own time-outs). */
 export class TeacherActionRepo {
   constructor(private readonly db: Db) {}
 
@@ -27,7 +28,7 @@ export class TeacherActionRepo {
       );
   }
 
-  /** Newest last. Used by tests and, later, the audit view. */
+  /** Oldest first. Used by tests. */
   list(examId: string): TeacherAction[] {
     const rows = this.db
       .prepare(
@@ -45,8 +46,51 @@ export class TeacherActionRepo {
       examId: r.exam_id,
       examStudentId: r.exam_student_id,
       action: r.action,
-      payload: JSON.parse(r.payload_json) as Record<string, unknown>,
+      payload: parsePayload(r.payload_json),
       ts: r.ts,
     }));
+  }
+
+  /** The audit view (M36): newest first, with the student's code and name. */
+  audit(examId: string, limit: number): AuditEntry[] {
+    const rows = this.db
+      .prepare(
+        `SELECT a.id, a.action, a.exam_student_id, c.student_code, c.name, a.payload_json, a.ts
+           FROM teacher_actions a
+           LEFT JOIN exam_students s ON s.id = a.exam_student_id
+           LEFT JOIN class_students c ON c.id = s.class_student_id
+          WHERE a.exam_id = ?
+          ORDER BY a.id DESC
+          LIMIT ?`,
+      )
+      .all(examId, limit) as {
+      id: number;
+      action: string;
+      exam_student_id: string | null;
+      student_code: string | null;
+      name: string | null;
+      payload_json: string;
+      ts: number;
+    }[];
+    return rows.map((r) => ({
+      id: r.id,
+      action: r.action,
+      examStudentId: r.exam_student_id,
+      studentCode: r.student_code,
+      studentName: r.name,
+      payload: parsePayload(r.payload_json),
+      ts: r.ts,
+    }));
+  }
+}
+
+function parsePayload(json: string): Record<string, unknown> {
+  try {
+    const value: unknown = JSON.parse(json);
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
   }
 }

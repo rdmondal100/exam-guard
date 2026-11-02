@@ -24,7 +24,12 @@ import {
   SubmitResultSchema,
   SubmitSchema,
 } from './submission.js';
-import { ThumbStartSchema, ThumbStopSchema, ThumbsSubscribeSchema } from './thumbs.js';
+import {
+  ThumbStartSchema,
+  ThumbStopSchema,
+  ThumbsFocusSchema,
+  ThumbsSubscribeSchema,
+} from './thumbs.js';
 
 /** Idle limit on a student socket and the client's ping period (docs/protocol.md §3). */
 export const STUDENT_IDLE_MS = 15_000;
@@ -249,6 +254,7 @@ export type Subscribe = z.infer<typeof SubscribeSchema>;
 export const TeacherMessageSchema = z.discriminatedUnion('t', [
   SubscribeSchema,
   ThumbsSubscribeSchema,
+  ThumbsFocusSchema,
 ]);
 export type TeacherMessage = z.infer<typeof TeacherMessageSchema>;
 

@@ -1,5 +1,8 @@
 import {
+  AuditResponseSchema,
   AuthOkSchema,
+  BroadcastResultSchema,
+  ExtendAllResultSchema,
   EventsResponseSchema,
   TEACHER_TOKEN_HEADER,
   ExamsSchema,
@@ -11,6 +14,10 @@ import {
   TerminalLogResponseSchema,
   ThumbStatsSchema,
   StudentActionResultSchema,
+  type AuditEntry,
+  type BroadcastAction,
+  type BroadcastResult,
+  type ExtendAllResult,
   type EventRow,
   type ExamCreateBody,
   type ExamSummary,
@@ -56,6 +63,12 @@ export interface ExamApi {
    * `invalid_state` when the action does not fit the student or exam, `not_found` for a stranger.
    */
   studentAction(id: string, studentId: string, action: StudentAction): Promise<StudentActionResult>;
+  /** Extra time for everyone (M36); running exams only, otherwise `invalid_state`. */
+  extendAll(id: string, minutes: number): Promise<ExtendAllResult>;
+  /** A popup for every joined student (M36); hosting or running. */
+  broadcast(id: string, message: Omit<BroadcastAction, 'type'>): Promise<BroadcastResult>;
+  /** The teacher action log (M36), newest first, in any exam state. */
+  auditLog(id: string): Promise<AuditEntry[]>;
   /** One student's terminal events and transcript, in any exam state. */
   terminalLog(id: string, studentId: string): Promise<TerminalLogResponse>;
   /** What the agents saw, newest first. `after` is the id of the newest event already shown. */
@@ -118,6 +131,18 @@ export function createExamApi(connection: ServerConnection, fetchFn: FetchFn = f
         StudentActionResultSchema,
         action,
       ),
+    extendAll: (id, minutes) =>
+      call(connection, fetchFn, `${path(id)}/actions`, ExtendAllResultSchema, {
+        type: 'extend_all',
+        minutes,
+      }),
+    broadcast: (id, message) =>
+      call(connection, fetchFn, `${path(id)}/actions`, BroadcastResultSchema, {
+        type: 'broadcast',
+        ...message,
+      }),
+    auditLog: async (id) =>
+      (await call(connection, fetchFn, `${path(id)}/actions`, AuditResponseSchema)).actions,
     terminalLog: (id, studentId) =>
       call(
         connection,
