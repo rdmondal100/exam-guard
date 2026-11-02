@@ -5,7 +5,7 @@ import {
   type SaveReason,
   type StudentQuestion,
 } from '@examguard/shared';
-import type { AnswerState } from './answerStore';
+import type { AnswerState } from '../store/answerStore';
 import { pickLanguage } from './languages';
 
 /** Everything the scheduler needs to know about the exam screen at one moment. */

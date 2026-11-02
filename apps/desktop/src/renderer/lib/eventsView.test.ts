@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { EventRow } from '@examguard/shared';
-import { createExamApi } from './examApi';
+import { createExamApi } from '../api/examApi';
 import { describeEvent, formatDuration, jpegDataUrl, programCounts } from './eventsView';
 
 const event = (type: string, details: Record<string, unknown>): EventRow => ({
@@ -146,5 +146,17 @@ describe('examApi events and screenshots', () => {
     await expect(createExamApi(CONNECTION, fetchFn).screenshot(1)).rejects.toMatchObject({
       code: 'not_found',
     });
+  });
+});
+
+describe('tamper lock events (M24)', () => {
+  it('describes a relaunch and a lost agent link', () => {
+    expect(describeEvent(event('app_relaunched', { exe: 'ExamGuard.exe', pid: 4 }))).toBe(
+      'ExamGuard was closed and the agent started it again',
+    );
+    expect(
+      describeEvent(event('agent_lost', { reason: 'The monitoring agent stopped answering.' })),
+    ).toBe('Monitoring agent lost, student locked: The monitoring agent stopped answering.');
+    expect(describeEvent(event('agent_lost', {}))).toBe('Monitoring agent lost, student locked');
   });
 });

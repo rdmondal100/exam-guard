@@ -1,8 +1,8 @@
 import type { AppInfo } from '@examguard/shared';
-import { useAuth } from '@/lib/useAuth';
-import { useServerStatus } from '@/lib/useServerStatus';
-import { LoginScreen } from '../auth/LoginScreen';
-import { SetupScreen } from '../auth/SetupScreen';
+import { useAuth } from '@/hooks/useAuth';
+import { useServerStatus } from '@/hooks/useServerStatus';
+import { LoginScreen } from '../../pages/auth/LoginScreen';
+import { SetupScreen } from '../../pages/auth/SetupScreen';
 import { TeacherShell } from './TeacherShell';
 
 /** Teacher mode entry: setup → login → shell. Nothing teacher-facing renders before login. */

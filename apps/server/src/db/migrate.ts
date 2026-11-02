@@ -1,4 +1,4 @@
-import type { Db } from './connection.js';
+import type { Db } from './connectDb.js';
 import type { Migration } from './migrations.js';
 
 /** Applies pending migrations, each in its own transaction, tracked by `PRAGMA user_version`. */

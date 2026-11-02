@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import type { TerminalLogResponse } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
-import type { ExamApi } from '@/lib/examApi';
+import type { ExamApi } from '@/api/examApi';
 import { clockTime, describeTerminalEvent } from '@/lib/terminalLog';
 
 const TerminalTranscript = lazy(() => import('./TerminalTranscript'));

@@ -4,6 +4,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub use crate::relaunch::LaunchRequest;
+
 /// Screenshot and outside-time rules (`MonitorPolicySchema` in the shared package).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MonitorPolicy {
@@ -86,6 +88,9 @@ pub enum FromApp {
         pipe_version: u32,
         #[serde(rename = "appVersion")]
         app_version: String,
+        /// How to start the app again if it disappears while monitoring (M24).
+        #[serde(default)]
+        launch: Option<LaunchRequest>,
     },
     #[serde(rename = "system.check")]
     SystemCheck { seq: u64 },
@@ -226,9 +231,24 @@ mod tests {
             FromApp::Hello {
                 seq: 1,
                 pipe_version: 1,
-                app_version: "0.0.0".into()
+                app_version: "0.0.0".into(),
+                launch: None,
             }
         );
+        let with_launch: FromApp = serde_json::from_str(
+            r#"{"t":"hello","seq":1,"pipeVersion":1,"appVersion":"0","launch":{"args":["."],"cwd":"C:\\x","env":{"EG_A":"1"}}}"#,
+        )
+        .unwrap();
+        let FromApp::Hello {
+            launch: Some(launch),
+            ..
+        } = with_launch
+        else {
+            panic!("no launch");
+        };
+        assert_eq!(launch.args, vec!["."]);
+        assert_eq!(launch.cwd.as_deref(), Some(r"C:\x"));
+        assert_eq!(launch.env["EG_A"], "1");
         let ack: FromApp =
             serde_json::from_str(r#"{"t":"heartbeat.ack","seq":4,"hbSeq":9}"#).unwrap();
         assert_eq!(ack, FromApp::HeartbeatAck { seq: 4, hb_seq: 9 });

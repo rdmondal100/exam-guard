@@ -1,5 +1,5 @@
 import net from 'node:net';
-import { AGENT_PIPE_NAME } from '@examguard/shared';
+import { AGENT_PIPE_NAME, type PipeLaunch } from '@examguard/shared';
 import { AgentClient } from './agent-client.js';
 import type { AgentLink } from './agent-link.js';
 import { installedAgentPath, verifyAgentService } from './agent-verify.js';
@@ -10,6 +10,8 @@ export interface AgentLinkEnv {
   isPackaged: boolean;
   env: NodeJS.ProcessEnv;
   appVersion: string;
+  /** How the agent starts this app again (M24); see `launchInfo`. */
+  launch?: PipeLaunch;
 }
 
 /** Whether `EG_FAKE_AGENT=1` is in force (dev builds only). */
@@ -30,5 +32,6 @@ export function createAgentLink(where: AgentLinkEnv, run: RunCommand): AgentLink
       ? async () => true
       : (pid) => verifyAgentService(pid, run, installedAgentPath(where.env)),
     appVersion: where.appVersion,
+    ...(where.launch ? { launch: where.launch } : {}),
   });
 }

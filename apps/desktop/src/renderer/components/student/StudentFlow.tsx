@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { JoinResult, ProbeResult } from '@examguard/shared';
 import { ConfirmName } from './ConfirmName';
-import { FindExamScreen } from './FindExamScreen';
+import { FindExamScreen } from '../../pages/student/FindExamScreen';
 import { JoinForm } from './JoinForm';
 import { MonitoringNotice } from './MonitoringNotice';
-import { SessionScreen } from './SessionScreen';
+import { SessionScreen } from '../../pages/student/SessionScreen';
 
 type Host = Extract<ProbeResult, { ok: true }>;
 type Joined = Extract<JoinResult, { ok: true }>;

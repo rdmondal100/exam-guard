@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { HostingInfo, RosterEntry } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
-import type { ExamApi } from '@/lib/examApi';
+import type { ExamApi } from '@/api/examApi';
 import { sortedStudents } from '@/lib/rosterState';
-import { useRoster } from '@/lib/useRoster';
+import { useRoster } from '@/hooks/useRoster';
 import { InternetControl } from './InternetControl';
 import { RosterList } from './RosterList';
 import { TerminalControl } from './TerminalControl';
@@ -143,7 +143,15 @@ export function HostingPanel({ examId, api, running, onStart, onStop, onEnd }: P
           students={sortedStudents(roster)}
         />
       )}
-      <RosterList students={sortedStudents(roster)} onTerminalLog={setLogOf} />
+      <RosterList
+        students={sortedStudents(roster)}
+        onTerminalLog={setLogOf}
+        onUnlock={(s) =>
+          void api.unlock(examId, s.id).catch((e: unknown) => {
+            setError(e instanceof Error ? e.message : String(e));
+          })
+        }
+      />
       {logOf && (
         <TerminalLogDialog
           examId={examId}

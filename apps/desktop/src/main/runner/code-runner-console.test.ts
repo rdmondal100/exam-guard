@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RunRequest } from '@examguard/shared';
 import type { PtyOpen } from '../terminal/pty.js';
 import type { PtyProcess } from '../terminal/terminal-host.js';
@@ -178,7 +178,8 @@ describe('the program console', () => {
     const running = runner({ runTimeMs: 30_000, onData: (d) => text.push(d) }).run(
       req({ flags: '-lm' }),
     );
-    await new Promise((res) => setTimeout(res, 30));
+    // Opening writes the work folder first, which can take a while under load.
+    await vi.waitFor(() => expect(ptys).toHaveLength(1));
     expect(spawned).toHaveLength(1);
     expect(opened).toHaveLength(1);
     const [spec, size] = opened[0] ?? [];
@@ -204,7 +205,8 @@ describe('the program console', () => {
   it('forwards keystrokes and resizes to the running program and remembers the size', async () => {
     const r = runner();
     const running = r.run(req({ language: 'js' }));
-    await new Promise((res) => setTimeout(res, 30));
+    // Opening writes the work folder first, which can take a while under load.
+    await vi.waitFor(() => expect(ptys).toHaveLength(1));
     r.write('42\r');
     r.resize({ cols: 100, rows: 30 });
     expect(ptys[0]?.written).toEqual(['42\r']);
@@ -219,7 +221,8 @@ describe('the program console', () => {
     const r = runner();
     r.resize({ cols: 120, rows: 40 });
     const running = r.run(req({ language: 'js' }));
-    await new Promise((res) => setTimeout(res, 30));
+    // Opening writes the work folder first, which can take a while under load.
+    await vi.waitFor(() => expect(ptys).toHaveLength(1));
     expect(opened[0]?.[1]).toEqual({ cols: 120, rows: 40 });
     ptys[0]?.exit(0);
     await running;
@@ -228,7 +231,8 @@ describe('the program console', () => {
   it('Stop ends the run', async () => {
     const r = runner();
     const running = r.run(req({ language: 'js' }));
-    await new Promise((res) => setTimeout(res, 30));
+    // Opening writes the work folder first, which can take a while under load.
+    await vi.waitFor(() => expect(ptys).toHaveLength(1));
     r.stop();
     expect(ptys[0]?.killed).toBe(true);
     expect((await running).status).toBe('stopped');

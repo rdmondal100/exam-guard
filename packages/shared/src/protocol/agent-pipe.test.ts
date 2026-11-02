@@ -76,3 +76,32 @@ describe('internet messages on the pipe', () => {
     expect(AgentToAppSchema.safeParse(status).success).toBe(false);
   });
 });
+
+describe('M24: relaunch info and the new kinds', () => {
+  const hello = { t: 'hello', seq: 1, pipeVersion: PIPE_VERSION, appVersion: '0.0.0' };
+
+  it('accepts a hello that says how to start the app again', () => {
+    const launch = { args: ['.', '--profile', 'student'], cwd: 'E:\\app', env: { EG_X: '1' } };
+    expect(AppToAgentSchema.safeParse({ ...hello, launch }).success).toBe(true);
+    expect(AppToAgentSchema.safeParse({ ...hello, launch: { args: [], env: {} } }).success).toBe(
+      true,
+    );
+  });
+
+  it('rejects a launch with too many arguments', () => {
+    const args = Array.from({ length: 33 }, () => 'x');
+    expect(AppToAgentSchema.safeParse({ ...hello, launch: { args, env: {} } }).success).toBe(false);
+  });
+
+  it('accepts app_relaunched evidence from the agent', () => {
+    const evidence = {
+      t: 'evidence',
+      seq: 2,
+      evidenceSeq: 9,
+      ts: 1,
+      kind: 'app_relaunched',
+      data: { exe: 'ExamGuard.exe', pid: 42 },
+    };
+    expect(AgentToAppSchema.safeParse(evidence).success).toBe(true);
+  });
+});

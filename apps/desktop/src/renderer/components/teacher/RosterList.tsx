@@ -5,10 +5,12 @@ interface Props {
   students: RosterEntry[];
   /** Shows a "Terminal" button per student that opens their terminal log. */
   onTerminalLog?: (student: RosterEntry) => void;
+  /** Shows an "Unlock" button for a locked student (M24: their monitoring agent was lost). */
+  onUnlock?: (student: RosterEntry) => void;
 }
 
 /** Joined students: name, code, state and whether their socket is up. */
-export function RosterList({ students, onTerminalLog }: Props) {
+export function RosterList({ students, onTerminalLog, onUnlock }: Props) {
   if (students.length === 0) {
     return <p className="text-sm text-muted">Nobody has joined yet.</p>;
   }
@@ -27,7 +29,19 @@ export function RosterList({ students, onTerminalLog }: Props) {
               Outside {formatDuration(s.outsideMs)}
             </span>
           )}
-          <span className="text-muted">{s.connected ? s.state : `${s.state} · offline`}</span>
+          <span className={s.state === 'locked' ? 'font-medium text-red-700' : 'text-muted'}>
+            {s.connected ? s.state : `${s.state} · offline`}
+          </span>
+          {onUnlock && s.state === 'locked' && (
+            <button
+              type="button"
+              className="rounded-md border border-red-300 px-2 py-0.5 text-xs text-red-700"
+              title="The monitoring agent on this PC was lost. Check the PC, then let the student continue."
+              onClick={() => onUnlock(s)}
+            >
+              Unlock
+            </button>
+          )}
           {onTerminalLog && (
             <button
               type="button"

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import type { RosterEntry } from '@examguard/shared';
-import type { ExamApi } from '@/lib/examApi';
+import type { ExamApi } from '@/api/examApi';
 import { sortedStudents } from '@/lib/rosterState';
-import { useRoster } from '@/lib/useRoster';
+import { useRoster } from '@/hooks/useRoster';
 import { RosterList } from './RosterList';
 import { TerminalLogDialog } from './TerminalLogDialog';
 

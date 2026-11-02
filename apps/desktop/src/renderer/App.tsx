@@ -3,7 +3,7 @@ import type { AppInfo, AppMode } from '@examguard/shared';
 import { AgentGate } from './components/student/AgentGate';
 import { StudentFlow } from './components/student/StudentFlow';
 import { TeacherGate } from './components/teacher/TeacherGate';
-import { ModeSelect } from './components/ModeSelect';
+import { ModeSelect } from './components/common/ModeSelect';
 
 export function App() {
   const [info, setInfo] = useState<AppInfo | null>(null);

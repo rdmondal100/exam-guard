@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { AgentReport, AgentState } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
-import { useAgentStatus } from '@/lib/useAgentStatus';
+import { useAgentStatus } from '@/hooks/useAgentStatus';
 
 const LABELS: Record<AgentState, string> = {
   running: 'Monitoring agent running',

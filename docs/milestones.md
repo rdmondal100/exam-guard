@@ -23,19 +23,19 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 
 ### M03 Exam server in a utilityProcess
 - **Goal:** Teacher mode starts `apps/server` as a utilityProcess and restarts it on crash.
-- **Touches:** `apps/server/src/index.ts`, `http/teacher-app.ts` (loopback 47821, `/api/v1/health`, token check), `apps/desktop/main/server-host.ts` (spawn, backoff restart, MessagePort, token handoff to preload), logs.
+- **Touches:** `apps/server/src/server.ts`, `app.ts` (loopback 47821, `/api/v1/health`, token check), `apps/desktop/main/server-host.ts` (spawn, backoff restart, MessagePort, token handoff to preload), logs.
 - **Accept:** health returns 200 with the token and 401 without it. Killing the server process makes it restart and the UI banner shows "server restarted".
 - **Manual test:** Teacher mode → status chip "Server running". End the utility process in Task Manager → it comes back within about 2 s.
 
 ### M04 SQLite + migrations
 - **Goal:** the database is created in the data folder with the migration runner and the first tables.
-- **Touches:** `apps/server/src/db/{connection,migrate}.ts`, `migrations/0001_init.sql` (settings, teacher; other tables come with their features), repo helpers, tests with a temp DB.
+- **Touches:** `apps/server/src/db/{connectDb,migrate}.ts`, `migrations/0001_init.sql` (settings, teacher; other tables come with their features), repo helpers, tests with a temp DB.
 - **Accept:** a fresh profile creates `db/examguard.sqlite` in WAL mode with `user_version=1`. Re-running is a no-op. Tests pass.
 - **Manual test:** delete the profile folder, start the app, and check the file exists (open it in DB Browser for SQLite).
 
 ### M05 Teacher password and login gate — **Phase 1 demo**
 - **Goal:** first run sets the teacher password, and every later run asks for it before showing anything.
-- **Touches:** `apps/server/src/auth/` (scrypt), `/auth/setup|login`, teacher renderer routes: setup, login, empty home shell with nav.
+- **Touches:** `apps/server/src/services/auth/` + `utils/passwordHash.ts` (scrypt), `/auth/setup|login`, teacher renderer routes: setup, login, empty home shell with nav.
 - **Accept:** the wrong password is rejected (with a rate limit). Teacher pages can't be reached without logging in. Student mode is unaffected.
 - **Manual test (demo):** fresh profile → set password → restart → log in → home shown, server running, DB created. The student profile opens Student mode.
 
@@ -64,7 +64,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 
 ### M09 Hosting: TLS, PIN, student listener
 - **Goal:** "Start hosting" opens the student HTTPS/WSS listener with a self-signed cert and shows the hosting screen.
-- **Touches:** `server/tls/cert.ts` (selfsigned, stored in `certs/`, fingerprint + 4-char code), `http/student-app.ts` (0.0.0.0:47820, only while hosting), `/info`, PIN generation, hosting screen (PIN, LAN addresses, port, fp code, join counts), power-save blocker in main.
+- **Touches:** `server/utils/tls/cert.ts` (selfsigned, stored in `certs/`, fingerprint + 4-char code), `studentApp.ts` (0.0.0.0:47820, only while hosting), `/info`, PIN generation, hosting screen (PIN, LAN addresses, port, fp code, join counts), power-save blocker in main.
 - **Accept:** `curl -k https://<ip>:47820/api/v1/info` works while hosting and is refused after stopping. Sleep is blocked while hosting.
 - **Manual test:** start hosting and run the curl from the laptop. `powercfg /requests` on the teacher PC lists ExamGuard.
 
@@ -82,7 +82,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 
 ### M12 WebSocket session, lobby, student-sim v1 — **Phase 2 demo**
 - **Goal:** the student's WS connects to the lobby. The teacher sees a live roster and join counts.
-- **Touches:** `server/ws/student-socket.ts` (hello/welcome, ping/pong clock, protocol check, connected flag), teacher WS `subscribe` + `roster`/`hosting` messages, student lobby screen, `tools/student-sim` v1 (N students: join → lobby, CLI flags `--host --pin --students --csv`).
+- **Touches:** `server/sockets/student.socket.ts` (hello/welcome, ping/pong clock, protocol check, connected flag), teacher WS `subscribe` + `roster`/`hosting` messages, student lobby screen, `tools/student-sim` v1 (N students: join → lobby, CLI flags `--host --pin --students --csv`).
 - **Accept:** roster updates within 1 s. Disconnecting shows the student as disconnected. The sim with 200 students holds the lobby stable.
 - **Manual test (demo):** the laptop student joins and waits in the lobby, and the teacher sees them. Then `pnpm sim -- --students 200` → hosting counts show 201.
 
@@ -221,6 +221,8 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** service `buffer.rs` (AES-GCM, ack-based delete), helper `relaunch.rs`, app heartbeat watchdog → lock overlay + `agent_lost` critical, teacher unlock stub, `monitor.start/stop` tied to student state.
 - **Accept:** killing ExamGuard → it relaunches within ~3 s and the events from the gap arrive with screenshots. Heartbeat loss → locked + critical event. Monitoring stops after submit.
 - **Manual test:** on the laptop, kill ExamGuard from Task Manager, open Chrome while it's down, and confirm the events appear after the relaunch.
+  - Steps (installed service, rebuilt with `pnpm dev:student:agent` so the new agent is installed): (1) join and start the exam; (2) kill the student app's Electron process in Task Manager; (3) open Chrome within 3 s and browse ~20 s; (4) the app comes back by itself within ~3–5 s (dev: only with a built app, see limitations) and resumes the exam; the teacher's Events list shows `focus_lost`/`still_outside` with pictures from the gap and "ExamGuard was closed and the agent started it again"; (5) `C:\ProgramData\ExamGuard\buffer\<id>\` empties once the events are stored, and a standard user cannot open the folder; (6) as admin `sc stop ExamGuardAgent` → about 5–11 s later the student sees "Your exam is locked", the roster shows `locked` with an Unlock button and a critical "Monitoring agent lost" event; `sc start ExamGuardAgent`, press Unlock → the overlay goes; (7) submit → `heartbeat.monitoring` turns false (service.log) and killing the app no longer relaunches it. Without the service: `EG_FAKE_AGENT_FAIL=lose pnpm dev:student` locks 15 s + 5 s after the start.
+- **Built (2026-11-02):** Rust `buffer` (AES-256-GCM files, key, protected folder) under `evidence_queue` (`adopt` replaces `clear`), `relaunch` (pure `Relauncher`, `LaunchSpec`, command-line quoting), `session::launch_app_as_user` / `launch_app_same_user`, `pipe_server` reporting `app_linked`/`app_unlinked`, `link` ticker (lease + relaunch); shared `PipeLaunchSchema`, `AGENT_LOST_LOCK_MS`, `app_relaunched`, `agent_lost`, `UnlockAction`; server `StudentLock` + `/actions {type:'unlock'}`, severities; desktop `launchInfo`, `TamperWatch` + `createTamperLock`, `SessionClient.lockLocally`, fake agent `lose`, `ExamLockedOverlay`, roster Unlock. Decisions in decisions.md (M24).
 
 ### M25 Clipboard and paste control
 - **Goal:** the clipboard is cleared at start, and only text copied inside the exam can be pasted.
@@ -266,7 +268,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 
 ### M31 Event classification, risk score, alert feed
 - **Goal:** the server assigns severities from config, computes the risk score, and streams a filterable alert feed.
-- **Touches:** `server/events/{classify,risk}.ts` + tests (high-severity app list, long-outside threshold), `alert` WS message, alert feed panel with severity filter.
+- **Touches:** `server/services/events/{classify,risk}.ts` + tests (high-severity app list, long-outside threshold), `alert` WS message, alert feed panel with severity filter.
 - **Accept:** Chrome in focus → High. Short Notepad switch → Low. Risk score updates live. Feed filters work.
 - **Manual test:** generate events from the laptop and the sim's scripted events, then filter by High.
 
@@ -307,7 +309,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 
 ### M37 Provider interface, prompt, validation, Gemini adapter
 - **Goal:** `GradingProvider` + versioned prompt + strict output validation, FakeProvider with fixtures, Gemini adapter.
-- **Touches:** `server/grading/{provider,prompt,validate}.ts`, `providers/{gemini,fake}.ts`, `fixtures/grading/`, `scripts/record-fixture` (manual, uses the teacher key, never in tests).
+- **Touches:** `server/services/grading/{provider,prompt,validate}.ts`, `providers/{gemini,fake}.ts`, `fixtures/grading/`, `scripts/record-fixture` (manual, uses the teacher key, never in tests).
 - **Accept:** validation rejects awarded > max, non-half steps, wrong criteria and a total mismatch. All tests use the fake. Inputs contain only the anon ID.
 - **Manual test:** run a one-answer smoke script against real Gemini with your key, then inspect the stored raw response.
 

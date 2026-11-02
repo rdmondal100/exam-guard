@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 import type { Diagnostic, QuestionLanguage } from '@examguard/shared';
 import { LANGUAGE_LABEL } from '@/lib/languages';
-import { runKey, useRunStore } from '@/lib/runStore';
+import { runKey, useRunStore } from '@/store/runStore';
 import { RunPanel } from './RunPanel';
 
 const CodeEditor = lazy(() => import('./CodeEditor'));

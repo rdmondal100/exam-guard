@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RestoreResult, RestoredAnswers } from '@examguard/shared';
-import { useAnswerStore, type AnswerState } from './answerStore';
-import { seedAutosaver } from './useAutosave';
+import { useAnswerStore, type AnswerState } from '../store/answerStore';
+import { seedAutosaver } from '../hooks/useAutosave';
 
 export type RestoreOutcome = { ok: true } | { ok: false; message: string };
 

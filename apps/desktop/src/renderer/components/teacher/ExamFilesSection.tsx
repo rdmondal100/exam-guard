@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { EXAM_FILE_LIMITS, type ExamFile } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
 import { formatSize } from '@/lib/filePaths';
-import { useExamFiles } from '@/lib/useExamFiles';
+import { useExamFiles } from '@/hooks/useExamFiles';
 
 interface Props {
   examId: string;

@@ -7,17 +7,18 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "pnpm -r --if-present build",
-    "test": "vitest run",
+    "build": "turbo run build",
+    "test": "turbo run test --concurrency=1",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "pnpm -r --if-present typecheck",
-    "dev:teacher": "pnpm --filter @examguard/desktop dev:teacher",
-    "dev:student": "pnpm --filter @examguard/desktop dev:student",
-    "dev:student:agent": "pnpm --filter @examguard/desktop dev:student:agent",
-    "sim": "pnpm --filter @examguard/student-sim sim",
-    "fetch-toolchains": "node scripts/fetch-toolchains.mjs"
+    "typecheck": "turbo run typecheck",
+    "dev:teacher": "turbo run build --filter=@examguard/desktop^... && pnpm --filter @examguard/desktop dev:teacher",
+    "dev:student": "turbo run build --filter=@examguard/desktop^... && pnpm --filter @examguard/desktop dev:student",
+    "dev:student:agent": "turbo run build --filter=@examguard/desktop^... && pnpm --filter @examguard/desktop dev:student:agent",
+    "sim": "turbo run build --filter=@examguard/student-sim && pnpm --filter @examguard/student-sim sim",
+    "fetch-toolchains": "node scripts/fetch-toolchains.mjs",
+    "test:root": "vitest run"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -25,6 +26,7 @@
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.9.10",
+    "turbo": "2.11.9",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.71.2",
     "vitest": "^5.0.5"

@@ -12,6 +12,7 @@ jpeg-encoder = "0.7"
 base64 = "0.22"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+aes-gcm = "0.10"
 
 [dependencies.windows-sys]
 workspace = true
@@ -24,6 +25,7 @@ features = [
   "Win32_Storage_FileSystem",
   "Win32_System_Console",
   "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_Environment",
   "Win32_System_IO",
   "Win32_System_Pipes",
   "Win32_System_Registry",

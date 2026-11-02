@@ -3,7 +3,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import type { ClassListImportResult, ClassStudentRow, CsvRowError } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import type { ClassListApi } from '@/lib/classListApi';
+import type { ClassListApi } from '@/api/classListApi';
 import { DataTable } from './DataTable';
 
 interface Props {

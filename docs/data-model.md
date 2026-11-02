@@ -1,6 +1,6 @@
 # Data model
 
-SQLite on the teacher PC only, accessed by the server process (better-sqlite3, `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`). Migrations are numbered SQL files in `apps/server/src/db/migrations/` (`0001_init.sql`, ...), applied in a transaction at startup, with the version kept in `PRAGMA user_version`.
+SQLite on the teacher PC only, accessed by the server process (better-sqlite3, `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`). Migrations are numbered SQL files in `apps/server/src/db/migrations/` (opened and applied by `db/connectDb.ts`; SQL lives in `db/repositories/*.repo.ts`) (`0001_init.sql`, ...), applied in a transaction at startup, with the version kept in `PRAGMA user_version`.
 
 **Conventions**
 - IDs: `TEXT` UUIDv7 (time-sortable) unless noted.
@@ -258,6 +258,6 @@ logs/main.log, server.log        rotated, 5 × 5 MB
   workspace\                           project folder: cwd of the terminal and of Run, the Files panel's root; node_modules, site-packages, .msys\ (pacman root); kept between runs
   .examguard\                          bin\ shims, pacman.conf, gnupg\ keyring copy (ExamGuard's, not the student's)
   .examguard\exam-files\               the teacher's files while they wait for the exam to start: <fileId>, revealed.json (ids already copied into workspace\)
-%ProgramData%\ExamGuard\buffer\<examId>\  agent evidence buffer (SYSTEM-only, AES-GCM)
+%ProgramData%\ExamGuard\buffer\        agent evidence buffer (M24): key.bin + <examStudentId>\<evidenceSeq>.bin (AES-256-GCM), folder ACL SYSTEM + Administrators only; a file goes on evidence.ack. `--console` uses %LOCALAPPDATA%\ExamGuard\agent-buffer\
 %ProgramData%\ExamGuard\agent.log
 ```

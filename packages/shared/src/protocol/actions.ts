@@ -32,12 +32,30 @@ export const InternetActionSchema = z.object({
 });
 export type InternetAction = z.infer<typeof InternetActionSchema>;
 
+/**
+ * Lets a locked student (M24: the agent link was lost) continue. The full per-student lock and
+ * unlock arrive with the teacher actions (M35).
+ */
+export const UnlockActionSchema = z.object({
+  type: z.literal('unlock'),
+  examStudentId: z.string().min(1).max(100),
+});
+export type UnlockAction = z.infer<typeof UnlockActionSchema>;
+
 /** `POST /exams/:id/actions`. */
 export const ExamActionSchema = z.discriminatedUnion('type', [
   TerminalActionSchema,
   InternetActionSchema,
+  UnlockActionSchema,
 ]);
 export type ExamAction = z.infer<typeof ExamActionSchema>;
+
+/** Reply to an `unlock` action. */
+export const UnlockActionResultSchema = z.object({
+  ok: z.literal(true),
+  studentState: z.literal('active'),
+});
+export type UnlockActionResult = z.infer<typeof UnlockActionResultSchema>;
 
 /** Reply to a `terminal` action: the state students now get. */
 export const TerminalActionResultSchema = z.object({
