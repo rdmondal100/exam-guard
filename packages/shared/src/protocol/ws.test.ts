@@ -164,7 +164,7 @@ describe('events', () => {
   });
 
   it.each([
-    { ...event, type: 'paste_blocked' },
+    { ...event, type: 'large_insertion' },
     { ...event, dedupeKey: '' },
     { ...event, details: 'x' },
   ])('rejects %j', (message) => {

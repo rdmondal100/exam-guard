@@ -17,7 +17,11 @@ export function placeholderSeverity(
   return type === 'focus_lost' || type === 'app_relaunched' ? 'medium' : 'low';
 }
 
-/** App events are low until the classifier (M31), except a lost agent link, which is critical (M24). */
+/**
+ * App events are low until the classifier (M31), except a lost agent link, which is critical (M24),
+ * and a blocked outside paste, which is medium (M25, requirements §8.6).
+ */
 export function appEventSeverity(type: string): Severity {
-  return type === 'agent_lost' ? 'critical' : 'low';
+  if (type === 'agent_lost') return 'critical';
+  return type === 'paste_blocked' ? 'medium' : 'low';
 }

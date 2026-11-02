@@ -28,6 +28,12 @@ export function programCounts(details: Record<string, unknown>): { exe: string; 
     .sort((a, b) => a.exe.localeCompare(b.exe, undefined, { sensitivity: 'base' }));
 }
 
+const PASTE_SURFACE_TEXT: Record<string, string> = {
+  editor: ' in the code editor',
+  answer: ' in an answer box',
+  terminal: ' in the terminal',
+};
+
 /** One line for the teacher's event list. */
 export function describeEvent(event: EventRow): string {
   const { details } = event;
@@ -55,6 +61,18 @@ export function describeEvent(event: EventRow): string {
       return programs.length === 0
         ? 'No programs were running at the start'
         : `Running at the start: ${programs.length} program${programs.length === 1 ? '' : 's'}`;
+    }
+    case 'paste_blocked': {
+      const chars = typeof details['chars'] === 'number' ? details['chars'] : 0;
+      const lines = typeof details['lines'] === 'number' ? details['lines'] : 0;
+      const surface = PASTE_SURFACE_TEXT[text(details['surface'])] ?? '';
+      const more =
+        typeof details['suppressed'] === 'number' ? ` (+${details['suppressed']} more)` : '';
+      const preview = text(details['preview']).replace(/\s+/g, ' ').trim();
+      const quoted = preview
+        ? `: "${preview.length > 80 ? `${preview.slice(0, 80)}…` : preview}"`
+        : '';
+      return `Paste from outside the exam blocked${more} (${chars} chars, ${lines} line${lines === 1 ? '' : 's'})${surface}${quoted}`;
     }
     case 'app_relaunched':
       return 'ExamGuard was closed and the agent started it again';

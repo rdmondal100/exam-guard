@@ -95,6 +95,16 @@ describe('GET /exams/:id/events', () => {
     expect(await ids(`/exams/${examId}/events?limit=1`)).toEqual([c]);
   });
 
+  it('the monitoring view has the agent evidence and the app events the teacher must see (M25)', async () => {
+    const focus = add();
+    add({ source: 'app', type: 'run_executed' });
+    const lost = add({ source: 'app', type: 'agent_lost', severity: 'critical' });
+    const paste = add({ source: 'app', type: 'paste_blocked', details: { chars: 40 } });
+    add({ source: 'app', type: 'terminal_command' });
+    expect(await ids(`/exams/${examId}/events?view=monitoring`)).toEqual([paste, lost, focus]);
+    expect((await get(`/exams/${examId}/events?view=everything`)).statusCode).toBe(400);
+  });
+
   it('keeps one exam out of another', async () => {
     add();
     const other = (

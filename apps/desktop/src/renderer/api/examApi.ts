@@ -112,7 +112,8 @@ export function createExamApi(connection: ServerConnection, fetchFn: FetchFn = f
         TerminalLogResponseSchema,
       ),
     events: async (id, options = {}) => {
-      const query = new URLSearchParams({ source: 'agent' });
+      // The agent's evidence plus the app events the teacher must see (agent_lost, paste_blocked).
+      const query = new URLSearchParams({ view: 'monitoring' });
       if (options.studentId) query.set('studentId', options.studentId);
       if (options.after !== undefined) query.set('after', String(options.after));
       if (options.limit !== undefined) query.set('limit', String(options.limit));

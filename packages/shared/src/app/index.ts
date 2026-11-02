@@ -6,3 +6,4 @@ export * from './files.js';
 export * from './exam-files-status.js';
 export * from './submit.js';
 export * from './session-exit.js';
+export * from './clipboard.js';

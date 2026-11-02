@@ -1,4 +1,10 @@
-import type { EventRow as EventDto, Severity, TerminalLogEvent } from '@examguard/shared';
+import {
+  MONITORING_APP_EVENT_TYPES,
+  type EventRow as EventDto,
+  type EventView,
+  type Severity,
+  type TerminalLogEvent,
+} from '@examguard/shared';
 import type { Db } from '../connectDb.js';
 
 export interface NewEvent {
@@ -18,6 +24,8 @@ export interface EventFilter {
   examStudentId?: string;
   severity?: Severity;
   source?: NewEvent['source'];
+  /** `monitoring`: the agent's evidence plus the app events the teacher must see (M25). */
+  view?: EventView;
   /** Only events with an id above this one (the list's last seen id). */
   after?: number;
   limit: number;
@@ -82,6 +90,11 @@ export class EventRepo {
     if (filter.source) {
       where.push('e.source = ?');
       args.push(filter.source);
+    }
+    if (filter.view === 'monitoring') {
+      const types = MONITORING_APP_EVENT_TYPES.map(() => '?').join(', ');
+      where.push(`(e.source = 'agent' OR e.type IN (${types}))`);
+      args.push(...MONITORING_APP_EVENT_TYPES);
     }
     if (filter.after !== undefined) {
       where.push('e.id > ?');

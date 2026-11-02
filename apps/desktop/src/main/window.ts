@@ -34,6 +34,20 @@ export function installCsp(): void {
       responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [policy] },
     });
   });
+  denyClipboardRead();
+}
+
+/**
+ * The page may not read the clipboard by itself (`navigator.clipboard.readText`), which Electron
+ * allows by default. Monaco's menu Paste falls back to it and would skip the paste guard (M25);
+ * Ctrl+V and the menu's `execCommand('paste')` still work through the `paste` event the guard sees.
+ */
+function denyClipboardRead(): void {
+  const ses = session.defaultSession;
+  ses.setPermissionRequestHandler((_contents, permission, callback) => {
+    callback(permission !== 'clipboard-read');
+  });
+  ses.setPermissionCheckHandler((_contents, permission) => permission !== 'clipboard-read');
 }
 
 export function createMainWindow(title: string): BrowserWindow {
