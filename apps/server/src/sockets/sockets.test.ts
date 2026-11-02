@@ -734,10 +734,10 @@ describe('internet switch', () => {
 });
 
 describe('tamper lock (M24)', () => {
-  const action = (payload: object) =>
+  const action = (sid: string, payload: object) =>
     app.inject({
       method: 'POST',
-      url: `/api/v1/exams/${examId}/actions`,
+      url: `/api/v1/exams/${examId}/students/${sid}/actions`,
       headers: HEADERS,
       payload,
     });
@@ -766,16 +766,17 @@ describe('tamper lock (M24)', () => {
     ]);
     expect(last(teacher, 'hosting')).toMatchObject({ active: 1 });
 
-    const unlocked = await action({ type: 'unlock', examStudentId: studentId() });
+    expect(last(c, 'state')?.state).toMatchObject({ lockReason: 'agent' });
+    const unlocked = await action(studentId(), { type: 'unlock' });
     expect(unlocked.statusCode).toBe(200);
-    expect(unlocked.json()).toEqual({ ok: true, studentState: 'active' });
+    expect(unlocked.json()).toMatchObject({ ok: true, studentState: 'active', delivered: true });
     await c.waitFor(() => last(c, 'state')?.state?.locked === false);
     await teacher.waitFor(() => entry(teacher, '1')?.state === 'active');
     expect(db.prepare('SELECT action, exam_student_id FROM teacher_actions').all()).toEqual([
       { action: 'unlock', exam_student_id: studentId() },
     ]);
 
-    const again = await action({ type: 'unlock', examStudentId: studentId() });
+    const again = await action(studentId(), { type: 'unlock' });
     expect(again.statusCode).toBe(409);
     expect(again.json().error.code).toBe('invalid_state');
   });
@@ -793,7 +794,7 @@ describe('tamper lock (M24)', () => {
   });
 
   it('refuses to unlock an unknown student', async () => {
-    const res = await action({ type: 'unlock', examStudentId: 'nobody' });
+    const res = await action('nobody', { type: 'unlock' });
     expect(res.statusCode).toBe(404);
   });
 });

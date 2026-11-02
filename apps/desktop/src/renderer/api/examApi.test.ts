@@ -116,12 +116,21 @@ describe('createExamApi', () => {
       expect(init?.method).toBe('POST');
     });
 
-    it('unlocks one student with an unlock action', async () => {
-      const fetchFn = reply(200, { ok: true, studentState: 'active' });
-      await createExamApi(CONNECTION, fetchFn).unlock('e1', 's9');
+    it('sends a per-student action to the student route', async () => {
+      const fetchFn = reply(200, {
+        ok: true,
+        studentState: 'active',
+        deadline: 5,
+        delivered: true,
+      });
+      const result = await createExamApi(CONNECTION, fetchFn).studentAction('e1', 's9', {
+        type: 'extend',
+        minutes: 5,
+      });
       const [url, init] = vi.mocked(fetchFn).mock.calls[0] ?? [];
-      expect(url).toBe('http://127.0.0.1:47821/api/v1/exams/e1/actions');
-      expect(JSON.parse(String(init?.body))).toEqual({ type: 'unlock', examStudentId: 's9' });
+      expect(url).toBe('http://127.0.0.1:47821/api/v1/exams/e1/students/s9/actions');
+      expect(JSON.parse(String(init?.body))).toEqual({ type: 'extend', minutes: 5 });
+      expect(result.deadline).toBe(5);
     });
 
     it('asks for the monitoring view of the events', async () => {

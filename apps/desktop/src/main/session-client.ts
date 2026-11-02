@@ -6,6 +6,7 @@ import {
   ServerToStudentSchema,
   WS_CLOSE,
   encodeScreenshotFrames,
+  encodeThumbFrame,
   type AnswerSave,
   type AnswerSaveRequest,
   type AnswerStatus,
@@ -17,6 +18,8 @@ import {
   type SessionStatus,
   type Submit,
   type SubmitOutcome,
+  type TeacherMessageToStudent,
+  type ThumbStart,
   type TranscriptChunk,
 } from '@examguard/shared';
 
@@ -42,6 +45,13 @@ export interface SessionClientDeps {
   onExam?: (state: SessionState) => void;
   /** The session was stopped for good (Leave), not restarted: nothing may stay locked down. */
   onStop?: () => void;
+  /**
+   * The server wants grid thumbnails (`thumb.start`) or no longer does (`null`: `thumb.stop`, or the
+   * socket closed; a new socket is asked again). M33.
+   */
+  onThumbs?: (command: ThumbStart | null) => void;
+  /** A teacher message or warning (M35), each id once; it is acked as soon as it is handed over. */
+  onTeacherMessage?: (message: TeacherMessageToStudent) => void;
   pingMs?: number;
   random?: () => number;
 }
@@ -90,6 +100,8 @@ export class SessionClient {
   private queue: OfflineQueue | null = null;
   private watchTimer: NodeJS.Timeout | null = null;
   private lastReceived = 0;
+  /** Teacher message ids already shown, so a resend after a reconnect shows nothing twice. */
+  private readonly shownMessages = new Set<string>();
   /** The Submit the student asked for, until the server answers. */
   private pendingSubmit: {
     frame: Submit;
@@ -151,7 +163,7 @@ export class SessionClient {
    */
   lockLocally(): void {
     if (!this.exam || this.exam.studentState !== 'active') return;
-    this.exam = { ...this.exam, studentState: 'locked', locked: true };
+    this.exam = { ...this.exam, studentState: 'locked', locked: true, lockReason: 'agent' };
     this.deps.onExam?.(this.exam);
   }
 
@@ -221,6 +233,13 @@ export class SessionClient {
       for (const frame of encodeScreenshotFrames(event.id, jpeg)) ws.send(frame, { binary: true });
     }
     this.sendFrame(ws, event);
+  }
+
+  /** Sends one grid thumbnail now, or drops it while the link is down (only the newest matters). */
+  sendThumb(jpeg: Uint8Array, capturedAt: number): void {
+    const ws = this.welcomed;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(encodeThumbFrame({ ts: capturedAt }, jpeg), { binary: true });
   }
 
   /** Sends a piece of the terminal transcript; re-sent after reconnects until acked. */
@@ -309,6 +328,7 @@ export class SessionClient {
     this.generation += 1;
     this.target = null;
     this.clearTimers();
+    if (this.welcomed) this.deps.onThumbs?.(null);
     this.welcomed = null;
     this.socket?.removeAllListeners();
     this.socket?.terminate();
@@ -427,6 +447,19 @@ export class SessionClient {
       this.settleSubmit({ ok: true });
     } else if (message.t === 'submit.refused') {
       this.settleSubmit({ ok: false, reason: message.reason });
+    } else if (message.t === 'message') {
+      this.sendFrame(ws, { t: 'ack', id: message.id });
+      if (this.shownMessages.has(message.id)) return;
+      this.shownMessages.add(message.id);
+      if (this.shownMessages.size > 200) {
+        const oldest = this.shownMessages.values().next().value;
+        if (oldest !== undefined) this.shownMessages.delete(oldest);
+      }
+      this.deps.onTeacherMessage?.(message);
+    } else if (message.t === 'thumb.start') {
+      this.deps.onThumbs?.(message);
+    } else if (message.t === 'thumb.stop') {
+      this.deps.onThumbs?.(null);
     } else if (message.t === 'pong') {
       const received = Date.now();
       const rtt = received - message.clientSent;
@@ -458,6 +491,7 @@ export class SessionClient {
     if (generation !== this.generation) return;
     this.clearTimers();
     this.socket = null;
+    if (this.welcomed) this.deps.onThumbs?.(null);
     this.welcomed = null;
     const final = FINAL[code];
     if (final) return this.emit('failed', final);

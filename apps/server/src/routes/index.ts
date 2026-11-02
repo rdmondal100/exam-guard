@@ -10,6 +10,7 @@ import { examFileRoutes } from './examFile.routes.js';
 import { hostingRoutes } from './hosting.routes.js';
 import { questionRoutes } from './question.routes.js';
 import { terminalLogRoutes } from './terminalLog.routes.js';
+import { thumbRoutes } from './thumb.routes.js';
 
 /**
  * The teacher API under `/api/v1`. `/health` and `/auth/*` need only the token; everything else
@@ -41,6 +42,9 @@ export function teacherRoutes(c: Container, requireLogin: RequestHandler): Route
   router.use(questionRoutes({ exams, questions, now }, requireLogin));
   router.use(eventRoutes({ exams, events, ...(screenshots ? { screenshots } : {}) }, requireLogin));
   router.use(terminalLogRoutes({ students, events, terminalLogs }, requireLogin));
-  if (c.live) router.use(hostingRoutes({ hosting: c.live.hosting, exams, students }, requireLogin));
+  if (c.live) {
+    router.use(hostingRoutes({ hosting: c.live.hosting, exams, students }, requireLogin));
+    router.use(thumbRoutes({ thumbs: c.live.thumbs }, requireLogin));
+  }
   return router;
 }

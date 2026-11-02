@@ -16,3 +16,4 @@ export * from './exam-files.js';
 export * from './agent-pipe.js';
 export * from './events.js';
 export * from './screenshot-frame.js';
+export * from './thumbs.js';

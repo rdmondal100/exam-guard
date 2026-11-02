@@ -3,6 +3,7 @@ import type { SessionState, SessionStatus } from '@examguard/shared';
 import { useRestoreAnswers } from '@/lib/restoreAnswers';
 import { useSessionExit } from '@/hooks/useSessionExit';
 import { ExamLockedOverlay } from '@/components/student/ExamLockedOverlay';
+import { TeacherMessagePopup } from '@/components/student/TeacherMessagePopup';
 import { ExamEndedScreen } from './ExamEndedScreen';
 import { ExamScreen } from './ExamScreen';
 import { LobbyScreen } from './LobbyScreen';
@@ -22,7 +23,16 @@ interface Props {
 }
 
 /** Opens the live session and shows the lobby until the exam runs, then the exam. */
-export function SessionScreen({ name, examTitle, onLeave }: Props) {
+export function SessionScreen(props: Props) {
+  return (
+    <>
+      <SessionBody {...props} />
+      <TeacherMessagePopup />
+    </>
+  );
+}
+
+function SessionBody({ name, examTitle, onLeave }: Props) {
   const [status, setStatus] = useState<SessionStatus>({ link: 'connecting', offsetMs: null });
   const [exam, setExam] = useState<SessionState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +96,7 @@ export function SessionScreen({ name, examTitle, onLeave }: Props) {
           filesOn={exam.filesEnabled}
           status={status}
         />
-        {exam.locked && <ExamLockedOverlay />}
+        {exam.locked && <ExamLockedOverlay reason={exam.lockReason ?? 'agent'} />}
       </>
     );
   }

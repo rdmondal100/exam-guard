@@ -44,7 +44,12 @@ beforeAll(async () => {
       if (isBinary) {
         const bytes = new Uint8Array(data as Buffer);
         const chunk = decodeScreenshotFrame(bytes);
-        frames.push({ t: 'binary', header: chunk?.header, size: chunk?.payload.length });
+        frames.push({
+          t: 'binary',
+          kind: bytes[0],
+          header: chunk?.header,
+          size: chunk?.payload.length,
+        });
         return;
       }
       const message = JSON.parse(data.toString()) as {
@@ -724,5 +729,55 @@ describe('SessionClient agent status', () => {
     for (const c of clients) c.terminate();
     await until(() => agentFrames().length === 2);
     expect(agentFrames()[1]).toMatchObject({ captureOk: false });
+  });
+});
+
+describe('grid thumbnails (M33)', () => {
+  it('passes thumb.start and thumb.stop on, sends frames only while connected, and stops on a close', async () => {
+    const commands: unknown[] = [];
+    client.stop();
+    client = new SessionClient({
+      onStatus: (s) => statuses.push(s),
+      onThumbs: (command) => commands.push(command),
+      pingMs: 50,
+      random: () => 0,
+    });
+    client.sendThumb(new Uint8Array([0xff, 0xd8, 0xff]), 1);
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    clients[0]?.send(JSON.stringify({ t: 'thumb.start', intervalMs: 4000, width: 320 }));
+    await until(() => commands.length === 1);
+    expect(commands[0]).toEqual({ t: 'thumb.start', intervalMs: 4000, width: 320 });
+    client.sendThumb(new Uint8Array([0xff, 0xd8, 0xff]), 2);
+    await until(() => frames.some((f) => (f as { t: string }).t === 'binary'));
+    expect(frames.filter((f) => (f as { t: string }).t === 'binary')).toEqual([
+      { t: 'binary', kind: 1, header: undefined, size: undefined },
+    ]);
+    clients[0]?.send(JSON.stringify({ t: 'thumb.stop' }));
+    await until(() => commands.length === 2);
+    expect(commands[1]).toBeNull();
+    clients[0]?.close();
+    await until(() => commands.length === 3);
+    expect(commands[2]).toBeNull();
+  });
+});
+
+describe('teacher messages (M35)', () => {
+  it('acks every copy and hands each id over once', async () => {
+    const shown: string[] = [];
+    client.stop();
+    client = new SessionClient({
+      onStatus: (s) => statuses.push(s),
+      onTeacherMessage: (m) => shown.push(m.text),
+      pingMs: 50,
+      random: () => 0,
+    });
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    const message = { t: 'message', id: 'm1', kind: 'warning', text: 'Eyes front', sentAt: 1 };
+    clients[0]?.send(JSON.stringify(message));
+    clients[0]?.send(JSON.stringify(message));
+    await until(() => frames.filter((f) => (f as { t: string }).t === 'ack').length === 2);
+    expect(shown).toEqual(['Eyes front']);
   });
 });

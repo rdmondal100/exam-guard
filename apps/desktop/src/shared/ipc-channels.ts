@@ -17,6 +17,7 @@ export const IPC = {
   restoreAnswers: 'answers:restore',
   sessionStatus: 'session:status',
   sessionExam: 'session:exam',
+  sessionMessage: 'session:message',
   answerSave: 'answers:save',
   answerStatus: 'answers:status',
   submitExam: 'exam:submit',

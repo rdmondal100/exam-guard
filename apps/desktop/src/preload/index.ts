@@ -32,6 +32,7 @@ import {
   ServerConnectionSchema,
   ServerStatusSchema,
   SessionStateSchema,
+  TeacherMessageToStudentSchema,
   SessionStatusSchema,
   TerminalDataSchema,
   TerminalExitSchema,
@@ -108,6 +109,14 @@ const api: ExamGuardApi = {
     };
     ipcRenderer.on(IPC.sessionExam, handler);
     return () => ipcRenderer.removeListener(IPC.sessionExam, handler);
+  },
+  onTeacherMessage: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown) => {
+      const parsed = TeacherMessageToStudentSchema.safeParse(payload);
+      if (parsed.success) listener(parsed.data);
+    };
+    ipcRenderer.on(IPC.sessionMessage, handler);
+    return () => ipcRenderer.removeListener(IPC.sessionMessage, handler);
   },
   saveAnswer: async (request) => {
     await ipcRenderer.invoke(IPC.answerSave, AnswerSaveRequestSchema.parse(request));

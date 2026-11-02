@@ -103,6 +103,11 @@ export class SessionHub {
     return this.conns.has(id);
   }
 
+  /** Closes one student's socket (their session was reset, M35); `detach` marks them offline. */
+  kick(id: string, code: number, reason: string): void {
+    this.conns.get(id)?.close(code, reason);
+  }
+
   /** Sends to one connected student. */
   sendTo(id: string, message: ServerToStudent): void {
     this.conns.get(id)?.send(message);

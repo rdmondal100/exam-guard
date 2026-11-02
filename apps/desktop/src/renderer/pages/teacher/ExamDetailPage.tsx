@@ -180,7 +180,7 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
               examId={exam.id}
               api={examApi}
               roster={roster}
-              running={exam.state === 'running'}
+              examState={exam.state}
             />
           )}
           <ExamFilesSection examId={exam.id} editable={editable} filesEnabled={exam.filesEnabled} />

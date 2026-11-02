@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ExamActionSchema, TerminalLogResponseSchema } from './actions.js';
+import { ExamActionSchema, StudentActionSchema, TerminalLogResponseSchema } from './actions.js';
 import { ServerToStudentSchema, StudentMessageSchema } from './ws.js';
 
 describe('ExamActionSchema', () => {
@@ -82,11 +82,27 @@ describe('TerminalLogResponseSchema', () => {
   });
 });
 
-describe('unlock action (M24)', () => {
-  it('names one student', () => {
-    expect(ExamActionSchema.safeParse({ type: 'unlock', examStudentId: 's1' }).success).toBe(true);
-    expect(ExamActionSchema.safeParse({ type: 'unlock' }).success).toBe(false);
-    expect(ExamActionSchema.safeParse({ type: 'unlock', examStudentId: '' }).success).toBe(false);
+describe('student actions (M35)', () => {
+  it('parses each action and refuses bad ones', () => {
+    const ok = (a: object) => StudentActionSchema.safeParse(a).success;
+    expect(ok({ type: 'unlock' })).toBe(true);
+    expect(ok({ type: 'lock' })).toBe(true);
+    expect(ok({ type: 'end' })).toBe(true);
+    expect(ok({ type: 'reset_session' })).toBe(true);
+    expect(ok({ type: 'extend', minutes: 10 })).toBe(true);
+    expect(ok({ type: 'extend', minutes: 0 })).toBe(false);
+    expect(ok({ type: 'extend', minutes: 1.5 })).toBe(false);
+    expect(ok({ type: 'message', kind: 'warning', text: 'Eyes front' })).toBe(true);
+    expect(ok({ type: 'message', kind: 'info', text: '  ' })).toBe(false);
+    expect(ok({ type: 'message', kind: 'info', text: 'x'.repeat(501) })).toBe(false);
+    // Unlock moved from the exam-wide actions to the student route.
+    expect(ExamActionSchema.safeParse({ type: 'unlock', examStudentId: 's1' }).success).toBe(false);
+  });
+
+  it('carries teacher messages and acks over the student socket', () => {
+    const message = { t: 'message', id: 'm', kind: 'info', text: 'Hi', sentAt: 1 };
+    expect(ServerToStudentSchema.safeParse(message).success).toBe(true);
+    expect(StudentMessageSchema.safeParse({ t: 'ack', id: 'm' }).success).toBe(true);
   });
 
   it('agent_lost is an app event', () => {

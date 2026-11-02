@@ -1,33 +1,53 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   EMPTY_ROSTER,
   applyTeacherMessage,
   parseTeacherFrame,
   type RosterState,
 } from '../lib/rosterState';
+import { ThumbStore } from '../lib/thumbStore';
+import { watchKey } from '../lib/thumbGrid';
 
 export interface RosterView extends RosterState {
   /** `false` while the socket is down; the last known roster stays on screen. */
   live: boolean;
   /** Counts socket (re)connects, so lists can fetch what they missed while it was down. */
   connects: number;
+  /** Grid thumbnails that arrived on this socket (M33). */
+  thumbs: ThumbStore;
+  /** The students on the visible grid page; `[]` stops every stream. Re-sent after a reconnect. */
+  watchThumbs(ids: readonly string[]): void;
 }
 
 const RETRY_MS = 1000;
 
+function sendWatch(ws: WebSocket | null, ids: readonly string[]): void {
+  if (ws?.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ t: 'thumbs.subscribe', examStudentIds: ids }));
+}
+
 /**
- * Live roster and alerts for one exam over the loopback teacher WebSocket, reconnecting when it
- * drops. With `enabled` false no socket is opened.
+ * Live roster, alerts and grid thumbnails for one exam over the loopback teacher WebSocket,
+ * reconnecting when it drops. With `enabled` false no socket is opened.
  */
 export function useRoster(examId: string, enabled = true): RosterView {
   const [roster, setRoster] = useState<RosterState>(EMPTY_ROSTER);
   const [live, setLive] = useState(false);
   const [connects, setConnects] = useState(0);
+  const [thumbs] = useState(() => new ThumbStore());
+  const socketRef = useRef<WebSocket | null>(null);
+  /** The page the grid wants, kept so a new socket asks for it again. */
+  const watching = useRef<readonly string[]>([]);
+
+  const watchThumbs = useCallback((ids: readonly string[]) => {
+    if (watchKey(ids) === watchKey(watching.current)) return;
+    watching.current = [...ids];
+    sendWatch(socketRef.current, watching.current);
+  }, []);
 
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-    let socket: WebSocket | null = null;
     let retry: ReturnType<typeof setTimeout> | null = null;
     setRoster(EMPTY_ROSTER);
 
@@ -39,13 +59,16 @@ export function useRoster(examId: string, enabled = true): RosterView {
       url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
       url.searchParams.set('token', connection.token);
       const ws = new WebSocket(url);
-      socket = ws;
+      ws.binaryType = 'arraybuffer';
+      socketRef.current = ws;
       ws.onopen = () => {
         setLive(true);
         setConnects((n) => n + 1);
         ws.send(JSON.stringify({ t: 'subscribe', examId }));
+        if (watching.current.length > 0) sendWatch(ws, watching.current);
       };
       ws.onmessage = (event) => {
+        if (event.data instanceof ArrayBuffer) return void thumbs.addFrame(event.data);
         const message = typeof event.data === 'string' ? parseTeacherFrame(event.data) : null;
         if (message) setRoster((current) => applyTeacherMessage(current, message));
       };
@@ -59,12 +82,15 @@ export function useRoster(examId: string, enabled = true): RosterView {
     return () => {
       cancelled = true;
       if (retry) clearTimeout(retry);
+      const socket = socketRef.current;
+      socketRef.current = null;
       if (socket) {
         socket.onclose = null;
         socket.close();
       }
+      thumbs.clear();
     };
-  }, [examId, enabled]);
+  }, [examId, enabled, thumbs]);
 
-  return { ...roster, live, connects };
+  return { ...roster, live, connects, thumbs, watchThumbs };
 }

@@ -42,6 +42,8 @@ export interface StudentAppDeps {
     | 'submissions'
     | 'evidence'
     | 'onAgentLost'
+    | 'thumbs'
+    | 'messages'
     | 'now'
     | 'helloTimeoutMs'
     | 'idleMs'

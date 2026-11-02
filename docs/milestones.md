@@ -261,6 +261,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** sim sends synthetic 15 KB JPEGs on `thumb.start`, server latest-frame cache + forwarding, a throwaway grid page.
 - **Accept:** 200 sim students connected, a 30-visible page at 4 s → server CPU under ~15 % on the dev PC, teacher traffic ≈110 KB/s, page switch updates within one interval. Numbers recorded.
 - **Manual test:** run the sim and watch Task Manager while flipping pages.
+- **Built (2026-11-02, with M33):** kept as production code, no throwaway page (the grid is M33). Sim sends a 15 KB displayable JPEG every `intervalMs` on `thumb.start`; server `ThumbRelay` (latest frame per student in memory, start/stop by the union of the visible pages, `GET /thumbs/stats`). **Numbers** (dev PC, i5-13600K, server in its own Node process, 200 sim students in another, one teacher socket): 30 visible at 4 s → server CPU 1–2.5 % of one core, teacher 113 KB/s, 7.5 frames/s, every tile of a new page within 12 ms (a sim student's first frame goes at once; a revisited page is served from the cache within 6 ms); all 200 on one page → 3.7 % of one core, 754 KB/s. After unsubscribing, `streaming` is 0.
 
 ### M30 SPIKE — WebRTC live view on the LAN
 - **Goal:** prove desktop capture → WebRTC → teacher renderer with signaling over the existing WS.
@@ -290,6 +291,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** student main capture (`desktopCapturer`, 320 px JPEG) on `thumb.start/stop`, grid UI with sort and paging, built on the M29 learnings.
 - **Accept:** only visible students send frames (check in server stats). Thumbnails aren't stored.
 - **Manual test:** grid shows the laptop screen updating every ~4 s. Change page → its stream stops.
+- **Built (2026-11-02, with M29):** shared `thumbs.ts` (binary kind 1, `thumb.start/stop`, `thumbs.subscribe`, `ThumbStats`); student main `ThumbCapture` + `captureScreenJpeg` (`desktopCapturer`, primary screen, 320 px, JPEG q50) streams only while asked **and** while monitoring (exam running, student active/locked); teacher `useRoster` takes binary frames into a `ThumbStore` (blob URLs, one tile re-renders per frame), `MonitoringBoard` Table/Screens toggle, `ThumbnailGrid` (30 per page, sort by risk/name/status, only connected students on the visible page stream, a hidden window streams nothing), `ThumbStatsLine` (streaming count and KB/s from `/thumbs/stats`). Laptop check not run.
 
 ### M34 [D] WebRTC live view
 - **Goal:** click a student → a live view panel (max 2 open), built on M30.
@@ -303,6 +305,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** action endpoint + `teacher_actions` log, student popups, lock overlay, deadline recompute, reset clears token/device.
 - **Accept:** each action reaches the student within 1 s and is logged. Reset lets the student join from another PC.
 - **Manual test:** run each action on the laptop student. Reset, then join the same ID from the dev-PC student profile.
+- **Built (2026-11-02, with M29/M33):** shared `StudentActionSchema`/`StudentActionResultSchema`, `lockReason` in `SessionState`, WS `message` (with `sentAt`) and `ack`; migration 0012 `exam_students.lock_reason`; server `StudentActions` (route `POST /exams/:id/students/:sid/actions`, every action in `teacher_actions`), `TeacherMessages` (re-sent after each welcome until acked), `StudentLock` (agent or teacher lock), `SessionHub.kick`; the exam-wide `unlock` stub moved to the student route. Student app: `TeacherMessagePopup` (one at a time, above the lock screen), lock screen text by reason; the sim acks messages. Teacher: `StudentActionsPanel` in the student detail (message/warning, lock/unlock, +5/+10/+15 or custom minutes, end with confirm, reset with confirm). Laptop check not run.
 
 ### M36 Global actions + audit view — **Phase 5 demo**
 - **Goal:** extend all, end all, broadcast, and a teacher action log view.

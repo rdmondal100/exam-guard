@@ -48,6 +48,7 @@ export function buildTeacherApp({ token, ...options }: TeacherAppOptions): Teach
     attachWebSocket(server, {}, (socket, request) =>
       onTeacherSocket(socket, request, {
         hub: live.hub,
+        thumbs: live.thumbs,
         allowed: (req) =>
           c.state.isLoggedIn() &&
           tokenMatches(token, new URL(req.url ?? '', 'http://x').searchParams.get('token')),

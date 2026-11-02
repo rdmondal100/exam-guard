@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { StudentStateSchema } from './join.js';
 
 /** Longest "on for N minutes" window the teacher can set. */
 export const MAX_TERMINAL_MINUTES = 600;
@@ -32,30 +33,54 @@ export const InternetActionSchema = z.object({
 });
 export type InternetAction = z.infer<typeof InternetActionSchema>;
 
-/**
- * Lets a locked student (M24: the agent link was lost) continue. The full per-student lock and
- * unlock arrive with the teacher actions (M35).
- */
-export const UnlockActionSchema = z.object({
-  type: z.literal('unlock'),
-  examStudentId: z.string().min(1).max(100),
-});
-export type UnlockAction = z.infer<typeof UnlockActionSchema>;
-
-/** `POST /exams/:id/actions`. */
+/** `POST /exams/:id/actions`: the exam-wide switches. */
 export const ExamActionSchema = z.discriminatedUnion('type', [
   TerminalActionSchema,
   InternetActionSchema,
-  UnlockActionSchema,
 ]);
 export type ExamAction = z.infer<typeof ExamActionSchema>;
 
-/** Reply to an `unlock` action. */
-export const UnlockActionResultSchema = z.object({
+/** Why a student is locked: their agent link was lost (M24) or the teacher locked them (M35). */
+export const LockReasonSchema = z.enum(['agent', 'teacher']);
+export type LockReason = z.infer<typeof LockReasonSchema>;
+
+/** Longest teacher message or warning, in characters. */
+export const MAX_TEACHER_MESSAGE = 500;
+/** Most minutes one extension adds. */
+export const MAX_EXTENSION_MINUTES = 600;
+
+/**
+ * `POST /exams/:id/students/:sid/actions` (M35). `message` is a popup (`kind: 'warning'` is logged
+ * as `warn`); `end` makes the student's answers final (`ended_by_teacher`); `reset_session` signs
+ * the student out so they can join again from another PC.
+ */
+export const StudentActionSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('message'),
+    kind: z.enum(['info', 'warning']),
+    text: z.string().trim().min(1).max(MAX_TEACHER_MESSAGE),
+  }),
+  z.object({ type: z.literal('lock') }),
+  z.object({ type: z.literal('unlock') }),
+  z.object({
+    type: z.literal('extend'),
+    minutes: z.number().int().min(1).max(MAX_EXTENSION_MINUTES),
+  }),
+  z.object({ type: z.literal('end') }),
+  z.object({ type: z.literal('reset_session') }),
+]);
+export type StudentAction = z.infer<typeof StudentActionSchema>;
+
+/** Reply to a student action: the student afterwards. */
+export const StudentActionResultSchema = z.object({
   ok: z.literal(true),
-  studentState: z.literal('active'),
+  studentState: StudentStateSchema,
+  /** The student's deadline (server time), or `null` before the start. */
+  deadline: z.number().nullable(),
+  /** The student's app was connected and got it at once (otherwise it waits for their next connection). */
+  delivered: z.boolean(),
 });
-export type UnlockActionResult = z.infer<typeof UnlockActionResultSchema>;
+export type StudentActionResult = z.infer<typeof StudentActionResultSchema>;
 
 /** Reply to a `terminal` action: the state students now get. */
 export const TerminalActionResultSchema = z.object({

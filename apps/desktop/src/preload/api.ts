@@ -2,6 +2,7 @@ import type {
   AgentChangeResult,
   AgentServiceStatus,
   AnswerSaveRequest,
+  TeacherMessageToStudent,
   PasteBlockedReport,
   LargeInsertionReport,
   RestoreResult,
@@ -68,6 +69,8 @@ export interface ExamGuardApi {
   onSessionStatus(listener: (status: SessionStatus) => void): () => void;
   /** Exam state (state, deadline, questions) after each welcome and push. Returns an unsubscribe. */
   onSessionExam(listener: (state: SessionState) => void): () => void;
+  /** A teacher message or warning (M35), each id once. Returns an unsubscribe. */
+  onTeacherMessage(listener: (message: TeacherMessageToStudent) => void): () => void;
   /** Student mode: autosave one answer buffer. Main numbers it and re-sends it until the server acks. */
   saveAnswer(request: AnswerSaveRequest): Promise<void>;
   /**

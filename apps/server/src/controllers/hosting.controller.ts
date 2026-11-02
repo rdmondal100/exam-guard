@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { ExamActionSchema, type RosterResponse } from '@examguard/shared';
+import { ExamActionSchema, StudentActionSchema, type RosterResponse } from '@examguard/shared';
 import type { ExamRepo } from '../db/repositories/exam.repo.js';
 import type { ExamStudentRepo } from '../db/repositories/examStudent.repo.js';
 import type { HostingManager } from '../services/hosting/hosting-manager.js';
@@ -53,16 +53,12 @@ export function createHostingController({ hosting, exams, students }: HostingCon
       res.json(body);
     },
 
-    /** Teacher actions: exam-wide `terminal` and `internet`, and `unlock` for one student (M24). */
+    /** The exam-wide switches: `terminal` and `internet`. */
     action(req: IdRequest, res: Response): void {
       const body = ExamActionSchema.safeParse(req.body);
       if (!body.success) throw new ApiError(400, 'invalid_body', 'Unknown or invalid action');
       const action = body.data;
       const examId = req.params.id;
-      if (action.type === 'unlock') {
-        res.json(hosting.locks.unlock(examId, action.examStudentId));
-        return;
-      }
       if (action.type === 'terminal' && !action.enabled && action.minutes !== undefined) {
         throw new ApiError(400, 'invalid_body', 'Minutes only apply when turning it on');
       }
@@ -71,6 +67,13 @@ export function createHostingController({ hosting, exams, students }: HostingCon
           ? hosting.internet.set(examId, action.enabled)
           : hosting.terminal.set(examId, action.enabled, action.minutes),
       );
+    },
+
+    /** One student: message or warning, lock, unlock, extend, end, reset session (M35). */
+    studentAction(req: Request<{ id: string; sid: string }>, res: Response): void {
+      const body = StudentActionSchema.safeParse(req.body);
+      if (!body.success) throw new ApiError(400, 'invalid_body', 'Unknown or invalid action');
+      res.json(hosting.studentActions.run(req.params.id, req.params.sid, body.data));
     },
   };
 }

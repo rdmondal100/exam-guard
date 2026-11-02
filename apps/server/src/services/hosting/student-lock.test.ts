@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ExamState, ServerToStudent } from '@examguard/shared';
+import type { ExamState, LockReason, ServerToStudent } from '@examguard/shared';
 import type { ExamStudent } from '../../db/repositories/examStudent.repo.js';
 import { StudentLock } from './student-lock.js';
 
@@ -11,31 +11,34 @@ function setup(examState: ExamState = 'running', state: ExamStudent['state'] = '
     state,
     tokenHash: null,
     deviceId: null,
+    lockReason: null,
   };
   const sent: ServerToStudent[] = [];
   const changed: string[] = [];
-  const actions: string[] = [];
   const lock = new StudentLock({
     students: {
       findById: (id) => (id === student.id ? student : undefined),
-      lock: () => (student.state === 'active' ? ((student.state = 'locked'), true) : false),
+      lock: (_id, reason: LockReason) =>
+        student.state === 'active'
+          ? ((student.state = 'locked'), (student.lockReason = reason), true)
+          : false,
       unlock: () => (student.state === 'locked' ? ((student.state = 'active'), true) : false),
     },
-    actions: { insert: (a) => actions.push(`${a.action} ${a.examStudentId}`) },
     hub: { sendTo: (_id, m) => sent.push(m), changed: (id) => changed.push(id) },
     examState: (id) => (id === 'e1' ? examState : undefined),
-    now: () => 7,
   });
-  return { lock, student, sent, changed, actions };
+  return { lock, student, sent, changed };
 }
 
 describe('StudentLock', () => {
-  it('locks an active student of a running exam once and tells them', () => {
+  it('locks an active student of a running exam once and tells them why', () => {
     const t = setup();
     t.lock.agentLost('s1');
     t.lock.agentLost('s1');
     expect(t.student.state).toBe('locked');
-    expect(t.sent).toEqual([{ t: 'state', state: { studentState: 'locked', locked: true } }]);
+    expect(t.sent).toEqual([
+      { t: 'state', state: { studentState: 'locked', locked: true, lockReason: 'agent' } },
+    ]);
     expect(t.changed).toEqual(['s1']);
   });
 
@@ -44,23 +47,24 @@ describe('StudentLock', () => {
     hosting.lock.agentLost('s1');
     expect(hosting.sent).toEqual([]);
     const submitted = setup('running', 'submitted');
-    submitted.lock.agentLost('s1');
+    expect(submitted.lock.lock('s1', 'teacher')).toBe(false);
     expect(submitted.student.state).toBe('submitted');
     setup().lock.agentLost('unknown');
   });
 
-  it('unlocks a locked student, logs it and pushes the state', () => {
-    const t = setup('running', 'locked');
-    expect(t.lock.unlock('e1', 's1')).toEqual({ ok: true, studentState: 'active' });
-    expect(t.actions).toEqual(['unlock s1']);
-    expect(t.sent).toEqual([{ t: 'state', state: { studentState: 'active', locked: false } }]);
+  it('locks for the teacher and unlocks, pushing each state', () => {
+    const t = setup();
+    expect(t.lock.lock('s1', 'teacher')).toBe(true);
+    expect(t.lock.unlock('s1')).toBe(true);
+    expect(t.lock.unlock('s1')).toBe(false);
+    expect(t.sent).toEqual([
+      { t: 'state', state: { studentState: 'locked', locked: true, lockReason: 'teacher' } },
+      { t: 'state', state: { studentState: 'active', locked: false, lockReason: null } },
+    ]);
   });
 
-  it('refuses an unknown exam or student (404) and a student who is not locked (409)', () => {
-    const t = setup();
-    expect(() => t.lock.unlock('nope', 's1')).toThrow(expect.objectContaining({ status: 404 }));
-    expect(() => t.lock.unlock('e1', 'x')).toThrow(expect.objectContaining({ status: 404 }));
-    expect(() => t.lock.unlock('e1', 's1')).toThrow(expect.objectContaining({ status: 409 }));
-    expect(t.actions).toEqual([]);
+  it('does not unlock outside a running exam or for an unknown student', () => {
+    expect(setup('ended', 'locked').lock.unlock('s1')).toBe(false);
+    expect(setup('running', 'locked').lock.unlock('x')).toBe(false);
   });
 });

@@ -1,9 +1,11 @@
+import type { LockReason } from '@examguard/shared';
+
 /**
- * Covers the exam while the student is locked (M24: the monitoring agent on this PC stopped
- * answering). Only the teacher can unlock. The timer keeps running and the answers typed so far
- * are already saved, so nothing is lost while it waits.
+ * Covers the exam while the student is locked: the monitoring agent on this PC stopped answering
+ * (M24), or the teacher locked the screen (M35). Only the teacher can unlock. The timer keeps
+ * running and the answers typed so far are already saved, so nothing is lost while it waits.
  */
-export function ExamLockedOverlay() {
+export function ExamLockedOverlay({ reason }: { reason: LockReason }) {
   return (
     <div
       role="alertdialog"
@@ -16,8 +18,9 @@ export function ExamLockedOverlay() {
           Your exam is locked
         </h1>
         <p>
-          The monitoring agent on this computer stopped answering, so the exam was paused for you.
-          Raise your hand: only the teacher can unlock it.
+          {reason === 'teacher'
+            ? 'Your teacher locked your screen. Wait for them, or raise your hand.'
+            : 'The monitoring agent on this computer stopped answering, so the exam was paused for you. Raise your hand: only the teacher can unlock it.'}
         </p>
         <p className="text-sm text-muted">
           Your answers so far are saved. The exam time keeps running.
