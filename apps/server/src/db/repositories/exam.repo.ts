@@ -55,6 +55,11 @@ function toSummary(row: ExamRow): ExamSummary {
 export class ExamRepo {
   constructor(private readonly db: Db) {}
 
+  /** Runs `fn` in one transaction (writes that span repositories, e.g. starting grading). */
+  transaction<T>(fn: () => T): T {
+    return this.db.transaction(fn)();
+  }
+
   list(): ExamSummary[] {
     const rows = this.db
       .prepare(`${SELECT} ORDER BY e.created_at DESC, e.id DESC`)

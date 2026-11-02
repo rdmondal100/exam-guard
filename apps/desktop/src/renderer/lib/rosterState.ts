@@ -1,6 +1,7 @@
 import {
   ServerToTeacherSchema,
   type EventRow,
+  type GradingStatus,
   type HostingCounts,
   type RosterEntry,
   type ServerToTeacher,
@@ -12,9 +13,16 @@ export interface RosterState {
   counts: HostingCounts | null;
   /** Monitoring events pushed live since the socket opened, newest first (M31). */
   alerts: readonly EventRow[];
+  /** The latest `grading.progress` push (M38), `null` until one arrives. */
+  grading: GradingStatus | null;
 }
 
-export const EMPTY_ROSTER: RosterState = { students: new Map(), counts: null, alerts: [] };
+export const EMPTY_ROSTER: RosterState = {
+  students: new Map(),
+  counts: null,
+  alerts: [],
+  grading: null,
+};
 
 /** Parses one teacher WS frame; `null` when it is not a known message. */
 export function parseTeacherFrame(raw: string): ServerToTeacher | null {
@@ -41,6 +49,7 @@ export function applyTeacherMessage(state: RosterState, message: ServerToTeacher
     return { ...state, counts: { joined, inLobby, active, submitted, connected } };
   }
   if (message.t === 'alert') return { ...state, alerts: pushAlert(state.alerts, message.event) };
+  if (message.t === 'grading.progress') return { ...state, grading: message.status };
   return state;
 }
 

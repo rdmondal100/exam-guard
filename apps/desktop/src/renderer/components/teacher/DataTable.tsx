@@ -7,10 +7,18 @@ interface Props<T> {
   empty?: string;
   /** Scrolls inside this height (a Tailwind max-h class) so long lists do not push the page. */
   maxHeight?: string;
+  /** Extra classes for one row, e.g. to highlight it. */
+  rowClassName?: (row: T) => string;
 }
 
 /** Plain read-only TanStack table with the app's styling. */
-export function DataTable<T>({ columns, data, empty = 'Nothing here.', maxHeight }: Props<T>) {
+export function DataTable<T>({
+  columns,
+  data,
+  empty = 'Nothing here.',
+  maxHeight,
+  rowClassName,
+}: Props<T>) {
   const table = useReactTable({ columns, data, getCoreRowModel: getCoreRowModel() });
   if (data.length === 0) return <p className="text-muted">{empty}</p>;
   return (
@@ -29,7 +37,10 @@ export function DataTable<T>({ columns, data, empty = 'Nothing here.', maxHeight
         </thead>
         <tbody>
           {table.getRowModel().rows.map((row) => (
-            <tr key={row.id} className="border-t border-border">
+            <tr
+              key={row.id}
+              className={`border-t border-border ${rowClassName?.(row.original) ?? ''}`}
+            >
               {row.getVisibleCells().map((cell) => (
                 <td key={cell.id} className="px-3 py-2">
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}

@@ -152,6 +152,12 @@ export class SessionHub {
     for (const sub of this.subs) if (sub.examId === examId) sub.send({ t: 'alert', event });
   }
 
+  /** Sends to every teacher socket subscribed to the exam (`grading.progress`, M38). */
+  toExam(examId: string, message: ServerToTeacher): void {
+    if (this.disposed) return;
+    for (const sub of this.subs) if (sub.examId === examId) sub.send(message);
+  }
+
   notice(level: 'info' | 'warn' | 'error', text: string): void {
     for (const sub of this.subs) sub.send({ t: 'notice', level, text });
   }

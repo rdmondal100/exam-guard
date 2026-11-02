@@ -183,7 +183,7 @@ INDEX(exam_id, ts)
 | text | TEXT | terminal output as shown to the student (ANSI kept), ≤16 KB per row |
 UNIQUE(chunk_key); INDEX(exam_student_id, id). At most 1 MB of text per student; later chunks are dropped after one marker.
 
-### grading_jobs
+### grading_jobs (M38, migration 0013)
 | col | type | notes |
 |---|---|---|
 | id | TEXT PK | |
@@ -193,7 +193,9 @@ UNIQUE(chunk_key); INDEX(exam_student_id, id). At most 1 MB of text per student;
 | instruction | TEXT | for re-evaluation |
 | scope_json | TEXT | which exam_student_ids |
 | state | TEXT | `queued, running, done, failed, cancelled` |
-| total, done_count, failed_count | INTEGER | |
+| total, done_count, failed_count | INTEGER | answers in scope, graded, given up on |
+| error | TEXT | why a failed job stopped (e.g. the key was refused) |
+| position | INTEGER | the question's position when the run started |
 | provider, model, prompt_version | TEXT | |
 | created_at, finished_at | INTEGER | |
 INDEX(exam_id, state)
@@ -208,13 +210,14 @@ INDEX(exam_id, state)
 | author | TEXT | `ai, teacher` |
 | status | TEXT | `ok, invalid, error` |
 | criteria_json | TEXT | `[{name,max,awarded,reason}]`, half-units |
-| total | INTEGER | half-units |
+| total | INTEGER | half-units; NULL unless `status = ok` |
 | feedback | TEXT | |
 | teacher_notes_json | TEXT | `[{line,issue}]` |
 | confidence | TEXT | `high, medium, low`, null for teacher |
 | provider, model, prompt_version | TEXT | AI only |
 | instruction | TEXT | re-evaluation instruction, if any |
-| raw_response | TEXT | AI only |
+| raw_response | TEXT | AI only: the reply, or `<kind>: <message>` for a failed call |
+| problems_json | TEXT | why an `invalid` reply was refused (the repair hint) |
 | attempt | INTEGER | |
 | created_at | INTEGER | |
 INDEX(exam_student_id, question_id, id DESC); INDEX(job_id)
@@ -224,8 +227,9 @@ INDEX(exam_student_id, question_id, id DESC); INDEX(job_id)
 |---|---|---|
 | exam_student_id, question_id | TEXT | composite PK, FK → final_answers |
 | status | TEXT | `pending, ai_graded, verified, modified, needs_manual` |
-| current_evaluation_id | INTEGER FK → evaluations, nullable | |
-| total | INTEGER | half-units, denormalised |
+| current_evaluation_id | INTEGER FK → evaluations, nullable | NULL while pending and for `needs_manual` |
+| total | INTEGER | half-units, denormalised, nullable |
+| confidence | TEXT | denormalised from the current evaluation (low-confidence counts) |
 | updated_at | INTEGER | |
 INDEX(question_id, status)
 

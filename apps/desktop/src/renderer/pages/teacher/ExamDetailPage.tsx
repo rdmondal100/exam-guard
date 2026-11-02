@@ -14,6 +14,9 @@ import { QuestionEditor } from '../../components/teacher/QuestionEditor';
 import { QuestionList } from '../../components/teacher/QuestionList';
 import { MonitoringBoard } from '../../components/teacher/MonitoringBoard';
 import { useRoster } from '@/hooks/useRoster';
+import { useGrading } from '@/hooks/useGrading';
+import { GradingPanel } from '../../components/teacher/GradingPanel';
+import { ReviewPanel } from '../../components/teacher/ReviewPanel';
 import { ExamFilesSection } from '../../components/teacher/ExamFilesSection';
 import { HostingPanel } from '../../components/teacher/HostingPanel';
 import { ReadyPanel } from '../../components/teacher/ReadyPanel';
@@ -46,6 +49,13 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
   const live = exam.state === 'hosting' || exam.state === 'running';
   // One teacher socket for the page: roster, counts and live alerts (M31).
   const roster = useRoster(exam.id, live || AFTER_EXAM.has(exam.state));
+  // Grading and review (M38, M39): progress arrives on the same socket.
+  const afterExam = AFTER_EXAM.has(exam.state);
+  const grading = useGrading(exam.id, roster.grading, roster.connects, afterExam);
+  const gradedState = grading.status?.examState;
+  useEffect(() => {
+    if (gradedState && gradedState !== exam.state) void reloadExams();
+  }, [gradedState, exam.state, reloadExams]);
 
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
@@ -175,6 +185,27 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
               This exam has ended. Students can no longer join or submit.
             </p>
           )}
+          {afterExam && (
+            <GradingPanel
+              examId={exam.id}
+              grading={grading}
+              questions={questions}
+              onStateChange={() => void reloadExams()}
+            />
+          )}
+          {(exam.state === 'grading' || exam.state === 'in_review' || exam.state === 'finalized') &&
+            grading.api &&
+            grading.status &&
+            examApi &&
+            questions.length > 0 && (
+              <ReviewPanel
+                examId={exam.id}
+                examApi={examApi}
+                api={grading.api}
+                status={grading.status}
+                questions={questions}
+              />
+            )}
           {(live || AFTER_EXAM.has(exam.state)) && examApi && (
             <MonitoringBoard
               examId={exam.id}

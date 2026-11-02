@@ -331,18 +331,21 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** migrations (grading_jobs, evaluations, answer_grades), `pipeline.ts`, resumable jobs, `grading.progress`, exam states Ended → Grading → In review, grading UI.
 - **Accept:** with FakeProvider fixtures that include 429s and invalid JSON → retries happen, persistent failures become `needs_manual`, and a restart mid-job resumes.
 - **Manual test:** grade a sim exam with the fake provider (dev toggle), then one small real run.
+- **Built (2026-11-03, with M39 and M40):** migration 0013, `grading-service.ts` (queue, states, cancel, resume), `grade-answer.ts` (retries, repair hints, `needs_manual`), `pool.ts`, `provider-source.ts` (key asked from main over the process port; `EG_GEMINI_API_KEY` until M43), dev fake `providers/synthetic.ts` (`EG_FAKE_GRADER=1`), `grading.progress`, the Grading panel. Cancel is `POST /exams/:id/grading/cancel` for the whole exam. Tested with the fixtures (429s, invalid JSON, over max, refused key, restart mid-job, cancel); no real Gemini run yet.
 
 ### M39 Review screens
 - **Goal:** per-question table and per-answer view (student answer + language vs sample, criteria, feedback, line notes, event timeline).
 - **Touches:** review pages, Monaco read-only diff-like side-by-side view, low-confidence highlighting.
 - **Accept:** all statuses are shown, and low confidence is highlighted. The timeline with screenshots is reachable from the answer.
 - **Manual test:** browse a graded exam and open a low-confidence answer.
+- **Built (2026-11-03):** `GET /exams/:id/review/:qid`, `GET /answers/:sid/:qid`, Review panel (question tabs, table sorted needs-manual and low confidence first, rows highlighted), answer view (read-only Monaco side by side with note lines marked, criteria, feedback, line notes, history, the student's event timeline with screenshots, previous/next).
 
 ### M40 Accept / edit + history
 - **Goal:** the teacher accepts or edits marks and feedback, and the full history is kept.
 - **Touches:** accept/edit endpoints writing teacher `evaluations` rows, status transitions (Verified/Modified), history panel.
 - **Accept:** edits can't exceed criterion max. History shows every AI and teacher entry in order.
 - **Manual test:** edit one criterion, accept another answer, and view the history.
+- **Built (2026-11-03):** accept (ai_graded → verified) and edit (→ modified, every guide criterion, at most its max) as teacher rows in `evaluations`; only while in review (finalized refuses); history panel with raw responses and validation problems.
 
 ### M41 [D] Re-evaluate with instruction
 - **Goal:** re-run the AI with a teacher instruction for one student or all students on a question.

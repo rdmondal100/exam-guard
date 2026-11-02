@@ -10,6 +10,7 @@ import {
   type ServerConnection,
   type ServerStatus,
 } from '@examguard/shared';
+import { fakeGraderEnabled, gradingKey } from './grading-key.js';
 import { STABLE_UPTIME_MS, restartDelayMs } from './server-backoff.js';
 
 /** Runs the exam server in a utilityProcess and restarts it when it exits. */
@@ -73,7 +74,12 @@ export class ServerHost {
     child.stderr?.on('data', (chunk: Buffer) => this.write('err', chunk));
     child.on('message', (raw: unknown) => this.onMessage(raw));
     child.on('exit', (code) => this.onExit(child, code));
-    child.postMessage({ type: 'config', token: this.token, dataDir: this.dataDir });
+    child.postMessage({
+      type: 'config',
+      token: this.token,
+      dataDir: this.dataDir,
+      fakeGrader: fakeGraderEnabled(),
+    });
   }
 
   private onMessage(raw: unknown): void {
@@ -84,6 +90,13 @@ export class ServerHost {
       this.setStatus({ state: 'running' });
     } else if (parsed.data.type === 'hosting') {
       this.setSleepBlocked(parsed.data.active);
+    } else if (parsed.data.type === 'grading-key-request') {
+      // The key goes over the process port only, never through the renderer (architecture §7).
+      this.child?.postMessage({
+        type: 'grading-key',
+        requestId: parsed.data.requestId,
+        apiKey: gradingKey(),
+      });
     } else {
       this.write('err', Buffer.from(`start error: ${parsed.data.message}\n`));
     }
