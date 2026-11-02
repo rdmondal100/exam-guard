@@ -151,3 +151,45 @@ describe('SessionHub', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+describe('SessionHub alerts (M31)', () => {
+  const stored = (examId: string, monitoring: boolean, riskAdded: number) => ({
+    examId,
+    monitoring,
+    riskAdded,
+    event: {
+      id: 1,
+      examStudentId: 'a',
+      studentCode: 'a',
+      studentName: 'A',
+      type: 'focus_lost',
+      severity: 'high' as const,
+      serverTs: 1,
+      clientTs: 1,
+      details: {},
+      hasScreenshot: false,
+    },
+  });
+
+  it('pushes monitoring events to the exam’s teachers at once and the risk with the roster', () => {
+    const { repo } = fakeRepo();
+    const hub = new SessionHub({ students: repo, batchMs: 250 });
+    const mine: ServerToTeacher[] = [];
+    const other: ServerToTeacher[] = [];
+    hub.subscribe({ examId: 'e1', send: (m) => mine.push(m) });
+    hub.subscribe({ examId: 'e2', send: (m) => other.push(m) });
+    mine.length = 0;
+    other.length = 0;
+
+    hub.eventStored(stored('e1', true, 8));
+    expect(mine.map((m) => m.t)).toEqual(['alert']);
+    expect(other).toHaveLength(0);
+    vi.advanceTimersByTime(250);
+    expect(mine.map((m) => m.t)).toEqual(['alert', 'roster', 'hosting']);
+
+    mine.length = 0;
+    hub.eventStored(stored('e1', false, 0));
+    vi.advanceTimersByTime(250);
+    expect(mine).toHaveLength(0);
+  });
+});

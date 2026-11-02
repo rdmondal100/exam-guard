@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { HostingInfo, RosterEntry } from '@examguard/shared';
+import type { HostingInfo } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
 import type { ExamApi } from '@/api/examApi';
 import { sortedStudents } from '@/lib/rosterState';
-import { useRoster } from '@/hooks/useRoster';
+import type { RosterView } from '@/hooks/useRoster';
 import { InternetControl } from './InternetControl';
-import { RosterList } from './RosterList';
 import { TerminalControl } from './TerminalControl';
-import { TerminalLogDialog } from './TerminalLogDialog';
 
 interface Props {
   examId: string;
   api: ExamApi;
+  /** The live roster (the page owns the teacher socket). */
+  roster: RosterView;
   /** `running` swaps the Start and Stop buttons for End exam. */
   running: boolean;
   onStart: () => Promise<void>;
@@ -20,13 +20,14 @@ interface Props {
   onEnd: () => Promise<void>;
 }
 
-/** PIN, addresses and fingerprint code for a hosted exam. Joined students update live. */
-export function HostingPanel({ examId, api, running, onStart, onStop, onEnd }: Props) {
+/**
+ * PIN, addresses and fingerprint code for a hosted exam, the counts, and the terminal and internet
+ * switches. The students themselves are on the monitoring board (M32).
+ */
+export function HostingPanel({ examId, api, roster, running, onStart, onStop, onEnd }: Props) {
   const [info, setInfo] = useState<HostingInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
-  const [logOf, setLogOf] = useState<RosterEntry | null>(null);
-  const roster = useRoster(examId);
   const counts = roster.counts;
 
   const [reloads, setReloads] = useState(0);
@@ -141,23 +142,6 @@ export function HostingPanel({ examId, api, running, onStart, onStop, onEnd }: P
           api={api}
           initial={info.internet}
           students={sortedStudents(roster)}
-        />
-      )}
-      <RosterList
-        students={sortedStudents(roster)}
-        onTerminalLog={setLogOf}
-        onUnlock={(s) =>
-          void api.unlock(examId, s.id).catch((e: unknown) => {
-            setError(e instanceof Error ? e.message : String(e));
-          })
-        }
-      />
-      {logOf && (
-        <TerminalLogDialog
-          examId={examId}
-          student={logOf}
-          api={api}
-          onClose={() => setLogOf(null)}
         />
       )}
       <p className="text-sm text-muted">

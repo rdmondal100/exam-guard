@@ -5,6 +5,8 @@ import { EventViewSchema, MAX_EVENTS_PER_PAGE, SeveritySchema } from '@examguard
 export const EventQuerySchema = z.object({
   studentId: z.string().min(1).optional(),
   severity: SeveritySchema.optional(),
+  /** This severity and above (M31). */
+  minSeverity: SeveritySchema.optional(),
   source: z.enum(['agent', 'app', 'server']).optional(),
   view: EventViewSchema.optional(),
   after: z.coerce.number().int().nonnegative().optional(),

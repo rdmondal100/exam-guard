@@ -245,6 +245,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** Monaco `onDidChangeModelContent` + textarea input handler, `large_insertion` event with size.
 - **Accept:** an AutoHotkey or typing-tool burst is flagged. Normal typing and internal paste aren't.
 - **Manual test:** use a text-expander or `SendKeys` script to type 300 chars at once.
+- **Built (2026-11-02, with M31/M32):** shared `LargeInsertionReportSchema` + limits (200 chars, 5 new lines, 25 ms key gap), `large_insertion` app event; renderer `InsertionWatch` (bursts by key `timeStamp`, paste allowance, Monaco and text-box adapters), `useInsertionWatch` + context for the code and Files editors, `usePasteGuard(onAllowed)`; main `insertion:large` IPC with `ThrottledReporter` (was `PasteReporter`); teacher event line. Decisions in decisions.md (M27).
 
 ### M28 Phase 4 integration — **Phase 4 demo**
 - **Goal:** end-to-end on the laptop with the installed service and a standard user account.
@@ -275,12 +276,14 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** `server/services/events/{classify,risk}.ts` + tests (high-severity app list, long-outside threshold), `alert` WS message, alert feed panel with severity filter.
 - **Accept:** Chrome in focus → High. Short Notepad switch → Low. Risk score updates live. Feed filters work.
 - **Manual test:** generate events from the laptop and the sim's scripted events, then filter by High.
+- **Built (2026-11-02, with M27/M32):** server `services/events/{classify,risk,event-recorder}.ts` (replaces `placeholder-severity`); every event is stored through `EventRecorder` (agent evidence, app events, network, duplicate login); `exam_students.risk_score` grows per event; `SessionHub.eventStored` → WS `alert` + roster push; `events?minSeverity`; shared `AlertSchema`, `MONITORING_EVENT_TYPES` (renamed, + insertion/network/duplicate types), `severityAtLeast`, `DEFAULT_HIGH_SEVERITY_APPS`; teacher alert feed with severity and student filters, live over the socket (3 s polling removed). Decisions in decisions.md (M31).
 
 ### M32 Roster + student detail
 - **Goal:** sortable roster (risk, name, status) and a student detail panel with event timeline + screenshots.
 - **Touches:** dashboard page (TanStack Table), student detail drawer, screenshot viewer, outside-time totals.
 - **Accept:** 200 sim rows sort smoothly. The timeline shows screenshots inline.
 - **Manual test:** sort by risk with the sim running and open the laptop student's detail.
+- **Built (2026-11-02, with M27/M31):** `MonitoringBoard` (hosting, running and after the exam; one teacher socket per page through `useRoster(examId, enabled)` with live alerts and a reconnect counter): `RosterTable` (TanStack sorting by risk (default), ID, name, status, outside), `StudentDetail` side panel (facts, Unlock, Terminal log, timeline with lazily loaded `ScreenshotThumb`s), `EventLine`; `RosterList` and `EndedTerminalLogs` removed. The 200-row sim check was not run. Decisions in decisions.md (M32).
 
 ### M33 Thumbnail grid
 - **Goal:** paginated grid (25–30/page) streaming only the visible students.

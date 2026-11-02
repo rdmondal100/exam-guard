@@ -7,6 +7,7 @@ import { ClassListRepo } from '../../db/repositories/classList.repo.js';
 import type { Db } from '../../db/connectDb.js';
 import { initDatabase } from '../../db/connectDb.js';
 import { EventRepo } from '../../db/repositories/event.repo.js';
+import { EventRecorder } from '../events/event-recorder.js';
 import { ExamRepo } from '../../db/repositories/exam.repo.js';
 import { ExamStudentRepo } from '../../db/repositories/examStudent.repo.js';
 import { JoinError, JoinService, hashToken } from './join-service.js';
@@ -49,7 +50,11 @@ beforeEach(() => {
   service = new JoinService({
     exams,
     students: new ExamStudentRepo(db),
-    events: new EventRepo(db),
+    recorder: new EventRecorder({
+      events: new EventRepo(db),
+      students: new ExamStudentRepo(db),
+      exams,
+    }),
     now: () => clock++,
     makeToken: () => `token-number-${++tokens}-padding`,
     target: () => (hosted ? { examId, pin: PIN, fingerprint: FP } : null),

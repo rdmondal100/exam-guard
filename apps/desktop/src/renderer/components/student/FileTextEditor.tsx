@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Editor from '@monaco-editor/react';
+import { useInsertionWatchHandle } from '@/hooks/useInsertionWatch';
 import '@/lib/monaco';
 
 interface Props {
@@ -23,6 +24,10 @@ export default function FileTextEditor({ path, initial }: Props) {
   const latest = useRef(initial);
   const dirty = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Large insertions are watched here too (M27).
+  const insertionWatch = useInsertionWatchHandle();
+  const stopWatch = useRef<(() => void) | null>(null);
+  useEffect(() => () => stopWatch.current?.(), []);
 
   const flush = useCallback(async () => {
     clearTimeout(timer.current);
@@ -49,6 +54,9 @@ export default function FileTextEditor({ path, initial }: Props) {
           // Its own URI space, so it can never share a model with the answer buffers.
           path={`file:///project/${encodeURI(path)}`}
           defaultValue={initial}
+          onMount={(editor) => {
+            stopWatch.current = insertionWatch?.attach(editor) ?? null;
+          }}
           onChange={(next) => {
             latest.current = next ?? '';
             dirty.current = true;

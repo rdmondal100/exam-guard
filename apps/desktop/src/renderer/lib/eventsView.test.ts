@@ -213,3 +213,44 @@ describe('paste_blocked (M25)', () => {
     expect(line.endsWith('…"')).toBe(true);
   });
 });
+
+describe('M27 and M31 event lines', () => {
+  it('describes a large insertion with its size, speed and preview', () => {
+    expect(
+      describeEvent(
+        event('large_insertion', {
+          surface: 'editor',
+          chars: 300,
+          lines: 12,
+          durationMs: 400,
+          preview: 'int main() {',
+        }),
+      ),
+    ).toBe(
+      'Large text insertion: 300 chars, 12 new lines at once in the code editor: "int main() {"',
+    );
+    expect(
+      describeEvent(
+        event('large_insertion', {
+          surface: 'answer',
+          chars: 250,
+          lines: 1,
+          durationMs: 3000,
+          suppressed: 2,
+        }),
+      ),
+    ).toBe('Large text insertion (+2 more): 250 chars, 1 new line in 3 s in an answer box');
+  });
+
+  it('describes the network and duplicate sign-in events', () => {
+    expect(describeEvent(event('network_lost', { since: 1 }))).toBe(
+      'Lost the connection to this PC',
+    );
+    expect(describeEvent(event('network_restored', { downMs: 65_000 }))).toBe(
+      'Connection back after 1 min 5 s',
+    );
+    expect(describeEvent(event('duplicate_login', {}))).toBe(
+      'Someone tried to sign in as this student on another PC',
+    );
+  });
+});

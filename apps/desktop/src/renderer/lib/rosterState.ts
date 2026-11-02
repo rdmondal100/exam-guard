@@ -1,16 +1,20 @@
 import {
   ServerToTeacherSchema,
+  type EventRow,
   type HostingCounts,
   type RosterEntry,
   type ServerToTeacher,
 } from '@examguard/shared';
+import { pushAlert } from './eventFeed';
 
 export interface RosterState {
   students: ReadonlyMap<string, RosterEntry>;
   counts: HostingCounts | null;
+  /** Monitoring events pushed live since the socket opened, newest first (M31). */
+  alerts: readonly EventRow[];
 }
 
-export const EMPTY_ROSTER: RosterState = { students: new Map(), counts: null };
+export const EMPTY_ROSTER: RosterState = { students: new Map(), counts: null, alerts: [] };
 
 /** Parses one teacher WS frame; `null` when it is not a known message. */
 export function parseTeacherFrame(raw: string): ServerToTeacher | null {
@@ -22,7 +26,10 @@ export function parseTeacherFrame(raw: string): ServerToTeacher | null {
   }
 }
 
-/** Merges a push into the roster: `roster` carries the students that changed, by id. */
+/**
+ * Merges a push into the roster: `roster` carries the students that changed, by id; `alert` adds
+ * a live monitoring event.
+ */
 export function applyTeacherMessage(state: RosterState, message: ServerToTeacher): RosterState {
   if (message.t === 'roster') {
     const students = new Map(state.students);
@@ -33,6 +40,7 @@ export function applyTeacherMessage(state: RosterState, message: ServerToTeacher
     const { joined, inLobby, active, submitted, connected } = message;
     return { ...state, counts: { joined, inLobby, active, submitted, connected } };
   }
+  if (message.t === 'alert') return { ...state, alerts: pushAlert(state.alerts, message.event) };
   return state;
 }
 

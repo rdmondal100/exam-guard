@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PasteBlockedReport, SessionState } from '@examguard/shared';
 import { ClipboardClear } from './clipboard-clear.js';
-import { PasteReporter } from './paste-reporter.js';
+import { ThrottledReporter } from './throttled-reporter.js';
 
 const exam = (over: Partial<SessionState> = {}): SessionState => ({
   examState: 'running',
@@ -42,7 +42,7 @@ describe('ClipboardClear', () => {
   });
 });
 
-describe('PasteReporter', () => {
+describe('ThrottledReporter', () => {
   afterEach(() => vi.useRealTimers());
   const report = (chars: number): PasteBlockedReport => ({
     surface: 'editor',
@@ -54,7 +54,7 @@ describe('PasteReporter', () => {
   it('sends the first block at once and folds the next ones into one event per window', () => {
     vi.useFakeTimers();
     const sent: PasteBlockedReport[] = [];
-    const reporter = new PasteReporter((d) => sent.push(d), 2000);
+    const reporter = new ThrottledReporter<PasteBlockedReport>((d) => sent.push(d), 2000);
     reporter.report(report(1));
     reporter.report(report(2));
     reporter.report(report(3));

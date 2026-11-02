@@ -13,6 +13,7 @@ import type { SubmissionService } from '../submissions/submission-service.js';
 import type { AnswerWriter } from '../answers/answer-writer.js';
 import { createDropLogger } from '../answers/drop-logger.js';
 import { EvidenceIntake } from '../screenshots/evidence-intake.js';
+import type { EventRecorder } from '../events/event-recorder.js';
 import { ScreenshotStore } from '../screenshots/screenshot-store.js';
 import type { AnswerRepo } from '../../db/repositories/answer.repo.js';
 import type { EventRepo } from '../../db/repositories/event.repo.js';
@@ -47,6 +48,8 @@ export interface HostingManagerDeps {
   questions: QuestionRepo;
   students: ExamStudentRepo;
   events: EventRepo;
+  /** Classifies, stores and announces every event (M31). */
+  recorder: EventRecorder;
   terminals: TerminalRepo;
   terminalLogs: TerminalLogRepo;
   /** Stored versions (the `saved` list in the session state) and the batch writer for new ones. */
@@ -280,7 +283,7 @@ export class HostingManager {
     const join = new JoinService({
       exams: this.deps.exams,
       students: this.deps.students,
-      events: this.deps.events,
+      recorder: this.deps.recorder,
       now: this.now,
       onChange: (id) => this.deps.hub.changed(id),
       target: () => ({ examId, pin, fingerprint: cert.fingerprint }),
@@ -299,7 +302,7 @@ export class HostingManager {
       live: {
         hub: this.deps.hub,
         students: this.deps.students,
-        events: this.deps.events,
+        recorder: this.deps.recorder,
         terminalLogs: this.deps.terminalLogs,
         answers: {
           exams: this.deps.exams,
@@ -314,10 +317,10 @@ export class HostingManager {
         onAgentLost: (id) => this.locks.agentLost(id),
         submissions: this.deps.submissions,
         evidence: new EvidenceIntake({
+          recorder: this.deps.recorder,
           events: this.deps.events,
           students: this.deps.students,
           screenshots: new ScreenshotStore(this.deps.dataDir),
-          monitoring: (id) => this.deps.exams.get(id)?.monitoring,
           changed: (id) => this.deps.hub.changed(id),
           now: this.now,
         }),

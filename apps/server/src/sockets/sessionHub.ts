@@ -6,6 +6,7 @@ import {
   type ServerToTeacher,
 } from '@examguard/shared';
 import type { ExamStudentRepo } from '../db/repositories/examStudent.repo.js';
+import type { StoredEvent } from '../services/events/event-recorder.js';
 
 /** A live student socket, as the hub sees it. */
 export interface StudentConn {
@@ -133,6 +134,17 @@ export class SessionHub {
     return () => {
       this.subs.delete(sub);
     };
+  }
+
+  /**
+   * An event was stored (M31): a monitoring event goes to the exam's teachers at once as `alert`,
+   * and a risk change is pushed with the next roster batch.
+   */
+  eventStored({ examId, event, monitoring, riskAdded }: StoredEvent): void {
+    if (this.disposed) return;
+    if (riskAdded > 0 && event.examStudentId) this.changed(event.examStudentId);
+    if (!monitoring) return;
+    for (const sub of this.subs) if (sub.examId === examId) sub.send({ t: 'alert', event });
   }
 
   notice(level: 'info' | 'warn' | 'error', text: string): void {

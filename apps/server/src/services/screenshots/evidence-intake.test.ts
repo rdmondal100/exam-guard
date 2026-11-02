@@ -2,11 +2,13 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { encodeScreenshotFrames, type EventReport } from '@examguard/shared';
+import { DEFAULT_MONITORING, encodeScreenshotFrames, type EventReport } from '@examguard/shared';
 import type { Db } from '../../db/connectDb.js';
 import { initDatabase } from '../../db/connectDb.js';
 import { EventRepo } from '../../db/repositories/event.repo.js';
+import { ExamRepo } from '../../db/repositories/exam.repo.js';
 import { ExamStudentRepo } from '../../db/repositories/examStudent.repo.js';
+import { EventRecorder } from '../events/event-recorder.js';
 import { EvidenceIntake } from './evidence-intake.js';
 import { ScreenshotStore } from './screenshot-store.js';
 
@@ -15,7 +17,6 @@ let db: Db;
 let events: EventRepo;
 let students: ExamStudentRepo;
 let changed: string[];
-let highApps: string[];
 let intake: EvidenceIntake;
 
 beforeEach(() => {
@@ -31,12 +32,12 @@ beforeEach(() => {
   events = new EventRepo(db);
   students = new ExamStudentRepo(db);
   changed = [];
-  highApps = [];
+  setApps([]);
   intake = new EvidenceIntake({
+    recorder: new EventRecorder({ events, students, exams: new ExamRepo(db) }),
     events,
     students,
     screenshots: new ScreenshotStore(dir),
-    monitoring: () => ({ highSeverityApps: highApps }),
     changed: (id) => changed.push(id),
     now: () => 777,
   });
@@ -45,6 +46,12 @@ afterEach(() => {
   db.close();
   rmSync(dir, { recursive: true, force: true });
 });
+
+/** The exam's high-severity programs. */
+const setApps = (apps: string[]) =>
+  db
+    .prepare('UPDATE exams SET monitoring_json = ?')
+    .run(JSON.stringify({ ...DEFAULT_MONITORING, highSeverityApps: apps }));
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
 const report = (key: string, over: Partial<EventReport> = {}): EventReport => ({
@@ -83,7 +90,7 @@ describe('EvidenceIntake', () => {
     const [row] = rows();
     expect(row).toMatchObject({
       type: 'focus_lost',
-      severity: 'medium',
+      severity: 'low',
       source: 'agent',
       dedupe_key: 'agent:s1:1',
     });
@@ -107,7 +114,7 @@ describe('EvidenceIntake', () => {
       's1',
       report('s1:20', { type: 'processes_at_start', details: { processes } }),
     );
-    highApps = ['discord.exe'];
+    setApps(['discord.exe']);
     intake.report(
       'e1',
       's1',
@@ -125,7 +132,7 @@ describe('EvidenceIntake', () => {
   });
 
   it('uses the high-severity programs of the exam', () => {
-    highApps = ['chrome.exe'];
+    setApps(['chrome.exe']);
     intake.report('e1', 's1', report('s1:4'));
     expect(rows()[0]?.severity).toBe('high');
   });

@@ -12,15 +12,15 @@ import { useExams } from '@/hooks/useExams';
 import { useQuestions } from '@/hooks/useQuestions';
 import { QuestionEditor } from '../../components/teacher/QuestionEditor';
 import { QuestionList } from '../../components/teacher/QuestionList';
-import { EndedTerminalLogs } from '../../components/teacher/EndedTerminalLogs';
-import { EventsPanel } from '../../components/teacher/EventsPanel';
+import { MonitoringBoard } from '../../components/teacher/MonitoringBoard';
+import { useRoster } from '@/hooks/useRoster';
 import { ExamFilesSection } from '../../components/teacher/ExamFilesSection';
 import { HostingPanel } from '../../components/teacher/HostingPanel';
 import { ReadyPanel } from '../../components/teacher/ReadyPanel';
 
 type Editing = { question?: Question; type?: QuestionType } | null;
 
-/** States after the exam ran: terminal logs stay readable there. */
+/** States after the exam ran: the board (timelines, terminal logs) stays readable there. */
 const AFTER_EXAM: ReadonlySet<ExamSummary['state']> = new Set([
   'ended',
   'grading',
@@ -43,6 +43,9 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const editable = exam.state === 'draft' || exam.state === 'ready';
+  const live = exam.state === 'hosting' || exam.state === 'running';
+  // One teacher socket for the page: roster, counts and live alerts (M31).
+  const roster = useRoster(exam.id, live || AFTER_EXAM.has(exam.state));
 
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
@@ -156,10 +159,11 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
             onBackToDraft={backToDraft}
             onHost={host}
           />
-          {(exam.state === 'hosting' || exam.state === 'running') && examApi && (
+          {live && examApi && (
             <HostingPanel
               examId={exam.id}
               api={examApi}
+              roster={roster}
               running={exam.state === 'running'}
               onStart={startExam}
               onStop={stopHosting}
@@ -171,11 +175,13 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
               This exam has ended. Students can no longer join or submit.
             </p>
           )}
-          {(exam.state === 'running' || AFTER_EXAM.has(exam.state)) && examApi && (
-            <EventsPanel examId={exam.id} api={examApi} />
-          )}
-          {AFTER_EXAM.has(exam.state) && examApi && (
-            <EndedTerminalLogs examId={exam.id} api={examApi} />
+          {(live || AFTER_EXAM.has(exam.state)) && examApi && (
+            <MonitoringBoard
+              examId={exam.id}
+              api={examApi}
+              roster={roster}
+              running={exam.state === 'running'}
+            />
           )}
           <ExamFilesSection examId={exam.id} editable={editable} filesEnabled={exam.filesEnabled} />
           <div className="flex items-center justify-between">

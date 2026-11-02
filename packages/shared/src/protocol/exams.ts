@@ -67,12 +67,39 @@ export type ExamUpdateBody = z.infer<typeof ExamUpdateBodySchema>;
 
 export const ExamsSchema = z.array(ExamSummarySchema);
 
+/**
+ * Programs whose focus or launch is high severity by default (requirements §8.6: browsers,
+ * messaging, remote access, AI desktop apps). The teacher edits the list per exam (M31).
+ */
+export const DEFAULT_HIGH_SEVERITY_APPS: readonly string[] = [
+  'chrome.exe',
+  'msedge.exe',
+  'firefox.exe',
+  'brave.exe',
+  'opera.exe',
+  'vivaldi.exe',
+  'iexplore.exe',
+  'WhatsApp.exe',
+  'WhatsApp.Root.exe',
+  'Telegram.exe',
+  'Discord.exe',
+  'Messenger.exe',
+  'Signal.exe',
+  'Slack.exe',
+  'ms-teams.exe',
+  'Teams.exe',
+  'ChatGPT.exe',
+  'AnyDesk.exe',
+  'TeamViewer.exe',
+  'mstsc.exe',
+];
+
 /** Screenshot policy from requirements §8.5 and the 60 s grace period from §8.4. */
 export const DEFAULT_MONITORING: MonitoringSettings = {
   screenshotOnSwitch: true,
   screenshotOnTitleChange: true,
   screenshotIntervalSec: 20,
   minScreenshotGapSec: 5,
-  highSeverityApps: [],
+  highSeverityApps: [...DEFAULT_HIGH_SEVERITY_APPS],
   graceSec: 60,
 };

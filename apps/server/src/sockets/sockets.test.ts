@@ -23,6 +23,7 @@ interface Entry {
   connected: boolean;
   agentOk?: boolean;
   internetBlocked?: boolean;
+  riskScore?: number;
 }
 interface Msg {
   t: string;
@@ -350,7 +351,7 @@ describe('agent evidence', () => {
     expect(listed.events).toHaveLength(1);
     expect(listed.events[0]).toMatchObject({
       type: 'focus_lost',
-      severity: 'medium',
+      severity: 'high',
       studentCode: '1',
       hasScreenshot: true,
     });
@@ -372,6 +373,38 @@ describe('agent evidence', () => {
         (s) => s.studentCode === '1' && (s as { outsideMs?: number }).outsideMs === 7000,
       ),
     );
+  });
+
+  it('pushes a live alert and the new risk score to the teacher (M31)', async () => {
+    const token = await joinStudent('1');
+    const teacher = await teacherWs();
+    const c = await studentWs();
+    c.ws.send(hello(token));
+    await c.waitFor(() => has(c, 'welcome'));
+    c.ws.send(agentEvent('dev:9'));
+    await teacher.waitFor(() => has(teacher, 'alert'));
+    const alert = last(teacher, 'alert') as unknown as {
+      event: { type: string; severity: string; studentCode: string };
+    };
+    expect(alert.event).toMatchObject({ type: 'focus_lost', severity: 'high', studentCode: '1' });
+    await teacher.waitFor(() => (entry(teacher, '1')?.riskScore ?? 0) > 0);
+
+    // The student's own work is no alert and adds no risk.
+    const before = entry(teacher, '1')?.riskScore;
+    c.ws.send(
+      JSON.stringify({
+        t: 'event',
+        id: 'ev-run',
+        dedupeKey: 'ev-run',
+        clientTs: 6,
+        type: 'run_executed',
+        details: { language: 'c', status: 'ok' },
+      }),
+    );
+    await c.waitFor(() => acked(c, 2));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(teacher.messages.filter((m) => m.t === 'alert')).toHaveLength(1);
+    expect(entry(teacher, '1')?.riskScore).toBe(before);
   });
 
   it('closes a socket that sends a picture before saying hello', async () => {

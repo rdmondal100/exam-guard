@@ -34,6 +34,13 @@ const PASTE_SURFACE_TEXT: Record<string, string> = {
   terminal: ' in the terminal',
 };
 
+/** `: "the first 80 characters…"` of a paste or insertion preview, or nothing. */
+function quote(details: Record<string, unknown>): string {
+  const preview = text(details['preview']).replace(/\s+/g, ' ').trim();
+  if (!preview) return '';
+  return `: "${preview.length > 80 ? `${preview.slice(0, 80)}…` : preview}"`;
+}
+
 /** One line for the teacher's event list. */
 export function describeEvent(event: EventRow): string {
   const { details } = event;
@@ -68,11 +75,7 @@ export function describeEvent(event: EventRow): string {
       const surface = PASTE_SURFACE_TEXT[text(details['surface'])] ?? '';
       const more =
         typeof details['suppressed'] === 'number' ? ` (+${details['suppressed']} more)` : '';
-      const preview = text(details['preview']).replace(/\s+/g, ' ').trim();
-      const quoted = preview
-        ? `: "${preview.length > 80 ? `${preview.slice(0, 80)}…` : preview}"`
-        : '';
-      return `Paste from outside the exam blocked${more} (${chars} chars, ${lines} line${lines === 1 ? '' : 's'})${surface}${quoted}`;
+      return `Paste from outside the exam blocked${more} (${chars} chars, ${lines} line${lines === 1 ? '' : 's'})${surface}${quote(details)}`;
     }
     case 'app_relaunched':
       return 'ExamGuard was closed and the agent started it again';
@@ -94,6 +97,24 @@ export function describeEvent(event: EventRow): string {
       const parent = text(details['parentExe']);
       return `Opened Task Manager${parent ? ` (from ${parent})` : ''}`;
     }
+    case 'large_insertion': {
+      const chars = typeof details['chars'] === 'number' ? details['chars'] : 0;
+      const lines = typeof details['lines'] === 'number' ? details['lines'] : 0;
+      const surface = PASTE_SURFACE_TEXT[text(details['surface'])] ?? '';
+      const more =
+        typeof details['suppressed'] === 'number' ? ` (+${details['suppressed']} more)` : '';
+      const ms = typeof details['durationMs'] === 'number' ? details['durationMs'] : 0;
+      const when = ms < 1000 ? 'at once' : `in ${formatDuration(ms)}`;
+      return `Large text insertion${more}: ${chars} chars, ${lines} new line${lines === 1 ? '' : 's'} ${when}${surface}${quote(details)}`;
+    }
+    case 'network_lost':
+      return 'Lost the connection to this PC';
+    case 'network_restored': {
+      const down = details['downMs'];
+      return `Connection back${typeof down === 'number' ? ` after ${formatDuration(down)}` : ''}`;
+    }
+    case 'duplicate_login':
+      return 'Someone tried to sign in as this student on another PC';
     case 'agent_lost': {
       const reason = text(details['reason']);
       return `Monitoring agent lost, student locked${reason ? `: ${reason}` : ''}`;

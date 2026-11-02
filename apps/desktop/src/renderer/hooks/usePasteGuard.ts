@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { checkPaste, PasteGuard, watchClipboardWrites } from '@/lib/pasteGuard';
 
 /** Selected text in the focused text box, or else on the page. */
@@ -16,10 +16,16 @@ function selectedText(): string {
 /**
  * The paste guard of the exam window (M25): text copied or cut inside the window may be pasted
  * anywhere in it; any other text pasted or dropped is blocked and reported to main, which logs a
- * `paste_blocked` event. Returns when the last paste was blocked, for a short notice.
+ * `paste_blocked` event. `onAllowed` hears each paste or drop let through (the large-insertion
+ * watch, M27). Returns when the last paste was blocked, for a short notice.
  */
-export function usePasteGuard(): number | null {
+export function usePasteGuard(onAllowed?: (text: string) => void): number | null {
   const [blockedAt, setBlockedAt] = useState<number | null>(null);
+  // Read through a ref so a new callback does not re-register the listeners.
+  const allowedRef = useRef(onAllowed);
+  useEffect(() => {
+    allowedRef.current = onAllowed;
+  }, [onAllowed]);
 
   useEffect(() => {
     const guard = new PasteGuard();
@@ -32,7 +38,7 @@ export function usePasteGuard(): number | null {
     };
     const block = (e: Event, text: string) => {
       const report = checkPaste(guard, text, e.target);
-      if (!report) return;
+      if (!report) return allowedRef.current?.(text);
       e.preventDefault();
       e.stopImmediatePropagation();
       setBlockedAt(Date.now());
@@ -48,7 +54,7 @@ export function usePasteGuard(): number | null {
     const onDrop = (e: DragEvent) => {
       if (dragInside) {
         dragInside = false;
-        return;
+        return allowedRef.current?.(e.dataTransfer?.getData('text/plain') ?? '');
       }
       block(e, e.dataTransfer?.getData('text/plain') ?? '');
     };

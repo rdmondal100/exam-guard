@@ -8,6 +8,7 @@ import {
   type EvidenceKind,
 } from './agent-pipe.js';
 import { ExamStateSchema } from './exams.js';
+import { EventRowSchema } from './events.js';
 import { StudentQuestionSchema } from './questions.js';
 import { InternetStateSchema, TerminalStateSchema } from './actions.js';
 import { ExamFilesSchema } from './exam-files.js';
@@ -62,6 +63,8 @@ export const APP_EVENT_TYPES = [
   'paste_blocked',
   /** The agent link stayed down while the exam ran; the server locks the student (M24). */
   'agent_lost',
+  /** A burst of text far faster than typing, not an allowed paste (M27). */
+  'large_insertion',
 ] as const;
 export const AppEventTypeSchema = z.enum(APP_EVENT_TYPES);
 export type AppEventType = z.infer<typeof AppEventTypeSchema>;
@@ -259,10 +262,19 @@ export const ServerNoticeSchema = z.object({
 });
 export type ServerNotice = z.infer<typeof ServerNoticeSchema>;
 
+/**
+ * A monitoring event was just stored for the subscribed exam (M31): the live alert feed. Only
+ * events of the monitoring view (`isMonitoringEvent`) are pushed; the new risk score follows as
+ * `roster`.
+ */
+export const AlertSchema = z.object({ t: z.literal('alert'), event: EventRowSchema });
+export type Alert = z.infer<typeof AlertSchema>;
+
 export const ServerToTeacherSchema = z.discriminatedUnion('t', [
   RosterUpdateSchema,
   HostingStatusSchema,
   ServerNoticeSchema,
+  AlertSchema,
 ]);
 export type ServerToTeacher = z.infer<typeof ServerToTeacherSchema>;
 

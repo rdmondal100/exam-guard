@@ -1,6 +1,7 @@
 import type { EventRepo } from '../../db/repositories/event.repo.js';
 import type { ExamRepo } from '../../db/repositories/exam.repo.js';
 import type { ExamStudentRepo } from '../../db/repositories/examStudent.repo.js';
+import type { EventRecorder } from '../events/event-recorder.js';
 
 /** A student that stays disconnected this long has lost the network (architecture §6). */
 export const NETWORK_GRACE_MS = 10_000;
@@ -10,7 +11,9 @@ const NETWORK_TYPES = ['network_lost', 'network_restored'] as const;
 export interface ConnectionEventsDeps {
   students: Pick<ExamStudentRepo, 'findById'>;
   exams: Pick<ExamRepo, 'get'>;
-  events: EventRepo;
+  events: Pick<EventRepo, 'lastOfTypes'>;
+  /** Classifies and stores the events (M31). */
+  recorder: Pick<EventRecorder, 'record'>;
   now?: () => number;
   graceMs?: number;
 }
@@ -20,7 +23,7 @@ export interface ConnectionEventsDeps {
  * after the grace period and only while the exam runs, so a blip, the lobby and the end of the
  * exam stay quiet. Whether a student is "lost" is read back from the events table, not kept in
  * memory, so a server restart in the middle of an outage still produces the restored event.
- * The severity is `low` until the classifier (M31).
+ * The classifier makes `network_lost` medium and `network_restored` low (M31).
  */
 export class ConnectionEvents {
   private readonly timers = new Map<string, NodeJS.Timeout>();
@@ -63,11 +66,10 @@ export class ConnectionEvents {
     if (this.deps.exams.get(student.examId)?.state !== 'running') return;
     // One outage is one event, however many times the socket closes during it.
     if (this.deps.events.lastOfTypes(studentId, NETWORK_TYPES)?.type === 'network_lost') return;
-    this.deps.events.insert({
+    this.deps.recorder.record({
       examId: student.examId,
       examStudentId: studentId,
       type: 'network_lost',
-      severity: 'low',
       source: 'server',
       details: { since },
       serverTs: this.now(),
@@ -82,11 +84,10 @@ export class ConnectionEvents {
     if (last?.type !== 'network_lost') return;
     const since = typeof last.details.since === 'number' ? last.details.since : last.serverTs;
     const at = this.now();
-    this.deps.events.insert({
+    this.deps.recorder.record({
       examId: student.examId,
       examStudentId: studentId,
       type: 'network_restored',
-      severity: 'low',
       source: 'server',
       details: { since, downMs: Math.max(0, at - since) },
       serverTs: at,

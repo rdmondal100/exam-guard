@@ -3,38 +3,15 @@
 Read this first every session, and keep it under about 8 KB. Decisions are in `docs/decisions.md` (grep it, never read it whole), the session log in `docs/session-log.md` (append only), old reviews in `docs/archive/`.
 
 ## Current status
-- **Stage 1, Phase 4 (Monitoring agent) in progress.** Last milestone built: M26 (second monitor + Task Manager / secure desktop) on 2026-11-02; automated tests pass, its laptop test is not run yet (steps in `docs/milestones.md` M26). **Manual tests still owed:** M25 (paste guard, dev PC) and the M22 laptop Chrome run. The user reported the M24 test finished on 2026-11-02 (details not recorded).
+- **Stage 1, Phase 4 code done except M28 (laptop integration); Phase 5 started.** Last batch built 2026-11-02: M27 (large insertion), M31 (classifier, risk score, live alert feed), M32 (sortable roster + student detail); the user now asks for several milestones per session and no manual tests. Automated tests pass. **Manual checks never run:** M22 laptop Chrome run, M25 paste guard, M26 laptop screens, M27 typing tool, M31/M32 dashboard with the sim (M24 reported finished by the user).
 - **Manual checks:** the user ran M02–M13 (2026-10-21) and M14–M21b (2026-10-25: real WFP filters and the installed agent service on the laptop) and reports them good; details were not recorded. Phase 2 accepted.
 - **Refactor 2026-11-01 (not a milestone):** Express 5 layered server, Turborepo, Vite-style renderer folders (decisions.md, "Refactor 2026-11-01").
-- **Next step:** run the M26 laptop test (with the M22 Chrome trial in the same sitting) and the M25 test, then M27 (large text insertion). If the M21a/M21b laptop run is repeated, write what it shows (established connections, DHCP, IPv6, group policy, lease, killed service) into `docs/decisions.md` (M21a) and architecture §3.
+- **Next step:** M28 Phase 4 integration (laptop, installed service; fixes only + architecture §3), then the spikes M29 (thumbnails for 200 sim students) and M30 (WebRTC), then M33. If the M21a/M21b laptop run is repeated, write what it shows into `docs/decisions.md` (M21a) and architecture §3.
 - **Agent notes:** rebuild and reinstall the service (`pnpm dev:student:agent`) to get each new agent feature (M22–M26). In dev the relaunch only renders with a built app (limitations). Without the service: `EG_FAKE_AGENT_FAIL=lose` tries the lock, `EG_FAKE_AGENT_MONITORS=2` the roster screen chip.
 
 ## Completed milestones
 `M## name — date — note`. Details: `docs/decisions.md` (grep the milestone), `docs/milestones.md`, `git log`.
-- M01 Monorepo skeleton — 2026-10-18 — pnpm + Cargo workspaces, lint/test/clippy gates.
-- M02 Electron shell + mode selection — 2026-10-18 — secure window, per-profile `mode.json`, student install lock.
-- M03 Exam server in a utilityProcess — 2026-10-18 — loopback API with token (Fastify, Express since 2026-11-01), supervised restart.
-- M04 SQLite + migrations — 2026-10-18 — better-sqlite3, migration runner, `0001_init`.
-- M05 Teacher password and login gate — 2026-10-19 — scrypt, lockout, setup/login screens.
-- M06 Class list CSV import — 2026-10-19 — server-side parse with dry-run preview.
-- M07 Exam CRUD and settings — 2026-10-19 — exam state machine, duplicate.
-- M08 Question editor — 2026-10-19 — Monaco editor, criteria, `/ready` check.
-- M09 Hosting: TLS, PIN, student listener — 2026-10-20 — self-signed cert, 6-digit PIN, sleep blocker.
-- M10 Discovery + manual IP + cert pinning — 2026-10-20 — mDNS, fingerprint pin before any byte.
-- M11 Student join + monitoring notice — 2026-10-20 — PIN + ID, one session per student.
-- M12 WebSocket session, lobby, student-sim v1 — 2026-10-20 — roster, 200 sim students in 1.4 s.
-- M13 Start + exam client shell — 2026-10-21 — shared deadline, fullscreen non-closable window, timer.
-- M14 Monaco + per-language code buffers — 2026-10-21.
-- M15 Local code runner (C, C++, JS) — 2026-10-21 — Rust `eg-runner` Job Object, WinLibs gcc.
-- M15a SPIKE Exam terminal — 2026-10-21 — node-pty + xterm.js, pacman/npm shims.
-- M15b Teacher terminal toggle + command logging — 2026-10-22.
-- M15c Workspace runs, own flags, one run console — 2026-10-22.
-- M15d Python runtime + pip — 2026-10-23.
-- M15e Project folder for Run + Files panel — 2026-10-23.
-- M15f Teacher-provided exam files — 2026-10-23.
-- M16 Autosave + versions — 2026-10-23.
-- M17 Offline queue, reconnect, same-PC resume — 2026-10-23.
-- M18 Submit, auto-submit, receipt, student-sim v2 — 2026-10-23 — the Phase 3 demo.
+- M01–M18 (Phases 1–3, 2026-10-18 → 10-23): monorepo, Electron shell, server in utilityProcess, SQLite, teacher login, class lists, exams, questions, hosting/TLS/PIN, discovery + pinning, join, WS lobby + sim, exam client, Monaco buffers, code runner + terminal (M15–M15f), autosave, offline resume, submit + receipt. Notes per milestone: `docs/milestones.md` ("Built" lines) and `git log`.
 - M19 SPIKE Agent service + helper — 2026-10-23 — laptop run passed 2026-10-23.
 - M20 Agent service skeleton + helper lifecycle — 2026-10-23.
 - M21 Pipe link, heartbeat, system check — 2026-10-24 — `/join` needs a passing check.
@@ -45,6 +22,9 @@ Read this first every session, and keep it under about 8 KB. Decisions are in `d
 - M24 Evidence buffer, app relaunch, tamper lock — 2026-11-02 — AES-GCM disk buffer per student, service relaunches the app as the user (`app_relaunched`), `agent_lost` after 5 s → server `locked` + teacher Unlock stub; test finished per the user.
 - M25 Clipboard and paste control — 2026-11-02 — clipboard cleared at start, renderer paste guard over the whole exam window (outside paste/drop blocked, `paste_blocked` medium with a 200-char preview), teacher list via `events?view=monitoring`.
 - M26 Second monitor + Task Manager / secure desktop — 2026-11-02 — helper polls screens + input desktop (500 ms), `monitor_changed` / `secure_desktop` / `taskmgr_opened`, roster "N screens"; M19 spike report panel removed; laptop test pending.
+- M27 Large text insertion — 2026-11-02 — renderer burst watch by key time stamps (>200 chars or 5 new lines, keys ≤25 ms apart), allowed pastes exempt, `large_insertion` high.
+- M31 Event classification, risk score, alert feed — 2026-11-02 — `EventRecorder` (classifier, risk points per event), default high-severity app list, WS `alert`, live feed with severity filter.
+- M32 Roster + student detail — 2026-11-02 — `MonitoringBoard`: TanStack roster sorted by risk, student side panel with timeline and inline screenshots; 200-row sim check not run.
 
 ## Known issues / open questions
 Cleaned up 2026-10-25 after the user's report that the manual tests up to M21b are good; what is left is real limitations and later work (details of that pass: `docs/decisions.md`, "Known-issues pass").
@@ -60,8 +40,8 @@ Moved to `docs/limitations.md` (read it when you touch that area).
 
 ### Deferred to a named milestone
 - **M45 (agent logs):** the agent's logs still go to `%ProgramData%\ExamGuard\spike` (move them with the installer).
-- **M31+ (classifier):** the severity of agent events is a placeholder (`services/screenshots/placeholder-severity.ts`); `riskScore` is still 0; Alt-Tab/Start-menu `explorer.exe` flicker should be filtered there; a WS `alert` push to the teacher is not built (the Events list polls every 3 s).
-- **M31+ (events UI):** `run_executed`, `network_*` and terminal events are stored but not shown to the teacher; to look, query the `events` table. The roster has no terminal column and the dashboard does not show where the terminal switch took effect (add with the monitor grid, M26+/M32).
+- **Classifier follow-ups (no owner yet):** Alt-Tab/Start-menu `explorer.exe` flicker is not filtered; thresholds and risk points are constants until M43.
+- **Events UI (M33+):** `run_executed` and terminal events are stored but not in the monitoring view; the roster has no terminal column and the dashboard does not show where the terminal switch took effect.
 - **M35–M36 (teacher actions):** the teacher lock action (M24 built only `unlock` for an agent loss); a teacher "reset session" (clears `token_hash` and `device_id` so a student can re-join from another PC) and extensions (`extension_sec`, `global_extension_sec` are read in the deadline but nothing sets them yet). A WS rate limit per token is not built (the 512 KB frame limit and 15 s idle drop are in).
 - **M43 (Settings):** regenerate the cert (`loadOrCreateCert(dir, true)` exists; until then the "mismatched cert is refused" case is covered only by the `tls-pin` unit tests), change password (`POST /auth/change`, no password recovery in Stage 1), the data folder is not movable (M44), run limits as a Settings value instead of the `RUN_LIMITS` constants, a teacher value for the long wall time.
 - **M45–M46 (installer):** packaged-build checks (DevTools off, real HKLM `InstallType` key) need the installer; the server entry path (`import.meta.resolve`) and asar-unpack for better-sqlite3 `.node`, node-pty's `conpty.dll` / `OpenConsole.exe`; trim Monaco to `editor.api` plus c/cpp/js (about 7 MB of chunks) and trim MSYS2 base (225 MB); package `eg-runner`, MinGW and Python (installer plus about 50 MB for Python) and check the gcc specs fix under `C:\Program Files`; the installed agent only reads the allowed program from the registry, so until the installer writes `AppPath` a packaged student app cannot link to the agent (M21).

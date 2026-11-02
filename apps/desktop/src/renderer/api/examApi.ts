@@ -17,6 +17,7 @@ import {
   type HostingInfo,
   type InternetActionResult,
   type ServerConnection,
+  type Severity,
   type StartResult,
   type TerminalActionResult,
   type TerminalLogResponse,
@@ -58,6 +59,8 @@ export interface ExamApi {
 
 export interface EventsOptions {
   studentId?: string;
+  /** This severity and above (M31). */
+  minSeverity?: Severity;
   after?: number;
   limit?: number;
 }
@@ -112,9 +115,10 @@ export function createExamApi(connection: ServerConnection, fetchFn: FetchFn = f
         TerminalLogResponseSchema,
       ),
     events: async (id, options = {}) => {
-      // The agent's evidence plus the app events the teacher must see (agent_lost, paste_blocked).
+      // The agent's evidence plus the app and server events the teacher must see (M25, M31).
       const query = new URLSearchParams({ view: 'monitoring' });
       if (options.studentId) query.set('studentId', options.studentId);
+      if (options.minSeverity) query.set('minSeverity', options.minSeverity);
       if (options.after !== undefined) query.set('after', String(options.after));
       if (options.limit !== undefined) query.set('limit', String(options.limit));
       const response = await call(

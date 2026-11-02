@@ -1,25 +1,23 @@
-import type { PasteBlockedReport } from '@examguard/shared';
-
-/** At most one `paste_blocked` event this often. */
-export const PASTE_EVENT_GAP_MS = 2_000;
+/** At most one `paste_blocked` (M25) or `large_insertion` (M27) event this often. */
+export const INPUT_EVENT_GAP_MS = 2_000;
 
 /**
- * Turns blocked pastes into `paste_blocked` events without flooding the teacher: the first one goes
- * at once, the ones in the next `gapMs` are folded into a single event at the end of that window
- * (the newest report, `suppressed` = how many others it stands for).
+ * Turns repeated reports into events without flooding the teacher: the first one goes at once,
+ * the ones in the next `gapMs` are folded into a single event at the end of that window (the newest
+ * report, `suppressed` = how many others it stands for).
  */
-export class PasteReporter {
+export class ThrottledReporter<T extends { suppressed?: number }> {
   private windowOpen = false;
-  private latest: PasteBlockedReport | null = null;
+  private latest: T | null = null;
   private folded = 0;
   private timer: NodeJS.Timeout | null = null;
 
   constructor(
-    private readonly send: (details: PasteBlockedReport) => void,
-    private readonly gapMs = PASTE_EVENT_GAP_MS,
+    private readonly send: (details: T) => void,
+    private readonly gapMs = INPUT_EVENT_GAP_MS,
   ) {}
 
-  report(report: PasteBlockedReport): void {
+  report(report: T): void {
     if (!this.windowOpen) {
       this.send(report);
       this.open();
