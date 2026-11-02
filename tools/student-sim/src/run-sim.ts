@@ -20,6 +20,16 @@ export interface SimRun {
   saves(): SaveStats;
   /** Receipts, submits, drops and receipt problems summed over all students. */
   submits(): SubmitTotals;
+  /** Grid thumbnails summed over all students (M29). */
+  thumbs(): ThumbTotals;
+}
+
+export interface ThumbTotals {
+  /** Students streaming right now. */
+  streaming: number;
+  starts: number;
+  sent: number;
+  bytes: number;
 }
 
 export interface SubmitTotals {
@@ -111,6 +121,17 @@ export function runSim(
         total.sent += one.sent;
         total.acked += one.acked;
         total.pending += one.pending;
+      }
+      return total;
+    },
+    thumbs: () => {
+      const total: ThumbTotals = { streaming: 0, starts: 0, sent: 0, bytes: 0 };
+      for (const s of students) {
+        const one = s.thumbStats();
+        if (one.streaming) total.streaming += 1;
+        total.starts += one.starts;
+        total.sent += one.sent;
+        total.bytes += one.bytes;
       }
       return total;
     },

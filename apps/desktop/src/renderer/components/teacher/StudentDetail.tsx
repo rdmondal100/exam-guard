@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { EventRow, RosterEntry } from '@examguard/shared';
+import type { EventRow, ExamState, RosterEntry } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
 import type { ExamApi } from '@/api/examApi';
 import { formatDuration } from '@/lib/eventsView';
@@ -9,14 +9,15 @@ import { useEvents } from '@/hooks/useEvents';
 import type { RosterView } from '@/hooks/useRoster';
 import { EventLine } from './EventLine';
 import { ScreenshotDialog } from './ScreenshotDialog';
+import { StudentActionsPanel } from './StudentActionsPanel';
 
 interface Props {
   examId: string;
   api: ExamApi;
   student: RosterEntry;
   roster: RosterView;
-  /** Shows Unlock for a locked student while the exam runs (M24). */
-  onUnlock?: (student: RosterEntry) => void;
+  /** Which actions fit (M35). */
+  examState: ExamState;
   onTerminalLog: (student: RosterEntry) => void;
   onClose: () => void;
 }
@@ -30,7 +31,7 @@ export function StudentDetail({
   api,
   student: s,
   roster,
-  onUnlock,
+  examState,
   onTerminalLog,
   onClose,
 }: Props) {
@@ -61,16 +62,6 @@ export function StudentDetail({
           <p className="font-mono text-muted">{s.studentCode}</p>
         </div>
         <div className="ml-auto flex gap-2">
-          {onUnlock && s.state === 'locked' && (
-            <Button
-              variant="outline"
-              className="h-8 border-red-300 px-3 text-red-700"
-              title="The monitoring agent on this PC was lost. Check the PC, then let the student continue."
-              onClick={() => onUnlock(s)}
-            >
-              Unlock
-            </Button>
-          )}
           <Button variant="outline" className="h-8 px-3" onClick={() => onTerminalLog(s)}>
             Terminal log
           </Button>
@@ -87,6 +78,7 @@ export function StudentDetail({
           </div>
         ))}
       </dl>
+      <StudentActionsPanel examId={examId} examState={examState} api={api} student={s} />
       <h3 className="font-semibold">Timeline</h3>
       {error && (
         <p role="alert" className="text-red-700">

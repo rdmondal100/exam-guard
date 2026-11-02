@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { RosterEntry } from '@examguard/shared';
+import type { ExamState, RosterEntry } from '@examguard/shared';
 import type { ExamApi } from '@/api/examApi';
 import { sortedStudents } from '@/lib/rosterState';
 import type { RosterView } from '@/hooks/useRoster';
@@ -7,30 +7,29 @@ import { EventsPanel } from './EventsPanel';
 import { RosterTable } from './RosterTable';
 import { StudentDetail } from './StudentDetail';
 import { TerminalLogDialog } from './TerminalLogDialog';
+import { ThumbnailGrid } from './ThumbnailGrid';
+
+type View = 'table' | 'grid';
 
 interface Props {
   examId: string;
   api: ExamApi;
   roster: RosterView;
-  /** The exam is running: a locked student can be unlocked. */
-  running: boolean;
+  /** Which per-student actions fit (M35). */
+  examState: ExamState;
 }
 
 /**
- * The live dashboard (M31, M32): the sortable roster, the alert feed, and a student's detail with
- * their timeline when a row or a name in the feed is clicked.
+ * The live dashboard (M31, M32, M33): the sortable roster or the thumbnail grid of screens, the
+ * alert feed, and a student's detail with their timeline when a row, a tile or a name in the feed
+ * is clicked.
  */
-export function MonitoringBoard({ examId, api, roster, running }: Props) {
+export function MonitoringBoard({ examId, api, roster, examState }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [logOf, setLogOf] = useState<RosterEntry | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<View>('table');
   const students = sortedStudents(roster);
   const selected = selectedId ? roster.students.get(selectedId) : undefined;
-
-  const unlock = (s: RosterEntry) =>
-    void api.unlock(examId, s.id).catch((e: unknown) => {
-      setError(e instanceof Error ? e.message : String(e));
-    });
 
   return (
     <>
@@ -44,17 +43,39 @@ export function MonitoringBoard({ examId, api, roster, running }: Props) {
             {students.length} joined · click a row for the timeline
           </span>
           {!roster.live && <span className="text-sm text-amber-700">(reconnecting…)</span>}
+          <div
+            role="group"
+            aria-label="View"
+            className="ml-auto flex overflow-hidden rounded-md border border-border text-sm"
+          >
+            {(['table', 'grid'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={view === v}
+                onClick={() => setView(v)}
+                className={`px-3 py-1 ${view === v ? 'bg-primary text-primary-foreground' : 'bg-card hover:bg-background'}`}
+              >
+                {v === 'table' ? 'Table' : 'Screens'}
+              </button>
+            ))}
+          </div>
         </div>
-        {error && (
-          <p role="alert" className="text-red-700">
-            {error}
-          </p>
+        {view === 'table' ? (
+          <RosterTable
+            students={students}
+            selectedId={selectedId}
+            onSelect={(s) => setSelectedId(s.id === selectedId ? null : s.id)}
+          />
+        ) : (
+          <ThumbnailGrid
+            api={api}
+            roster={roster}
+            students={students}
+            selectedId={selectedId}
+            onSelect={(s) => setSelectedId(s.id === selectedId ? null : s.id)}
+          />
         )}
-        <RosterTable
-          students={students}
-          selectedId={selectedId}
-          onSelect={(s) => setSelectedId(s.id === selectedId ? null : s.id)}
-        />
       </section>
       <EventsPanel
         examId={examId}
@@ -70,7 +91,7 @@ export function MonitoringBoard({ examId, api, roster, running }: Props) {
           api={api}
           student={selected}
           roster={roster}
-          {...(running ? { onUnlock: unlock } : {})}
+          examState={examState}
           onTerminalLog={setLogOf}
           onClose={() => setSelectedId(null)}
         />

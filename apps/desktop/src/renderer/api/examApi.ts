@@ -9,7 +9,8 @@ import {
   StartResultSchema,
   TerminalActionResultSchema,
   TerminalLogResponseSchema,
-  UnlockActionResultSchema,
+  ThumbStatsSchema,
+  StudentActionResultSchema,
   type EventRow,
   type ExamCreateBody,
   type ExamSummary,
@@ -18,9 +19,12 @@ import {
   type InternetActionResult,
   type ServerConnection,
   type Severity,
+  type StudentAction,
+  type StudentActionResult,
   type StartResult,
   type TerminalActionResult,
   type TerminalLogResponse,
+  type ThumbStats,
 } from '@examguard/shared';
 import { jpegDataUrl } from '../lib/eventsView';
 import { apiError, call, TeacherApiError, type FetchFn } from './teacherApi';
@@ -47,14 +51,19 @@ export interface ExamApi {
   setTerminal(id: string, enabled: boolean, minutes?: number): Promise<TerminalActionResult>;
   /** The student internet switch, hosting or running only. `allowed: false` blocks it. */
   setInternet(id: string, allowed: boolean): Promise<InternetActionResult>;
-  /** Lets a locked student continue (M24). Rejects `invalid_state` when they are not locked. */
-  unlock(id: string, studentId: string): Promise<void>;
+  /**
+   * One student (M35): message or warning, lock, unlock, extend, end, reset session. Rejects
+   * `invalid_state` when the action does not fit the student or exam, `not_found` for a stranger.
+   */
+  studentAction(id: string, studentId: string, action: StudentAction): Promise<StudentActionResult>;
   /** One student's terminal events and transcript, in any exam state. */
   terminalLog(id: string, studentId: string): Promise<TerminalLogResponse>;
   /** What the agents saw, newest first. `after` is the id of the newest event already shown. */
   events(id: string, options?: EventsOptions): Promise<EventRow[]>;
   /** The picture of an event as a `data:` URL; rejects `not_found` when it has none. */
   screenshot(eventId: number): Promise<string>;
+  /** The thumbnail relay's counters (M33). */
+  thumbStats(): Promise<ThumbStats>;
 }
 
 export interface EventsOptions {
@@ -101,12 +110,14 @@ export function createExamApi(connection: ServerConnection, fetchFn: FetchFn = f
         type: 'internet',
         enabled: allowed,
       }),
-    unlock: async (id, studentId) => {
-      await call(connection, fetchFn, `${path(id)}/actions`, UnlockActionResultSchema, {
-        type: 'unlock',
-        examStudentId: studentId,
-      });
-    },
+    studentAction: (id, studentId, action) =>
+      call(
+        connection,
+        fetchFn,
+        `${path(id)}/students/${encodeURIComponent(studentId)}/actions`,
+        StudentActionResultSchema,
+        action,
+      ),
     terminalLog: (id, studentId) =>
       call(
         connection,
@@ -129,6 +140,7 @@ export function createExamApi(connection: ServerConnection, fetchFn: FetchFn = f
       );
       return response.events;
     },
+    thumbStats: () => call(connection, fetchFn, '/thumbs/stats', ThumbStatsSchema),
     screenshot: async (eventId) => {
       const res = await fetchFn(`${connection.baseUrl}/api/v1/screenshots/${eventId}`, {
         headers: { [TEACHER_TOKEN_HEADER]: connection.token },

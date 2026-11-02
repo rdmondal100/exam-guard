@@ -15,5 +15,6 @@ export function hostingRoutes(deps: HostingControllerDeps, requireLogin: Request
   router.get('/exams/:id/hosting', requireLogin, hosting.info);
   router.get('/exams/:id/roster', requireLogin, hosting.roster);
   router.post('/exams/:id/actions', requireLogin, hosting.action);
+  router.post('/exams/:id/students/:sid/actions', requireLogin, hosting.studentAction);
   return router;
 }

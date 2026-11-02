@@ -99,6 +99,7 @@ UNIQUE(question_id, name)
 | token_hash | TEXT | SHA-256 of the session token. NULL = no active session |
 | device_id | TEXT | bound on first join. Cleared by teacher reset |
 | pinned_fp | TEXT | cert fingerprint the student trusted |
+| lock_reason | TEXT, nullable | `agent` (M24) or `teacher` (M35) while `locked` (migration 0012) |
 | extension_sec | INTEGER DEFAULT 0 | |
 | joined_at, started_at, submitted_at, last_seen_at | INTEGER | |
 | submission_hash | TEXT | the receipt hash (M18): SHA-256 of the canonical JSON of `[{questionId, language, sha256}]` sorted by `questionId` (see `final_answers`); set with `submitted_at` when the answers become final, also for `ended_by_teacher` |

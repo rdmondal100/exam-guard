@@ -4,6 +4,7 @@ import { PROTOCOL_VERSION, STUDENT_PING_MS, WS_CLOSE, type Receipt } from '@exam
 import { agent, postJson, type Target } from './http.js';
 import { receiptProblem } from './sim-receipt.js';
 import { SimSaves, type SaveStats } from './sim-saves.js';
+import { SimThumbs, type ThumbStats } from './sim-thumbs.js';
 
 export type SimState = 'joining' | 'connecting' | 'connected' | 'failed';
 
@@ -59,9 +60,18 @@ export class SimStudent {
   private readonly problems: string[] = [];
   private disconnects = 0;
   private refused = 0;
+  /** Grid thumbnails while the teacher has this student on the visible page (M29). */
+  private readonly thumbs: SimThumbs;
 
   constructor(private readonly options: SimStudentOptions) {
     this.saves = options.autosaveMs ? new SimSaves(options.autosaveMs, options.code) : null;
+    let seed = 0;
+    for (const ch of options.code) seed = (seed * 31 + ch.charCodeAt(0)) & 0x7f;
+    this.thumbs = new SimThumbs(seed);
+  }
+
+  thumbStats(): ThumbStats & { streaming: boolean } {
+    return { ...this.thumbs.totals(), streaming: this.thumbs.streaming };
   }
 
   saveStats(): SaveStats {
@@ -112,6 +122,7 @@ export class SimStudent {
     if (this.dropTimer) clearTimeout(this.dropTimer);
     this.submitTimer = this.dropTimer = null;
     this.saves?.detach();
+    this.thumbs.stop();
     this.ws?.removeAllListeners();
     this.ws?.terminate();
     this.ws = null;
@@ -139,6 +150,8 @@ export class SimStudent {
       const message = JSON.parse(data.toString()) as {
         t?: string;
         clientSeq?: number;
+        intervalMs?: number;
+        id?: string;
         state?: { questions?: unknown; saved?: unknown; receipt?: Receipt | null };
         receipt?: Receipt;
       };
@@ -146,6 +159,12 @@ export class SimStudent {
         return this.saves?.ack(message.clientSeq);
       }
       if (message.t === 'submit.result' && message.receipt) return this.gotReceipt(message.receipt);
+      // Teacher messages are acked so the server stops re-sending them (M35).
+      if (message.t === 'message' && message.id) {
+        return ws.send(JSON.stringify({ t: 'ack', id: message.id }));
+      }
+      if (message.t === 'thumb.start') return this.thumbs.start(ws, message.intervalMs ?? 4000);
+      if (message.t === 'thumb.stop') return this.thumbs.stop();
       if (message.t === 'submit.refused') {
         this.refused += 1;
         return;
@@ -181,6 +200,7 @@ export class SimStudent {
       if (this.pingTimer) clearInterval(this.pingTimer);
       this.pingTimer = null;
       this.saves?.detach();
+      this.thumbs.stop();
       if (this.dropTimer) clearTimeout(this.dropTimer);
       this.dropTimer = null;
       if (this.stopped || this.receipt) return;

@@ -33,12 +33,15 @@ import { loadOrCreateCert } from '../../utils/tls/cert.js';
 import { lanAddresses } from '../../utils/tls/lanAddresses.js';
 import { advertiseOverMdns, type Advertise } from './mdns-advertiser.js';
 import type { SessionHub } from '../../sockets/sessionHub.js';
+import type { ThumbRelay } from '../../sockets/thumbRelay.js';
 import type { ConnectionEvents } from './connection-events.js';
 import { generatePin } from '../../utils/pin.js';
 import { HostingError } from './hosting-error.js';
 import { DeadlineWatcher } from './deadline-watcher.js';
 import { InternetSwitch } from './internet-switch.js';
+import { StudentActions } from './student-actions.js';
 import { StudentLock } from './student-lock.js';
+import { TeacherMessages } from './teacher-messages.js';
 import { TerminalSwitch } from './terminal-switch.js';
 
 export { HostingError };
@@ -68,6 +71,8 @@ export interface HostingManagerDeps {
   hub: SessionHub;
   /** Raises `network_lost` / `network_restored`; the hub feeds it. Cleared when hosting stops. */
   connections?: ConnectionEvents;
+  /** Grid thumbnail fan-out (M29, M33). Its cache is dropped when hosting stops. */
+  thumbs?: ThumbRelay;
   dataDir: string;
   /** Tests use 0 (any free port) and 127.0.0.1. */
   port?: number;
@@ -100,8 +105,12 @@ export class HostingManager {
   readonly terminal: TerminalSwitch;
   /** The teacher's internet switch. */
   readonly internet: InternetSwitch;
-  /** The tamper lock and the teacher's unlock (M24). */
+  /** The tamper lock (M24) and the teacher's lock and unlock (M35). */
   readonly locks: StudentLock;
+  /** Teacher messages and warnings, re-sent until the student's app shows them (M35). */
+  readonly messages: TeacherMessages;
+  /** The teacher's per-student actions (M35). */
+  readonly studentActions: StudentActions;
   private readonly watcher: DeadlineWatcher;
 
   constructor(private readonly deps: HostingManagerDeps) {
@@ -121,8 +130,18 @@ export class HostingManager {
     });
     this.locks = new StudentLock({
       students: deps.students,
+      hub: deps.hub,
+      examState: (id) => deps.exams.get(id)?.state,
+    });
+    this.messages = new TeacherMessages({ hub: deps.hub, now: this.now });
+    this.studentActions = new StudentActions({
+      students: deps.students,
       actions: deps.actions,
       hub: deps.hub,
+      locks: this.locks,
+      messages: this.messages,
+      submissions: deps.submissions,
+      deadlines: deps.deadlines,
       examState: (id) => deps.exams.get(id)?.state,
       now: this.now,
     });
@@ -234,6 +253,7 @@ export class HostingManager {
       questions: running ? questions.list(student.examId).map(toStudentQuestion) : undefined,
       saved: this.deps.answers.savedFor(studentId),
       locked: state === 'locked',
+      lockReason: state === 'locked' ? (student.lockReason ?? 'agent') : null,
       monitoring: running,
       ...(running && exam ? { monitoringPolicy: monitorPolicyFor(exam.monitoring) } : {}),
       terminal: this.terminal.state(student.examId),
@@ -273,6 +293,8 @@ export class HostingManager {
     this.deps.students.resetConnections();
     // The sockets closed because we stopped, not because a student lost the network.
     this.deps.connections?.reset();
+    this.deps.thumbs?.reset();
+    this.messages.reset();
     this.deps.onActive?.(false);
   }
 
@@ -325,6 +347,8 @@ export class HostingManager {
           now: this.now,
         }),
         examId: () => (this.active?.examId === examId ? examId : null),
+        ...(this.deps.thumbs ? { thumbs: this.deps.thumbs } : {}),
+        messages: this.messages,
         now: this.now,
         ...this.deps.socketTimings,
       },

@@ -39,10 +39,20 @@ function main(): void {
       options.submitAfterMs || options.disconnectEveryMs || u.receipts > 0
         ? ` · receipts ${u.receipts} (own ${u.selfSubmitted}, auto ${u.receipts - u.selfSubmitted}) · drops ${u.disconnects} · bad receipts ${u.problems.length}`
         : '';
+    const th = run.thumbs();
+    const kbPerSec = (th.bytes - lastThumbBytes) / 1024 / ((Date.now() - lastReport) / 1000);
+    lastThumbBytes = th.bytes;
+    lastReport = Date.now();
+    const thumbs =
+      th.starts > 0
+        ? ` · thumbs streaming ${th.streaming} sent ${th.sent} (${kbPerSec.toFixed(0)} KB/s)`
+        : '';
     console.log(
-      `connected ${c.connected}/${c.total} · joining ${c.joining} · reconnecting ${c.connecting} · failed ${c.failed}${saves}${submits}`,
+      `connected ${c.connected}/${c.total} · joining ${c.joining} · reconnecting ${c.connecting} · failed ${c.failed}${saves}${submits}${thumbs}`,
     );
   };
+  let lastThumbBytes = 0;
+  let lastReport = Date.now();
   const timer = setInterval(report, 5000);
   void run.settled().then(() => {
     report();

@@ -13,7 +13,8 @@ function contentSecurityPolicy(): string {
     "default-src 'self'",
     dev ? `script-src 'self' 'unsafe-inline'` : "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data:",
+    // Grid thumbnails arrive as binary frames and are shown through blob: URLs (M33).
+    "img-src 'self' data: blob:",
     // Monaco runs its language services in blob: workers and ships its icon font as a data: URI.
     "worker-src 'self' blob:",
     "font-src 'self' data:",

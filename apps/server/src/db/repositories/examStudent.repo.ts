@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import type { HostingCounts, RosterEntry, StudentState } from '@examguard/shared';
+import type { HostingCounts, LockReason, RosterEntry, StudentState } from '@examguard/shared';
 import type { Db } from '../connectDb.js';
 import { newId } from '../../utils/ids.js';
 
@@ -16,6 +16,8 @@ export interface ExamStudent {
   state: StudentState;
   tokenHash: string | null;
   deviceId: string | null;
+  /** Set while `locked` (M35). */
+  lockReason: LockReason | null;
 }
 
 interface Row {
@@ -25,6 +27,7 @@ interface Row {
   state: StudentState;
   token_hash: string | null;
   device_id: string | null;
+  lock_reason: LockReason | null;
 }
 
 const toStudent = (row: Row): ExamStudent => ({
@@ -34,10 +37,11 @@ const toStudent = (row: Row): ExamStudent => ({
   state: row.state,
   tokenHash: row.token_hash,
   deviceId: row.device_id,
+  lockReason: row.lock_reason,
 });
 
 const SELECT =
-  'SELECT id, exam_id, class_student_id, state, token_hash, device_id FROM exam_students';
+  'SELECT id, exam_id, class_student_id, state, token_hash, device_id, lock_reason FROM exam_students';
 
 /** `exam_students`: one row per student per exam, the session. */
 export class ExamStudentRepo {
@@ -129,13 +133,34 @@ export class ExamStudentRepo {
     return ids;
   }
 
-  /** `active` → `locked` (M24: the agent link was lost). Returns whether the row changed. */
-  lock(id: string): boolean {
+  /** `active` → `locked`, by the agent link loss (M24) or the teacher (M35). Returns whether the row changed. */
+  lock(id: string, reason: LockReason): boolean {
     return (
       this.db
-        .prepare("UPDATE exam_students SET state = 'locked' WHERE id = ? AND state = 'active'")
-        .run(id).changes > 0
+        .prepare(
+          "UPDATE exam_students SET state = 'locked', lock_reason = ? WHERE id = ? AND state = 'active'",
+        )
+        .run(reason, id).changes > 0
     );
+  }
+
+  /** Adds personal extra time (M35). */
+  addExtension(id: string, seconds: number): void {
+    this.db
+      .prepare('UPDATE exam_students SET extension_sec = extension_sec + ? WHERE id = ?')
+      .run(Math.max(0, Math.round(seconds)), id);
+  }
+
+  /**
+   * Signs the student out (M35): the token stops working and the device is no longer bound, so
+   * they can join again from another PC. The state and answers stay.
+   */
+  resetSession(id: string): void {
+    this.db
+      .prepare(
+        'UPDATE exam_students SET token_hash = NULL, device_id = NULL, pinned_fp = NULL WHERE id = ?',
+      )
+      .run(id);
   }
 
   /** Adds an event's points to the student's risk score (M31). */
@@ -149,7 +174,9 @@ export class ExamStudentRepo {
   unlock(id: string): boolean {
     return (
       this.db
-        .prepare("UPDATE exam_students SET state = 'active' WHERE id = ? AND state = 'locked'")
+        .prepare(
+          "UPDATE exam_students SET state = 'active', lock_reason = NULL WHERE id = ? AND state = 'locked'",
+        )
         .run(id).changes > 0
     );
   }

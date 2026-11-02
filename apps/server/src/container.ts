@@ -24,6 +24,7 @@ import { HostingManager, type HostingManagerDeps } from './services/hosting/host
 import { ScreenshotStore } from './services/screenshots/screenshot-store.js';
 import { SubmissionService } from './services/submissions/submission-service.js';
 import { SessionHub } from './sockets/sessionHub.js';
+import { ThumbRelay } from './sockets/thumbRelay.js';
 
 export interface ContainerOptions {
   db: Db;
@@ -50,6 +51,7 @@ export interface ContainerOptions {
     | 'examFiles'
     | 'hub'
     | 'connections'
+    | 'thumbs'
   > & {
     /** How long a student may be offline before `network_lost`; tests shorten it. */
     networkGraceMs?: number;
@@ -61,6 +63,8 @@ export interface Live {
   hosting: HostingManager;
   hub: SessionHub;
   connections: ConnectionEvents;
+  /** Grid thumbnails: who streams, the latest frame per student, the counters (M29, M33). */
+  thumbs: ThumbRelay;
 }
 
 /** Every repository and service of the teacher server, built once from the database. */
@@ -124,11 +128,17 @@ export function createContainer({ db, now, filesDir, hosting }: ContainerOptions
     now,
     ...(networkGraceMs === undefined ? {} : { graceMs: networkGraceMs }),
   });
+  // Built before the hub it reads from; it only calls the hub later, on socket traffic.
+  let thumbs: ThumbRelay | null = null;
   const hub = new SessionHub({
     students,
     now,
-    onConnection: (id, connected) => connections.onConnection(id, connected),
+    onConnection: (id, connected) => {
+      connections.onConnection(id, connected);
+      if (!connected) thumbs?.onDisconnect(id);
+    },
   });
+  thumbs = new ThumbRelay({ students: hub, ...(now ? { now } : {}) });
   // Live alert feed and the roster's risk score (M31).
   recorder.onStored((stored) => hub.eventStored(stored));
   const answerWriter = new AnswerWriter(answers, {
@@ -164,9 +174,10 @@ export function createContainer({ db, now, filesDir, hosting }: ContainerOptions
     actions: new TeacherActionRepo(db),
     examFiles,
     hub,
+    thumbs,
     now,
     ...managerOptions,
   });
-  container.live = { hosting: manager, hub, connections };
+  container.live = { hosting: manager, hub, connections, thumbs };
   return container;
 }

@@ -10,7 +10,12 @@ import {
 import { ExamStateSchema } from './exams.js';
 import { EventRowSchema } from './events.js';
 import { StudentQuestionSchema } from './questions.js';
-import { InternetStateSchema, TerminalStateSchema } from './actions.js';
+import {
+  InternetStateSchema,
+  LockReasonSchema,
+  MAX_TEACHER_MESSAGE,
+  TerminalStateSchema,
+} from './actions.js';
 import { ExamFilesSchema } from './exam-files.js';
 import { AnswerAckSchema, AnswerSaveSchema, SavedAnswerSchema } from './answers.js';
 import {
@@ -19,6 +24,7 @@ import {
   SubmitResultSchema,
   SubmitSchema,
 } from './submission.js';
+import { ThumbStartSchema, ThumbStopSchema, ThumbsSubscribeSchema } from './thumbs.js';
 
 /** Idle limit on a student socket and the client's ping period (docs/protocol.md §3). */
 export const STUDENT_IDLE_MS = 15_000;
@@ -121,7 +127,12 @@ export const InternetStatusMessageSchema = z.object({
 });
 export type InternetStatusMessage = z.infer<typeof InternetStatusMessageSchema>;
 
+/** The student app showed a server command (a teacher message, M35); the server stops re-sending it. */
+export const AckSchema = z.object({ t: z.literal('ack'), id: z.string().min(1).max(100) });
+export type Ack = z.infer<typeof AckSchema>;
+
 export const StudentMessageSchema = z.discriminatedUnion('t', [
+  AckSchema,
   HelloSchema,
   PingSchema,
   EventReportSchema,
@@ -146,6 +157,8 @@ export const SessionStateSchema = z.object({
   /** The newest stored version of each buffer; the client continues its `clientSeq` after these. */
   saved: z.array(SavedAnswerSchema),
   locked: z.boolean(),
+  /** Why the student is locked; absent or `null` when not locked (M35). */
+  lockReason: LockReasonSchema.nullable().optional(),
   monitoring: z.boolean(),
   /** What the agent does while the exam runs; set together with `monitoring: true` (M22). */
   monitoringPolicy: MonitorPolicySchema.optional(),
@@ -194,6 +207,20 @@ export type WsError = z.infer<typeof WsErrorSchema>;
 export const EventAckSchema = z.object({ t: z.literal('event.ack'), id: z.string() });
 export type EventAck = z.infer<typeof EventAckSchema>;
 
+/**
+ * A teacher message or warning (M35), shown as a popup. Re-sent after every `welcome` until the
+ * student app answers `ack`; the app shows each id once.
+ */
+export const TeacherMessageToStudentSchema = z.object({
+  t: z.literal('message'),
+  id: z.string().min(1).max(100),
+  kind: z.enum(['info', 'warning']),
+  text: z.string().min(1).max(MAX_TEACHER_MESSAGE),
+  /** Server time the teacher sent it. */
+  sentAt: z.number(),
+});
+export type TeacherMessageToStudent = z.infer<typeof TeacherMessageToStudentSchema>;
+
 /** The transcript chunk is stored (or was already, or was dropped over the cap). */
 export const TranscriptAckSchema = z.object({ t: z.literal('transcript.ack'), key: z.string() });
 export type TranscriptAck = z.infer<typeof TranscriptAckSchema>;
@@ -208,6 +235,9 @@ export const ServerToStudentSchema = z.discriminatedUnion('t', [
   SubmitResultSchema,
   SubmitRefusedSchema,
   WsErrorSchema,
+  ThumbStartSchema,
+  ThumbStopSchema,
+  TeacherMessageToStudentSchema,
 ]);
 export type ServerToStudent = z.infer<typeof ServerToStudentSchema>;
 
@@ -216,7 +246,10 @@ export type ServerToStudent = z.infer<typeof ServerToStudentSchema>;
 export const SubscribeSchema = z.object({ t: z.literal('subscribe'), examId: z.string().min(1) });
 export type Subscribe = z.infer<typeof SubscribeSchema>;
 
-export const TeacherMessageSchema = z.discriminatedUnion('t', [SubscribeSchema]);
+export const TeacherMessageSchema = z.discriminatedUnion('t', [
+  SubscribeSchema,
+  ThumbsSubscribeSchema,
+]);
 export type TeacherMessage = z.infer<typeof TeacherMessageSchema>;
 
 export const RosterEntrySchema = z.object({

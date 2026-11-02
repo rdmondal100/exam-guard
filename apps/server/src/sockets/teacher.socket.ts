@@ -2,12 +2,18 @@ import type { IncomingMessage } from 'node:http';
 import type { RawData, WebSocket } from 'ws';
 import { TeacherMessageSchema, type ServerToTeacher } from '@examguard/shared';
 import type { SessionHub } from './sessionHub.js';
+import type { ThumbRelay, ThumbViewer } from './thumbRelay.js';
 
 export interface TeacherSocketDeps {
   hub: SessionHub;
+  /** Grid thumbnails for the visible page (M29, M33). */
+  thumbs?: Pick<ThumbRelay, 'watch' | 'unwatch'>;
   /** Per-launch token (query string) and a logged-in teacher, the same bar as the HTTP routes. */
   allowed: (request: IncomingMessage) => boolean;
 }
+
+/** A teacher socket this far behind skips thumbnails until it catches up. */
+const MAX_BUFFERED_BYTES = 2 * 1024 * 1024;
 
 const text = (data: RawData): string =>
   Array.isArray(data)
@@ -22,7 +28,7 @@ const text = (data: RawData): string =>
 export function onTeacherSocket(
   socket: WebSocket,
   request: IncomingMessage,
-  { hub, allowed }: TeacherSocketDeps,
+  { hub, thumbs, allowed }: TeacherSocketDeps,
 ): void {
   if (!allowed(request)) {
     socket.close(4401, 'unauthorized');
@@ -31,6 +37,12 @@ export function onTeacherSocket(
   let unsubscribe: (() => void) | null = null;
   const send = (message: ServerToTeacher) => {
     if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
+  };
+  const viewer: ThumbViewer = {
+    sendBinary: (frame) => {
+      if (socket.readyState !== socket.OPEN || socket.bufferedAmount > MAX_BUFFERED_BYTES) return;
+      socket.send(frame, { binary: true });
+    },
   };
 
   socket.on('message', (data: RawData) => {
@@ -41,10 +53,15 @@ export function onTeacherSocket(
       return socket.close(4400, 'bad_frame');
     }
     if (!parsed.success) return socket.close(4400, 'bad_frame');
+    const message = parsed.data;
+    if (message.t === 'thumbs.subscribe') return thumbs?.watch(viewer, message.examStudentIds);
     // A new subscribe replaces the previous one.
     unsubscribe?.();
-    unsubscribe = hub.subscribe({ examId: parsed.data.examId, send });
+    unsubscribe = hub.subscribe({ examId: message.examId, send });
   });
-  socket.on('close', () => unsubscribe?.());
+  socket.on('close', () => {
+    unsubscribe?.();
+    thumbs?.unwatch(viewer);
+  });
   socket.on('error', () => socket.terminate());
 }

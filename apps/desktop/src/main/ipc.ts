@@ -39,6 +39,8 @@ import { createSecretBox } from './resume/secret-box.js';
 import { registerRunnerIpc } from './runner/runner-ipc.js';
 import type { ServerHost } from './server-host.js';
 import { registerTerminalIpc } from './terminal/terminal-ipc.js';
+import { captureScreenJpeg } from './thumbs/screen-capture.js';
+import { ThumbCapture } from './thumbs/thumb-capture.js';
 
 export interface AppState {
   profile: string;
@@ -122,6 +124,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
   let monitor: MonitorController | null = null;
   let tamper: TamperWatch | null = null;
   let clipboardClear: ClipboardClear | null = null;
+  let thumbs: ThumbCapture | null = null;
   // A failed session, or a link that stayed down past the deadline, must not trap the student.
   const exitWatch = new SessionExitWatch({ release: () => examLock.setActive(false) });
   app.once('will-quit', () => exitWatch.stop());
@@ -144,6 +147,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
       internet?.onExam(exam);
       monitor?.onExam(exam);
       tamper?.setWorking(state.mode === 'student' && wantsMonitoring(exam));
+      thumbs?.setMonitoring(state.mode === 'student' && wantsMonitoring(exam));
       clipboardClear?.onExam(exam);
       resume.hooks?.onExam(exam);
       for (const win of BrowserWindow.getAllWindows()) win.webContents.send(IPC.sessionExam, exam);
@@ -153,7 +157,19 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
       monitor?.reset();
       tamper?.setWorking(false);
       clipboardClear?.reset();
+      thumbs?.stop();
+      thumbs?.setMonitoring(false);
     },
+    onThumbs: (command) => thumbs?.setCommand(command),
+    onTeacherMessage: (message) => {
+      for (const win of BrowserWindow.getAllWindows())
+        win.webContents.send(IPC.sessionMessage, message);
+    },
+  });
+  // Grid thumbnails while the teacher has this student on the visible page (M33).
+  thumbs = new ThumbCapture({
+    capture: captureScreenJpeg,
+    send: (jpeg, capturedAt) => session.sendThumb(jpeg, capturedAt),
   });
   // The teacher's internet switch: applied through the agent, confirmed back to the server.
   internet = new InternetController(agentLink, session);

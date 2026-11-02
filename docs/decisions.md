@@ -360,3 +360,13 @@ ode_moduleselectron` to `node_modules.pnpmelectron@x...`; Windows reports the re
 
 **M32** — same session.
 - 2026-11-02 — The exam page owns one teacher socket (`useRoster`), shared by HostingPanel (counts, switches) and the new `MonitoringBoard`, which stays after the exam ends; the terminal log moved into the student detail, so `RosterList` and `EndedTerminalLogs` were removed. Timeline screenshots load when scrolled into view. — M32.
+
+**M29** — built with M33 in one session (several milestones at once, as the user asked).
+- 2026-11-02 — The spike code is kept (no throwaway grid page): `ThumbRelay` sits beside the hub, keyed by teacher socket; the union of all visible pages decides who streams. `thumb.start` goes after the `welcome` (not on attach) so a client never sees it before its session state. Numbers are in milestones M29. — M29.
+
+**M33** — same session.
+- 2026-11-02 — The student gates capture on the server's monitoring state (no thumbnails in the lobby or after submitting), so the server needs no exam-state check. Frames are not queued offline. Thumbnails live in a `ThumbStore` outside React state (blob URLs; CSP `img-src` now allows `blob:`), so one frame re-renders one tile. Offline students on the page are not asked; a minimized teacher window unsubscribes. — M33.
+
+**M35** — same session as M29/M33.
+- 2026-11-02 — No per-student `serverSeq`: the lock lives in the student row (with `lock_reason`, migration 0012) and reaches a reconnecting app in `welcome`; messages are an in-memory queue per student, re-sent after each `welcome` until `ack`. The app acks when main receives a message (before the popup is closed). The exam-wide `{type:'unlock'}` action was removed; all per-student actions use `/students/:sid/actions`. — M35.
+- 2026-11-02 — Reset clears `token_hash`, `device_id` and `pinned_fp` but keeps the state and answers, and closes the socket with 4401; the student re-joins with the PIN and continues (a late reset of a working student keeps their deadline). Extending only adds time. — M35.

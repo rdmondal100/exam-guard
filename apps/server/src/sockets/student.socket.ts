@@ -1,5 +1,6 @@
 import type { RawData, WebSocket } from 'ws';
 import {
+  BINARY_KIND_THUMB,
   HELLO_TIMEOUT_MS,
   STUDENT_IDLE_MS,
   StudentMessageSchema,
@@ -15,8 +16,10 @@ import type { TerminalLogRepo } from '../db/repositories/terminalLog.repo.js';
 import { hashToken } from '../services/join/join-service.js';
 import type { EvidenceIntake } from '../services/screenshots/evidence-intake.js';
 import type { EventRecorder } from '../services/events/event-recorder.js';
+import type { TeacherMessages } from '../services/hosting/teacher-messages.js';
 import type { SubmissionService } from '../services/submissions/submission-service.js';
 import type { SessionHub, StudentConn } from './sessionHub.js';
+import type { ThumbRelay } from './thumbRelay.js';
 
 export interface StudentSocketDeps {
   hub: SessionHub;
@@ -30,6 +33,10 @@ export interface StudentSocketDeps {
   submissions: Pick<SubmissionService, 'submit'>;
   /** What the agent saw: screenshot chunks (binary frames) and the events that name them (M22). */
   evidence: Pick<EvidenceIntake, 'chunk' | 'report' | 'forget'>;
+  /** Grid thumbnails (binary kind 1) and who is asked to stream them (M29, M33). */
+  thumbs?: Pick<ThumbRelay, 'frame' | 'onWelcome'>;
+  /** Teacher messages: re-sent after each welcome until the app acks them (M35). */
+  messages?: Pick<TeacherMessages, 'onWelcome' | 'ack'>;
   /** The student's app lost its agent link (`agent_lost`, M24): lock them. */
   onAgentLost?: (studentId: string) => void;
   /** The state the client should show; also activates a late joiner. */
@@ -82,9 +89,11 @@ export function onStudentSocket(socket: WebSocket, deps: StudentSocketDeps): voi
   socket.on('message', (data: RawData, isBinary: boolean) => {
     lastFrame = now();
     if (isBinary) {
-      // The only binary frames are screenshot chunks, and only from a signed-in student.
+      // Binary frames are thumbnails and screenshot chunks, and only from a signed-in student.
       if (!studentId) return refuse(WS_CLOSE.badHello, 'hello_first', 'Send hello first');
-      return deps.evidence.chunk(studentId, bytes(data));
+      const frame = bytes(data);
+      if (frame[0] === BINARY_KIND_THUMB) return deps.thumbs?.frame(studentId, frame);
+      return deps.evidence.chunk(studentId, frame);
     }
     let raw: unknown;
     try {
@@ -122,6 +131,10 @@ export function onStudentSocket(socket: WebSocket, deps: StudentSocketDeps): voi
       // Stored first, so the lock always has its event; a resend locks nothing again.
       if (stored && message.type === 'agent_lost') deps.onAgentLost?.(studentId);
       return send({ t: 'event.ack', id: message.id });
+    }
+    if (message.t === 'ack') {
+      if (!studentId) return refuse(WS_CLOSE.badHello, 'hello_first', 'Send hello first');
+      return deps.messages?.ack(studentId, message.id);
     }
     if (message.t === 'agent.status') {
       if (!studentId) return refuse(WS_CLOSE.badHello, 'hello_first', 'Send hello first');
@@ -181,6 +194,8 @@ export function onStudentSocket(socket: WebSocket, deps: StudentSocketDeps): voi
     clearTimeout(helloTimer);
     deps.hub.attach(student.id, conn, WS_CLOSE.replaced);
     send({ t: 'welcome', serverTime: now(), state: deps.sessionState(student.id) });
+    deps.thumbs?.onWelcome(student.id);
+    deps.messages?.onWelcome(student.id);
   });
 
   socket.on('close', () => {
