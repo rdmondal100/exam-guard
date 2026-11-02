@@ -72,3 +72,28 @@ describe('sortedStudents', () => {
     expect(sortedStudents(state).map((s) => s.studentCode)).toEqual(['1', '2', '10']);
   });
 });
+
+describe('live alerts (M31)', () => {
+  it('keeps pushed alerts newest first, once each', () => {
+    const alert = (id: number) => ({
+      t: 'alert' as const,
+      event: {
+        id,
+        examStudentId: 'a',
+        studentCode: '1',
+        studentName: 'Ada',
+        type: 'focus_lost',
+        severity: 'high' as const,
+        serverTs: id,
+        clientTs: id,
+        details: {},
+        hasScreenshot: false,
+      },
+    });
+    let state = applyTeacherMessage(EMPTY_ROSTER, alert(1));
+    state = applyTeacherMessage(state, alert(2));
+    state = applyTeacherMessage(state, alert(2));
+    expect(state.alerts.map((e) => e.id)).toEqual([2, 1]);
+    expect(EMPTY_ROSTER.alerts).toEqual([]);
+  });
+});

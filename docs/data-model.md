@@ -102,7 +102,7 @@ UNIQUE(question_id, name)
 | extension_sec | INTEGER DEFAULT 0 | |
 | joined_at, started_at, submitted_at, last_seen_at | INTEGER | |
 | submission_hash | TEXT | the receipt hash (M18): SHA-256 of the canonical JSON of `[{questionId, language, sha256}]` sorted by `questionId` (see `final_answers`); set with `submitted_at` when the answers become final, also for `ended_by_teacher` |
-| risk_score | INTEGER DEFAULT 0 | denormalised, updated with each event batch |
+| risk_score | INTEGER DEFAULT 0 | denormalised: the sum of the risk points of the student's events, added as each one is stored (M31, protocol §3) |
 | outside_ms_total | INTEGER DEFAULT 0 | denormalised |
 UNIQUE(exam_id, class_student_id); UNIQUE(token_hash); INDEX(exam_id, state); INDEX(exam_id, risk_score DESC)
 

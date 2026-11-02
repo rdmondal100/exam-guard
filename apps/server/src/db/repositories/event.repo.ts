@@ -1,6 +1,9 @@
 import {
-  MONITORING_APP_EVENT_TYPES,
+  MONITORING_EVENT_TYPES,
+  SEVERITIES,
+  severityAtLeast,
   type EventRow as EventDto,
+  type EventSource,
   type EventView,
   type Severity,
   type TerminalLogEvent,
@@ -12,7 +15,7 @@ export interface NewEvent {
   examStudentId: string | null;
   type: string;
   severity: Severity;
-  source: 'agent' | 'app' | 'server';
+  source: EventSource;
   details: Record<string, unknown>;
   serverTs: number;
   clientTs?: number;
@@ -23,6 +26,8 @@ export interface NewEvent {
 export interface EventFilter {
   examStudentId?: string;
   severity?: Severity;
+  /** This severity and above (M31). */
+  minSeverity?: Severity;
   source?: NewEvent['source'];
   /** `monitoring`: the agent's evidence plus the app events the teacher must see (M25). */
   view?: EventView;
@@ -31,7 +36,7 @@ export interface EventFilter {
   limit: number;
 }
 
-/** `events`. The classifier and the general queries arrive with monitoring. */
+/** `events`. Rows are written through the `EventRecorder` service, which classifies them (M31). */
 export class EventRepo {
   constructor(private readonly db: Db) {}
 
@@ -87,30 +92,34 @@ export class EventRepo {
       where.push('e.severity = ?');
       args.push(filter.severity);
     }
+    if (filter.minSeverity) {
+      const levels = SEVERITIES.filter((s) => severityAtLeast(s, filter.minSeverity ?? 'low'));
+      where.push(`e.severity IN (${levels.map(() => '?').join(', ')})`);
+      args.push(...levels);
+    }
     if (filter.source) {
       where.push('e.source = ?');
       args.push(filter.source);
     }
     if (filter.view === 'monitoring') {
-      const types = MONITORING_APP_EVENT_TYPES.map(() => '?').join(', ');
+      const types = MONITORING_EVENT_TYPES.map(() => '?').join(', ');
       where.push(`(e.source = 'agent' OR e.type IN (${types}))`);
-      args.push(...MONITORING_APP_EVENT_TYPES);
+      args.push(...MONITORING_EVENT_TYPES);
     }
     if (filter.after !== undefined) {
       where.push('e.id > ?');
       args.push(filter.after);
     }
     const rows = this.db
-      .prepare(
-        `SELECT e.id, e.exam_student_id, c.student_code, c.name, e.type, e.severity, e.server_ts,
-           e.client_ts, e.details_json, e.screenshot_path
-         FROM events e
-         LEFT JOIN exam_students s ON s.id = e.exam_student_id
-         LEFT JOIN class_students c ON c.id = s.class_student_id
-         WHERE ${where.join(' AND ')} ORDER BY e.id DESC LIMIT ?`,
-      )
+      .prepare(`${LIST_SELECT} WHERE ${where.join(' AND ')} ORDER BY e.id DESC LIMIT ?`)
       .all(...args, filter.limit) as ListRow[];
     return rows.map(toDto);
+  }
+
+  /** One event as the teacher sees it (the live alert, M31). */
+  row(id: number): EventDto | undefined {
+    const row = this.db.prepare(`${LIST_SELECT} WHERE e.id = ?`).get(id) as ListRow | undefined;
+    return row && toDto(row);
   }
 
   /** The newest event of one student among the given types, or `undefined`. */
@@ -139,6 +148,12 @@ export class EventRepo {
     return rows.map(toLogEvent);
   }
 }
+
+const LIST_SELECT = `SELECT e.id, e.exam_student_id, c.student_code, c.name, e.type, e.severity,
+    e.server_ts, e.client_ts, e.details_json, e.screenshot_path
+  FROM events e
+  LEFT JOIN exam_students s ON s.id = e.exam_student_id
+  LEFT JOIN class_students c ON c.id = s.class_student_id`;
 
 interface EventRow {
   id: number;

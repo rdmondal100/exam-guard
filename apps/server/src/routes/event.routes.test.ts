@@ -105,6 +105,21 @@ describe('GET /exams/:id/events', () => {
     expect((await get(`/exams/${examId}/events?view=everything`)).statusCode).toBe(400);
   });
 
+  it('filters by a severity and above, and shows server and insertion events (M31)', async () => {
+    const low = add({ severity: 'low' });
+    const medium = add({ source: 'server', type: 'network_lost', severity: 'medium' });
+    const high = add({ source: 'app', type: 'large_insertion', severity: 'high' });
+    const critical = add({ source: 'server', type: 'duplicate_login', severity: 'critical' });
+    expect(await ids(`/exams/${examId}/events?minSeverity=high`)).toEqual([critical, high]);
+    expect(await ids(`/exams/${examId}/events?minSeverity=low&view=monitoring`)).toEqual([
+      critical,
+      high,
+      medium,
+      low,
+    ]);
+    expect((await get(`/exams/${examId}/events?minSeverity=huge`)).statusCode).toBe(400);
+  });
+
   it('keeps one exam out of another', async () => {
     add();
     const other = (

@@ -9,16 +9,23 @@ import {
 export interface RosterView extends RosterState {
   /** `false` while the socket is down; the last known roster stays on screen. */
   live: boolean;
+  /** Counts socket (re)connects, so lists can fetch what they missed while it was down. */
+  connects: number;
 }
 
 const RETRY_MS = 1000;
 
-/** Live roster for one exam over the loopback teacher WebSocket, reconnecting when it drops. */
-export function useRoster(examId: string): RosterView {
+/**
+ * Live roster and alerts for one exam over the loopback teacher WebSocket, reconnecting when it
+ * drops. With `enabled` false no socket is opened.
+ */
+export function useRoster(examId: string, enabled = true): RosterView {
   const [roster, setRoster] = useState<RosterState>(EMPTY_ROSTER);
   const [live, setLive] = useState(false);
+  const [connects, setConnects] = useState(0);
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     let socket: WebSocket | null = null;
     let retry: ReturnType<typeof setTimeout> | null = null;
@@ -35,6 +42,7 @@ export function useRoster(examId: string): RosterView {
       socket = ws;
       ws.onopen = () => {
         setLive(true);
+        setConnects((n) => n + 1);
         ws.send(JSON.stringify({ t: 'subscribe', examId }));
       };
       ws.onmessage = (event) => {
@@ -56,7 +64,7 @@ export function useRoster(examId: string): RosterView {
         socket.close();
       }
     };
-  }, [examId]);
+  }, [examId, enabled]);
 
-  return { ...roster, live };
+  return { ...roster, live, connects };
 }

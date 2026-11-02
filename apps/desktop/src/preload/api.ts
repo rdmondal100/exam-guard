@@ -3,6 +3,7 @@ import type {
   AgentServiceStatus,
   AnswerSaveRequest,
   PasteBlockedReport,
+  LargeInsertionReport,
   RestoreResult,
   AnswerStatus,
   SubmitOutcome,
@@ -76,6 +77,8 @@ export interface ExamGuardApi {
   submitExam(): Promise<SubmitOutcome>;
   /** Student mode: a paste of text from outside the exam was blocked (M25); main logs it. */
   reportPasteBlocked(report: PasteBlockedReport): Promise<void>;
+  /** Student mode: a burst of text far faster than typing (M27); main logs it. */
+  reportLargeInsertion(report: LargeInsertionReport): Promise<void>;
   /** How many saves wait for the server. Returns an unsubscribe function. */
   onAnswerStatus(listener: (status: AnswerStatus) => void): () => void;
   /** Student mode: compile and run code on this PC (one at a time). Resolves when it ends. */

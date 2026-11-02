@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Editor, { type Monaco } from '@monaco-editor/react';
 import type { Diagnostic, QuestionLanguage } from '@examguard/shared';
 import { MONACO_LANGUAGE } from '@/lib/languages';
+import { useInsertionWatchHandle } from '@/hooks/useInsertionWatch';
 import '@/lib/monaco';
 
 interface Props {
@@ -19,6 +20,10 @@ const MARKER_OWNER = 'gcc';
 /** Full-height Monaco for the student's code. Default export so `React.lazy` can load it. */
 export default function CodeEditor({ path, language, value, onChange, diagnostics }: Props) {
   const [monaco, setMonaco] = useState<Monaco | null>(null);
+  // Large insertions are watched in the exam window (M27).
+  const insertionWatch = useInsertionWatchHandle();
+  const stopWatch = useRef<(() => void) | null>(null);
+  useEffect(() => () => stopWatch.current?.(), []);
 
   useEffect(() => {
     const model = monaco?.editor.getModel(monaco.Uri.parse(path));
@@ -51,7 +56,10 @@ export default function CodeEditor({ path, language, value, onChange, diagnostic
       language={MONACO_LANGUAGE[language]}
       value={value}
       onChange={(next) => onChange(next ?? '')}
-      onMount={(_editor, m) => setMonaco(m)}
+      onMount={(editor, m) => {
+        setMonaco(m);
+        stopWatch.current = insertionWatch?.attach(editor) ?? null;
+      }}
       options={{
         minimap: { enabled: false },
         fontSize: 14,

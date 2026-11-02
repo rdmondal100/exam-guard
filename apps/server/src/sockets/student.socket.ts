@@ -10,19 +10,19 @@ import {
   type SessionState,
 } from '@examguard/shared';
 import { takeAnswerSave, type AnswerIntakeDeps } from '../services/answers/answer-intake.js';
-import type { EventRepo } from '../db/repositories/event.repo.js';
 import type { ExamStudentRepo } from '../db/repositories/examStudent.repo.js';
 import type { TerminalLogRepo } from '../db/repositories/terminalLog.repo.js';
 import { hashToken } from '../services/join/join-service.js';
 import type { EvidenceIntake } from '../services/screenshots/evidence-intake.js';
-import { appEventSeverity } from '../services/screenshots/placeholder-severity.js';
+import type { EventRecorder } from '../services/events/event-recorder.js';
 import type { SubmissionService } from '../services/submissions/submission-service.js';
 import type { SessionHub, StudentConn } from './sessionHub.js';
 
 export interface StudentSocketDeps {
   hub: SessionHub;
   students: ExamStudentRepo;
-  events: EventRepo;
+  /** Classifies and stores the app's events (M31). */
+  recorder: Pick<EventRecorder, 'record'>;
   terminalLogs: TerminalLogRepo;
   /** Autosaves go through the batch writer. */
   answers: AnswerIntakeDeps;
@@ -108,17 +108,17 @@ export function onStudentSocket(socket: WebSocket, deps: StudentSocketDeps): voi
         return send({ t: 'event.ack', id: message.id });
       }
       // The key is namespaced so an app id can never collide with agent evidence keys.
-      const stored = deps.events.insert({
-        examId,
-        examStudentId: studentId,
-        type: message.type,
-        severity: appEventSeverity(message.type),
-        source: 'app',
-        details: message.details,
-        serverTs: now(),
-        clientTs: message.clientTs,
-        dedupeKey: `app:${message.dedupeKey}`,
-      });
+      const stored =
+        deps.recorder.record({
+          examId,
+          examStudentId: studentId,
+          type: message.type,
+          source: 'app',
+          details: message.details,
+          serverTs: now(),
+          clientTs: message.clientTs,
+          dedupeKey: `app:${message.dedupeKey}`,
+        }) !== null;
       // Stored first, so the lock always has its event; a resend locks nothing again.
       if (stored && message.type === 'agent_lost') deps.onAgentLost?.(studentId);
       return send({ t: 'event.ack', id: message.id });

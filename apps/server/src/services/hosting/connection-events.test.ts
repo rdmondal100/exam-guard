@@ -8,6 +8,7 @@ import { initDatabase } from '../../db/connectDb.js';
 import { EventRepo } from '../../db/repositories/event.repo.js';
 import { ExamRepo } from '../../db/repositories/exam.repo.js';
 import { ExamStudentRepo } from '../../db/repositories/examStudent.repo.js';
+import { EventRecorder } from '../events/event-recorder.js';
 import { ConnectionEvents, NETWORK_GRACE_MS } from './connection-events.js';
 
 let dir: string;
@@ -28,6 +29,11 @@ function newConnections(): ConnectionEvents {
     students: new ExamStudentRepo(db),
     exams: new ExamRepo(db),
     events,
+    recorder: new EventRecorder({
+      events,
+      students: new ExamStudentRepo(db),
+      exams: new ExamRepo(db),
+    }),
     now: () => clock,
   });
 }

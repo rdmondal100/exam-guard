@@ -2,7 +2,6 @@ import { createServer } from 'node:https';
 import express, { type Express } from 'express';
 import { MAX_WS_FRAME_BYTES, type StudentInfo } from '@examguard/shared';
 import type { AnswerRepo } from './db/repositories/answer.repo.js';
-import type { EventRepo } from './db/repositories/event.repo.js';
 import type { ExamRepo } from './db/repositories/exam.repo.js';
 import type { ExamStudentRepo } from './db/repositories/examStudent.repo.js';
 import type { TerminalLogRepo } from './db/repositories/terminalLog.repo.js';
@@ -33,12 +32,12 @@ export interface StudentAppDeps {
   live?: {
     hub: SessionHub;
     students: ExamStudentRepo;
-    events: EventRepo;
     terminalLogs: TerminalLogRepo;
     answers: AnswerIntakeDeps;
     examId: () => string | null;
   } & Pick<
     StudentSocketDeps,
+    | 'recorder'
     | 'sessionState'
     | 'submissions'
     | 'evidence'

@@ -7,13 +7,34 @@ export const SeveritySchema = z.enum(SEVERITIES);
 export type Severity = z.infer<typeof SeveritySchema>;
 
 /**
- * App events that belong in the teacher's monitoring list next to the agent's evidence
- * (`GET /exams/:id/events?view=monitoring`, M25). The rest of the app's events (runs, terminal)
- * are kept out of it.
+ * Events from the app and the server that belong in the teacher's monitoring list next to the
+ * agent's evidence (`GET /exams/:id/events?view=monitoring`, M25) and that are pushed live as
+ * `alert` (M31). The rest (runs, terminal, internet switch) are kept out of it.
  */
-export const MONITORING_APP_EVENT_TYPES = ['agent_lost', 'paste_blocked'] as const;
+export const MONITORING_EVENT_TYPES = [
+  'agent_lost',
+  'paste_blocked',
+  'large_insertion',
+  'network_lost',
+  'network_restored',
+  'duplicate_login',
+] as const;
 
-/** The teacher's event list views. `monitoring` = agent evidence plus `MONITORING_APP_EVENT_TYPES`. */
+export type EventSource = 'agent' | 'app' | 'server';
+
+/** Whether an event is part of the monitoring view and the live alert feed. */
+export function isMonitoringEvent(source: EventSource, type: string): boolean {
+  return source === 'agent' || (MONITORING_EVENT_TYPES as readonly string[]).includes(type);
+}
+
+/** Severity order, for "this severity and above" filters. */
+export const SEVERITY_RANK: Record<Severity, number> = { low: 0, medium: 1, high: 2, critical: 3 };
+
+export function severityAtLeast(severity: Severity, min: Severity): boolean {
+  return SEVERITY_RANK[severity] >= SEVERITY_RANK[min];
+}
+
+/** The teacher's event list views. `monitoring` = agent evidence plus `MONITORING_EVENT_TYPES`. */
 export const EventViewSchema = z.enum(['monitoring']);
 export type EventView = z.infer<typeof EventViewSchema>;
 

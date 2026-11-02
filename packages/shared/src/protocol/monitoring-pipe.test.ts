@@ -98,7 +98,8 @@ describe('agent event reports', () => {
     expect(ReportedEventTypeSchema.safeParse('app_launched').success).toBe(true);
     expect(ReportedEventTypeSchema.safeParse('processes_at_start').success).toBe(true);
     expect(ReportedEventTypeSchema.safeParse('paste_blocked').success).toBe(true);
-    expect(ReportedEventTypeSchema.safeParse('large_insertion').success).toBe(false);
+    expect(ReportedEventTypeSchema.safeParse('large_insertion').success).toBe(true);
+    expect(ReportedEventTypeSchema.safeParse('duplicate_login').success).toBe(false);
     expect(isAgentEventType('app_launched')).toBe(true);
     expect(isAgentEventType('title_changed')).toBe(true);
     expect(isAgentEventType('run_executed')).toBe(false);

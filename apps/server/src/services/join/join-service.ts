@@ -6,10 +6,10 @@ import {
   type JoinResponse,
   type StudentState,
 } from '@examguard/shared';
-import type { EventRepo } from '../../db/repositories/event.repo.js';
 import type { ExamRepo } from '../../db/repositories/exam.repo.js';
 import type { ExamStudentRepo } from '../../db/repositories/examStudent.repo.js';
 import { ApiError } from '../../utils/ApiError.js';
+import type { EventRecorder } from '../events/event-recorder.js';
 import { JoinLimiter } from './join-limiter.js';
 
 /** A refusal the error middleware turns into an HTTP error. */
@@ -30,7 +30,8 @@ export interface JoinTarget {
 export interface JoinServiceDeps {
   exams: ExamRepo;
   students: ExamStudentRepo;
-  events: EventRepo;
+  /** Stores `duplicate_login` (critical, M31). */
+  recorder: Pick<EventRecorder, 'record'>;
   target: () => JoinTarget | null;
   now?: () => number;
   limiter?: JoinLimiter;
@@ -59,7 +60,7 @@ export class JoinService {
   }
 
   join(request: JoinRequest, ip: string): JoinResponse {
-    const { exams, students, events } = this.deps;
+    const { exams, students, recorder } = this.deps;
     if (!isProtocolCompatible(request.protocol)) {
       throw new JoinError(
         426,
@@ -95,11 +96,10 @@ export class JoinService {
     const now = this.now();
     const existing = students.find(exam.id, onList.id);
     if (existing?.tokenHash && existing.deviceId && existing.deviceId !== request.deviceId) {
-      events.insert({
+      recorder.record({
         examId: exam.id,
         examStudentId: existing.id,
         type: 'duplicate_login',
-        severity: 'critical',
         source: 'server',
         details: {
           ip,

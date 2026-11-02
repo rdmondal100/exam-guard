@@ -17,6 +17,7 @@ import { AuthState } from './services/auth/auth-state.js';
 import { LoginLimiter } from './services/auth/login-limiter.js';
 import { ExamFileService } from './services/exam-files/exam-file-service.js';
 import { ExamFileStore } from './services/exam-files/exam-file-store.js';
+import { EventRecorder } from './services/events/event-recorder.js';
 import { StudentDeadlines } from './services/exams/student-deadlines.js';
 import { ConnectionEvents } from './services/hosting/connection-events.js';
 import { HostingManager, type HostingManagerDeps } from './services/hosting/hosting-manager.js';
@@ -37,6 +38,7 @@ export interface ContainerOptions {
     | 'questions'
     | 'students'
     | 'events'
+    | 'recorder'
     | 'terminals'
     | 'terminalLogs'
     | 'answers'
@@ -72,6 +74,8 @@ export interface Container {
   questions: QuestionRepo;
   students: ExamStudentRepo;
   events: EventRepo;
+  /** Classifies and stores events, adds risk points, announces them (M31). */
+  recorder: EventRecorder;
   terminalLogs: TerminalLogRepo;
   answers: AnswerRepo;
   examFiles?: ExamFileService;
@@ -84,6 +88,7 @@ export function createContainer({ db, now, filesDir, hosting }: ContainerOptions
   const questions = new QuestionRepo(db);
   const students = new ExamStudentRepo(db);
   const events = new EventRepo(db);
+  const recorder = new EventRecorder({ events, students, exams });
   const terminalLogs = new TerminalLogRepo(db);
   const answers = new AnswerRepo(db);
   const examFilesDir = filesDir ?? (hosting && join(hosting.dataDir, 'exam-files'));
@@ -102,6 +107,7 @@ export function createContainer({ db, now, filesDir, hosting }: ContainerOptions
     questions,
     students,
     events,
+    recorder,
     terminalLogs,
     answers,
     ...(examFiles ? { examFiles } : {}),
@@ -114,6 +120,7 @@ export function createContainer({ db, now, filesDir, hosting }: ContainerOptions
     students,
     exams,
     events,
+    recorder,
     now,
     ...(networkGraceMs === undefined ? {} : { graceMs: networkGraceMs }),
   });
@@ -122,6 +129,8 @@ export function createContainer({ db, now, filesDir, hosting }: ContainerOptions
     now,
     onConnection: (id, connected) => connections.onConnection(id, connected),
   });
+  // Live alert feed and the roster's risk score (M31).
+  recorder.onStored((stored) => hub.eventStored(stored));
   const answerWriter = new AnswerWriter(answers, {
     onRejected: (row, error) =>
       console.warn(
@@ -135,6 +144,7 @@ export function createContainer({ db, now, filesDir, hosting }: ContainerOptions
     questions,
     students,
     events,
+    recorder,
     terminals: new TerminalRepo(db),
     terminalLogs,
     answers,

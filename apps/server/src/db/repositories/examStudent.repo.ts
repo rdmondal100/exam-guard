@@ -138,6 +138,13 @@ export class ExamStudentRepo {
     );
   }
 
+  /** Adds an event's points to the student's risk score (M31). */
+  addRisk(id: string, points: number): void {
+    this.db
+      .prepare('UPDATE exam_students SET risk_score = risk_score + ? WHERE id = ?')
+      .run(points, id);
+  }
+
   /** `locked` → `active` (the teacher unlocked). Returns whether the row changed. */
   unlock(id: string): boolean {
     return (

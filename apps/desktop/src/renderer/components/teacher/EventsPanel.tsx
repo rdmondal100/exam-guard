@@ -1,58 +1,69 @@
-import { useMemo, useState } from 'react';
-import type { EventRow, Severity } from '@examguard/shared';
+import { useState } from 'react';
+import type { EventRow, RosterEntry, Severity } from '@examguard/shared';
 import type { ExamApi } from '@/api/examApi';
-import { describeEvent, programCounts } from '@/lib/eventsView';
-import { clockTime } from '@/lib/terminalLog';
+import { MIN_SEVERITY_CHOICES } from '@/lib/eventFeed';
 import { useEvents } from '@/hooks/useEvents';
+import type { RosterView } from '@/hooks/useRoster';
+import { EventLine } from './EventLine';
 import { ScreenshotDialog } from './ScreenshotDialog';
 
 interface Props {
   examId: string;
   api: ExamApi;
+  /** Live alerts and the student list for the filter. */
+  roster: RosterView;
+  students: RosterEntry[];
+  /** Opens a student's detail. */
+  onStudent: (examStudentId: string) => void;
 }
 
-const SEVERITY_STYLE: Record<Severity, string> = {
-  low: 'text-muted',
-  medium: 'text-amber-700',
-  high: 'text-red-700',
-  critical: 'font-semibold text-red-800',
-};
+const SELECT = 'h-8 rounded-md border border-border bg-background px-2';
 
-/** What the monitoring agents saw: leaving the exam, tab changes and coming back, with pictures. */
-export function EventsPanel({ examId, api }: Props) {
-  const { events, error } = useEvents(examId, api);
+/**
+ * The live alert feed across all students (M31): every monitoring event as it is stored, newest
+ * first, filtered by severity and student. Pushed over the teacher socket; fetched again after a
+ * reconnect to fill the gap.
+ */
+export function EventsPanel({ examId, api, roster, students, onStudent }: Props) {
   const [student, setStudent] = useState('');
+  const [minSeverity, setMinSeverity] = useState<Severity>('low');
   const [shown, setShown] = useState<EventRow | null>(null);
-  const [listed, setListed] = useState<number | null>(null);
-
-  const students = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const e of events) {
-      if (e.examStudentId)
-        seen.set(e.examStudentId, `${e.studentCode ?? ''} ${e.studentName ?? ''}`);
-    }
-    return [...seen.entries()];
-  }, [events]);
-  const visible = student ? events.filter((e) => e.examStudentId === student) : events;
+  const { events, error } = useEvents(examId, api, {
+    ...(student ? { studentId: student } : {}),
+    minSeverity,
+    live: roster.alerts,
+    connects: roster.connects,
+  });
 
   return (
     <section
-      aria-label="Monitoring events"
+      aria-label="Alert feed"
       className="flex flex-col gap-2 rounded-md border border-border p-4"
     >
-      <div className="flex items-center gap-3">
-        <h2 className="text-xl font-semibold">Monitoring events</h2>
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 className="text-xl font-semibold">Alerts</h2>
+        {!roster.live && <span className="text-sm text-amber-700">(reconnecting…)</span>}
         <label className="ml-auto flex items-center gap-2 text-sm">
-          Student
+          Severity
           <select
-            className="h-8 rounded-md border border-border bg-background px-2"
-            value={student}
-            onChange={(e) => setStudent(e.target.value)}
+            className={SELECT}
+            value={minSeverity}
+            onChange={(e) => setMinSeverity(e.target.value as Severity)}
           >
+            {MIN_SEVERITY_CHOICES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          Student
+          <select className={SELECT} value={student} onChange={(e) => setStudent(e.target.value)}>
             <option value="">Everyone</option>
-            {students.map(([id, label]) => (
-              <option key={id} value={id}>
-                {label}
+            {students.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.studentCode} {s.name}
               </option>
             ))}
           </select>
@@ -63,55 +74,16 @@ export function EventsPanel({ examId, api }: Props) {
           {error}
         </p>
       )}
-      {visible.length === 0 && !error && (
+      {events.length === 0 && !error && (
         <p className="text-sm text-muted">
-          Nothing seen yet. Switching away from the exam shows up here.
+          Nothing to show yet. Switching away from the exam, pastes from outside and other alerts
+          appear here as they happen.
         </p>
       )}
-      {visible.length > 0 && (
-        <ol aria-label="Events" className="max-h-80 divide-y divide-border overflow-auto">
-          {visible.map((e) => (
-            <li key={e.id} className="flex flex-wrap items-center gap-3 py-1.5 text-sm">
-              <span className="w-16 shrink-0 font-mono text-muted">{clockTime(e.serverTs)}</span>
-              <span className="w-40 shrink-0 truncate">
-                <span className="font-mono">{e.studentCode}</span> {e.studentName}
-              </span>
-              <span className={`flex-1 truncate ${SEVERITY_STYLE[e.severity]}`}>
-                {describeEvent(e)}
-              </span>
-              {e.type === 'processes_at_start' && programCounts(e.details).length > 0 && (
-                <button
-                  type="button"
-                  aria-expanded={listed === e.id}
-                  className="rounded-md border px-2 py-0.5 text-xs"
-                  onClick={() => setListed(listed === e.id ? null : e.id)}
-                >
-                  Programs
-                </button>
-              )}
-              {e.hasScreenshot && (
-                <button
-                  type="button"
-                  className="rounded-md border px-2 py-0.5 text-xs"
-                  onClick={() => setShown(e)}
-                >
-                  Screenshot
-                </button>
-              )}
-              {listed === e.id && (
-                <ul
-                  aria-label="Programs running at the start"
-                  className="w-full columns-2 pl-20 text-xs"
-                >
-                  {programCounts(e.details).map(({ exe, count }) => (
-                    <li key={exe} className="font-mono">
-                      {exe}
-                      {count > 1 ? ` ×${count}` : ''}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
+      {events.length > 0 && (
+        <ol aria-label="Events" className="max-h-96 divide-y divide-border overflow-auto">
+          {events.map((e) => (
+            <EventLine key={e.id} event={e} api={api} onOpenShot={setShown} onStudent={onStudent} />
           ))}
         </ol>
       )}

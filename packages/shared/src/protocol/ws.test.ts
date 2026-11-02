@@ -165,7 +165,7 @@ describe('events', () => {
   });
 
   it.each([
-    { ...event, type: 'large_insertion' },
+    { ...event, type: 'duplicate_login' },
     { ...event, dedupeKey: '' },
     { ...event, details: 'x' },
   ])('rejects %j', (message) => {

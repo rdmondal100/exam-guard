@@ -21,6 +21,7 @@ export const IPC = {
   answerStatus: 'answers:status',
   submitExam: 'exam:submit',
   pasteBlocked: 'clipboard:paste-blocked',
+  largeInsertion: 'insertion:large',
   runCode: 'runner:run',
   stopRun: 'runner:stop',
   runInput: 'runner:input',

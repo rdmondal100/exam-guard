@@ -6,6 +6,7 @@ import { isTimeUp, submitAnswers, submitRefusalText } from '@/lib/submit';
 import { saveNow, useAnswerStatus, useAutosave } from '@/hooks/useAutosave';
 import { useExamFilesStatus } from '@/hooks/useExamFilesStatus';
 import { usePasteGuard } from '@/hooks/usePasteGuard';
+import { InsertionWatchContext, useInsertionWatch } from '@/hooks/useInsertionWatch';
 import { CodeAnswer } from '../../components/student/CodeAnswer';
 import { ExamFilesNotice } from '../../components/student/ExamFilesNotice';
 import { ExamTimer } from '../../components/student/ExamTimer';
@@ -96,8 +97,10 @@ export function ExamScreen({
     return () => clearInterval(id);
   }, []);
   const timeUp = isTimeUp(deadline, now, status.offsetMs);
-  // Only text copied inside the exam may be pasted (M25).
-  const pasteBlockedAt = usePasteGuard();
+  // Only text copied inside the exam may be pasted (M25); typing far faster than a person is
+  // reported (M27), except the pastes the guard let through.
+  const insertionWatch = useInsertionWatch();
+  const pasteBlockedAt = usePasteGuard(insertionWatch.allow);
   const pasteNotice = pasteBlockedAt !== null && now - pasteBlockedAt < PASTE_NOTICE_MS;
   useEffect(() => {
     if (!timeUp) return;
@@ -114,151 +117,153 @@ export function ExamScreen({
   }, []);
 
   return (
-    <div className="flex h-screen flex-col">
-      <header className="flex items-center justify-between gap-4 border-b px-6 py-3">
-        <div>
-          <h1 className="text-lg font-semibold">{examTitle}</h1>
-          <p className="text-sm text-muted">{name}</p>
-        </div>
-        <div className="flex items-center gap-4">
-          {filesOn && (
-            <button
-              type="button"
-              onClick={() => {
-                setFilesMounted(true);
-                setFilesShown((v) => !v);
-              }}
-              className={`rounded-md border px-3 py-1 text-sm ${filesShown ? 'bg-black/10' : ''}`}
-            >
-              {filesShown ? 'Hide files' : 'Files'}
-            </button>
-          )}
-          {(terminalOn || terminalShown) && (
-            <button
-              type="button"
-              onClick={() => {
-                setTerminalMounted(true);
-                setTerminalShown((v) => !v);
-              }}
-              className={`rounded-md border px-3 py-1 text-sm ${terminalShown ? 'bg-black/10' : ''}`}
-            >
-              {terminalShown ? 'Hide terminal' : 'Terminal'}
-            </button>
-          )}
-          {internetOff && (
-            <span className="rounded-md bg-amber-100 px-3 py-1 text-sm text-amber-900">
-              Internet off
+    <InsertionWatchContext.Provider value={insertionWatch}>
+      <div className="flex h-screen flex-col">
+        <header className="flex items-center justify-between gap-4 border-b px-6 py-3">
+          <div>
+            <h1 className="text-lg font-semibold">{examTitle}</h1>
+            <p className="text-sm text-muted">{name}</p>
+          </div>
+          <div className="flex items-center gap-4">
+            {filesOn && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFilesMounted(true);
+                  setFilesShown((v) => !v);
+                }}
+                className={`rounded-md border px-3 py-1 text-sm ${filesShown ? 'bg-black/10' : ''}`}
+              >
+                {filesShown ? 'Hide files' : 'Files'}
+              </button>
+            )}
+            {(terminalOn || terminalShown) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setTerminalMounted(true);
+                  setTerminalShown((v) => !v);
+                }}
+                className={`rounded-md border px-3 py-1 text-sm ${terminalShown ? 'bg-black/10' : ''}`}
+              >
+                {terminalShown ? 'Hide terminal' : 'Terminal'}
+              </button>
+            )}
+            {internetOff && (
+              <span className="rounded-md bg-amber-100 px-3 py-1 text-sm text-amber-900">
+                Internet off
+              </span>
+            )}
+            <span className="rounded-md bg-blue-100 px-3 py-1 text-sm text-blue-900">
+              Monitoring active
             </span>
-          )}
-          <span className="rounded-md bg-blue-100 px-3 py-1 text-sm text-blue-900">
-            Monitoring active
-          </span>
-          <SaveChip status={saveStatus} online={linkOk} />
-          <button
-            type="button"
-            disabled={timeUp}
-            onClick={() => setConfirming(true)}
-            className="rounded-md bg-black px-3 py-1 text-sm text-white disabled:opacity-50"
-          >
-            Submit
-          </button>
-          <span
-            role="status"
-            className={`rounded-md px-3 py-1 text-sm ${
-              linkOk ? 'bg-green-100 text-green-900' : 'bg-amber-100 text-amber-900'
-            }`}
-          >
-            {LINK_TEXT[status.link]}
-          </span>
-          <ExamTimer deadline={deadline} offsetMs={status.offsetMs} />
-        </div>
-      </header>
-      <ExamFilesNotice status={examFiles} />
-      {timeUp && (
-        <p role="alert" className="bg-amber-100 px-6 py-2 text-sm text-amber-900">
-          Time is up. Your work is being sent. Your receipt appears in a moment; keep this window
-          open.
-        </p>
-      )}
-      {pasteNotice && (
-        <p role="status" className="bg-amber-100 px-6 py-2 text-sm text-amber-900">
-          Pasting text from outside the exam is not allowed. Only text copied inside the exam can be
-          pasted. Your teacher has been notified.
-        </p>
-      )}
-      <div className="flex min-h-0 flex-1" {...(timeUp ? { inert: '' } : {})}>
-        <aside className="w-48 shrink-0 overflow-y-auto border-r p-3">
-          <QuestionNav
-            questions={questions}
-            selectedId={question?.id ?? ''}
-            answered={answered}
-            onSelect={setSelectedId}
-          />
-        </aside>
-        {question ? (
-          <main className="flex min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-6">
-            <h2 className="text-base font-semibold">
-              Question {question.position} · {question.marks} marks
-            </h2>
-            <p className="whitespace-pre-wrap">{question.body}</p>
-            {question.studentNote && (
-              <p className="whitespace-pre-wrap rounded-md bg-black/5 p-3 text-sm">
-                {question.studentNote}
-              </p>
-            )}
-            {language ? (
-              <CodeAnswer
-                questionId={question.id}
-                allowed={question.allowedLanguages}
-                language={language}
-                value={getAnswer(answers, question.id, language)}
-                onLanguage={(l) => setLanguage(question.id, l)}
-                onChange={(v) => setAnswer(question.id, language, v)}
-              />
-            ) : (
-              <>
-                {question.type === 'code' && (
-                  <p className="text-sm text-muted">
-                    No language is set for this question. Write your answer below.
-                  </p>
-                )}
-                <WrittenAnswer
-                  value={getAnswer(answers, question.id, ANSWER_TEXT_KEY)}
-                  onChange={(v) => setAnswer(question.id, ANSWER_TEXT_KEY, v)}
+            <SaveChip status={saveStatus} online={linkOk} />
+            <button
+              type="button"
+              disabled={timeUp}
+              onClick={() => setConfirming(true)}
+              className="rounded-md bg-black px-3 py-1 text-sm text-white disabled:opacity-50"
+            >
+              Submit
+            </button>
+            <span
+              role="status"
+              className={`rounded-md px-3 py-1 text-sm ${
+                linkOk ? 'bg-green-100 text-green-900' : 'bg-amber-100 text-amber-900'
+              }`}
+            >
+              {LINK_TEXT[status.link]}
+            </span>
+            <ExamTimer deadline={deadline} offsetMs={status.offsetMs} />
+          </div>
+        </header>
+        <ExamFilesNotice status={examFiles} />
+        {timeUp && (
+          <p role="alert" className="bg-amber-100 px-6 py-2 text-sm text-amber-900">
+            Time is up. Your work is being sent. Your receipt appears in a moment; keep this window
+            open.
+          </p>
+        )}
+        {pasteNotice && (
+          <p role="status" className="bg-amber-100 px-6 py-2 text-sm text-amber-900">
+            Pasting text from outside the exam is not allowed. Only text copied inside the exam can
+            be pasted. Your teacher has been notified.
+          </p>
+        )}
+        <div className="flex min-h-0 flex-1" {...(timeUp ? { inert: '' } : {})}>
+          <aside className="w-48 shrink-0 overflow-y-auto border-r p-3">
+            <QuestionNav
+              questions={questions}
+              selectedId={question?.id ?? ''}
+              answered={answered}
+              onSelect={setSelectedId}
+            />
+          </aside>
+          {question ? (
+            <main className="flex min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-6">
+              <h2 className="text-base font-semibold">
+                Question {question.position} · {question.marks} marks
+              </h2>
+              <p className="whitespace-pre-wrap">{question.body}</p>
+              {question.studentNote && (
+                <p className="whitespace-pre-wrap rounded-md bg-black/5 p-3 text-sm">
+                  {question.studentNote}
+                </p>
+              )}
+              {language ? (
+                <CodeAnswer
+                  questionId={question.id}
+                  allowed={question.allowedLanguages}
+                  language={language}
+                  value={getAnswer(answers, question.id, language)}
+                  onLanguage={(l) => setLanguage(question.id, l)}
+                  onChange={(v) => setAnswer(question.id, language, v)}
                 />
-              </>
-            )}
-          </main>
-        ) : (
-          <main className="p-6">This exam has no questions.</main>
+              ) : (
+                <>
+                  {question.type === 'code' && (
+                    <p className="text-sm text-muted">
+                      No language is set for this question. Write your answer below.
+                    </p>
+                  )}
+                  <WrittenAnswer
+                    value={getAnswer(answers, question.id, ANSWER_TEXT_KEY)}
+                    onChange={(v) => setAnswer(question.id, ANSWER_TEXT_KEY, v)}
+                  />
+                </>
+              )}
+            </main>
+          ) : (
+            <main className="p-6">This exam has no questions.</main>
+          )}
+        </div>
+        {confirming && !timeUp && (
+          <SubmitDialog
+            answered={answered.size}
+            total={questions.length}
+            unsent={saveStatus.pending}
+            linkOk={linkOk}
+            busy={submitting}
+            error={submitError}
+            onConfirm={submit}
+            onCancel={() => setConfirming(false)}
+          />
+        )}
+        {filesOn && filesMounted && (
+          <section className={`h-72 shrink-0 border-t p-3 ${filesShown ? '' : 'hidden'}`}>
+            <Suspense fallback={<p className="text-sm text-muted">Loading files…</p>}>
+              <FilesPanel visible={filesShown} />
+            </Suspense>
+          </section>
+        )}
+        {terminalMounted && (
+          <section className={`h-72 shrink-0 border-t p-3 ${terminalShown ? '' : 'hidden'}`}>
+            <Suspense fallback={<p className="text-sm text-muted">Loading terminal…</p>}>
+              <TerminalDock />
+            </Suspense>
+          </section>
         )}
       </div>
-      {confirming && !timeUp && (
-        <SubmitDialog
-          answered={answered.size}
-          total={questions.length}
-          unsent={saveStatus.pending}
-          linkOk={linkOk}
-          busy={submitting}
-          error={submitError}
-          onConfirm={submit}
-          onCancel={() => setConfirming(false)}
-        />
-      )}
-      {filesOn && filesMounted && (
-        <section className={`h-72 shrink-0 border-t p-3 ${filesShown ? '' : 'hidden'}`}>
-          <Suspense fallback={<p className="text-sm text-muted">Loading files…</p>}>
-            <FilesPanel visible={filesShown} />
-          </Suspense>
-        </section>
-      )}
-      {terminalMounted && (
-        <section className={`h-72 shrink-0 border-t p-3 ${terminalShown ? '' : 'hidden'}`}>
-          <Suspense fallback={<p className="text-sm text-muted">Loading terminal…</p>}>
-            <TerminalDock />
-          </Suspense>
-        </section>
-      )}
-    </div>
+    </InsertionWatchContext.Provider>
   );
 }
