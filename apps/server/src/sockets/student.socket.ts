@@ -113,8 +113,7 @@ export function onStudentSocket(socket: WebSocket, deps: StudentSocketDeps): voi
         examStudentId: studentId,
         type: message.type,
         severity: appEventSeverity(message.type),
-        // A lost agent link belongs in the teacher's monitoring list, next to the agent's evidence.
-        source: message.type === 'agent_lost' ? 'agent' : 'app',
+        source: 'app',
         details: message.details,
         serverTs: now(),
         clientTs: message.clientTs,

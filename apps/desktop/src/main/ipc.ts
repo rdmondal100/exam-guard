@@ -32,6 +32,8 @@ import { runCommand } from './agent/run-command.js';
 import { registerExamFilesIpc } from './exam-files/exam-files-ipc.js';
 import { registerFilesIpc } from './files/files-ipc.js';
 import { registerAnswersIpc } from './answers/answers-ipc.js';
+import { registerClipboardIpc } from './clipboard/clipboard-ipc.js';
+import type { ClipboardClear } from './clipboard/clipboard-clear.js';
 import { registerResumeIpc, type ResumeHooks } from './resume/resume-ipc.js';
 import { createSecretBox } from './resume/secret-box.js';
 import { registerRunnerIpc } from './runner/runner-ipc.js';
@@ -119,6 +121,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
   let internet: InternetController | null = null;
   let monitor: MonitorController | null = null;
   let tamper: TamperWatch | null = null;
+  let clipboardClear: ClipboardClear | null = null;
   // A failed session, or a link that stayed down past the deadline, must not trap the student.
   const exitWatch = new SessionExitWatch({ release: () => examLock.setActive(false) });
   app.once('will-quit', () => exitWatch.stop());
@@ -141,6 +144,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
       internet?.onExam(exam);
       monitor?.onExam(exam);
       tamper?.setWorking(state.mode === 'student' && wantsMonitoring(exam));
+      clipboardClear?.onExam(exam);
       resume.hooks?.onExam(exam);
       for (const win of BrowserWindow.getAllWindows()) win.webContents.send(IPC.sessionExam, exam);
     },
@@ -148,6 +152,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
       internet?.reset();
       monitor?.reset();
       tamper?.setWorking(false);
+      clipboardClear?.reset();
     },
   });
   // The teacher's internet switch: applied through the agent, confirmed back to the server.
@@ -165,6 +170,8 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
   session.setAgentStatus(toAgentBlock(agentLink.status()));
   agentLink.onChange((link) => session.setAgentStatus(toAgentBlock(link)));
   registerAnswersIpc({ session, requireStudent });
+  // The clipboard is emptied at the start; blocked outside pastes are logged (M25).
+  clipboardClear = registerClipboardIpc({ session, requireStudent });
   resume.hooks = registerResumeIpc({
     userData: state.userData,
     box: createSecretBox(safeStorage),

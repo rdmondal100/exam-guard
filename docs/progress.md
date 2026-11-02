@@ -3,10 +3,10 @@
 Read this first every session, and keep it under about 8 KB. Decisions are in `docs/decisions.md` (grep it, never read it whole), the session log in `docs/session-log.md` (append only), old reviews in `docs/archive/`.
 
 ## Current status
-- **Stage 1, Phase 4 (Monitoring agent) in progress.** Last milestone built: M24 (evidence buffer, app relaunch, tamper lock) on 2026-11-02; automated tests pass, **its laptop test is not run yet** (steps in `docs/milestones.md` M24). **The laptop run of M22 has not been recorded as done either**: automated tests and a standalone helper start pass, the real Chrome trial is pending (manual test: `docs/milestones.md` M22).
+- **Stage 1, Phase 4 (Monitoring agent) in progress.** Last milestone built: M25 (clipboard and paste control) on 2026-11-02; automated tests pass, its manual test is not run yet (steps in `docs/milestones.md` M25). The user reported the M24 test finished on 2026-11-02 (details not recorded). **The laptop run of M22 has not been recorded as done**: automated tests and a standalone helper start pass, the real Chrome trial is pending (manual test: `docs/milestones.md` M22).
 - **Manual checks:** the user ran M02–M13 (2026-10-21) and M14–M21b (2026-10-25: real WFP filters and the installed agent service on the laptop) and reports them good; details were not recorded. Phase 2 accepted.
 - **Refactor 2026-11-01 (not a milestone):** Express 5 layered server, Turborepo, Vite-style renderer folders (decisions.md, "Refactor 2026-11-01").
-- **Next step:** run the M24 laptop test (and record the M22 one), then M25 (clipboard and paste control). If the M21a/M21b laptop run is repeated, write what it shows (established connections, DHCP, IPv6, group policy, whether the lease and a killed service lift the block) into `docs/decisions.md` (M21a) and architecture §3.
+- **Next step:** run the M25 manual test, then M26 (second monitor + Task Manager / secure desktop). If the M21a/M21b laptop run is repeated, write what it shows (established connections, DHCP, IPv6, group policy, whether the lease and a killed service lift the block) into `docs/decisions.md` (M21a) and architecture §3.
 - **M22–M24 notes:** the installed agent service must be rebuilt and reinstalled (`pnpm dev:student:agent`) to get the helper, the process watcher, the buffer and the relaunch. In dev the relaunch only renders with a built app (limitations). The lock can be tried without the service: `EG_FAKE_AGENT_FAIL=lose pnpm dev:student`. The "What the agent saw" chip (M19) still works from `helper.log` but shows 0 pictures; remove it with the next agent-chip cleanup.
 
 ## Completed milestones
@@ -42,7 +42,8 @@ Read this first every session, and keep it under about 8 KB. Decisions are in `d
 - M21b Teacher internet toggle — 2026-10-24 — teacher switch → server → app → agent lease → WFP.
 - M22 Focus tracking, outside time, screenshots → events — 2026-10-26 — helper hooks + policy, evidence over the pipe, binary screenshot frames, events list; laptop run pending.
 - M23 App launches + processes at start — 2026-10-26 — service process watcher (`app_launched`, `processes_at_start`), exam-app descendants and Windows hosts skipped; manual test marked done by the user.
-- M24 Evidence buffer, app relaunch, tamper lock — 2026-11-02 — AES-GCM disk buffer per student, service relaunches the app as the user (`app_relaunched`), `agent_lost` after 5 s → server `locked` + teacher Unlock stub; laptop test pending.
+- M24 Evidence buffer, app relaunch, tamper lock — 2026-11-02 — AES-GCM disk buffer per student, service relaunches the app as the user (`app_relaunched`), `agent_lost` after 5 s → server `locked` + teacher Unlock stub; test finished per the user.
+- M25 Clipboard and paste control — 2026-11-02 — clipboard cleared at start, renderer paste guard over the whole exam window (outside paste/drop blocked, `paste_blocked` medium with a 200-char preview), teacher list via `events?view=monitoring`.
 
 ## Known issues / open questions
 Cleaned up 2026-10-25 after the user's report that the manual tests up to M21b are good; what is left is real limitations and later work (details of that pass: `docs/decisions.md`, "Known-issues pass").

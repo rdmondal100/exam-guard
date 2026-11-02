@@ -37,6 +37,7 @@ describe('M24 severities', () => {
   it('rates a relaunched app medium and a lost agent link critical', () => {
     expect(placeholderSeverity('app_relaunched', { exe: 'ExamGuard.exe' }, [])).toBe('medium');
     expect(appEventSeverity('agent_lost')).toBe('critical');
+    expect(appEventSeverity('paste_blocked')).toBe('medium');
     expect(appEventSeverity('run_executed')).toBe('low');
   });
 });

@@ -729,7 +729,7 @@ describe('tamper lock (M24)', () => {
     await teacher.waitFor(() => entry(teacher, '1')?.state === 'locked');
     await c.waitFor(() => c.messages.filter((m) => m.t === 'event.ack').length === 2);
     expect(db.prepare('SELECT type, severity, source FROM events').all()).toEqual([
-      { type: 'agent_lost', severity: 'critical', source: 'agent' },
+      { type: 'agent_lost', severity: 'critical', source: 'app' },
     ]);
     expect(last(teacher, 'hosting')).toMatchObject({ active: 1 });
 

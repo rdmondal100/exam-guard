@@ -124,6 +124,14 @@ describe('createExamApi', () => {
       expect(JSON.parse(String(init?.body))).toEqual({ type: 'unlock', examStudentId: 's9' });
     });
 
+    it('asks for the monitoring view of the events', async () => {
+      const fetchFn = reply(200, { events: [] });
+      await createExamApi(CONNECTION, fetchFn).events('e1');
+      expect(vi.mocked(fetchFn).mock.calls[0]?.[0]).toBe(
+        'http://127.0.0.1:47821/api/v1/exams/e1/events?view=monitoring',
+      );
+    });
+
     it('sets the terminal switch with a terminal action', async () => {
       const result = { ok: true, terminal: { enabled: true, until: 5000 }, pendingMinutes: null };
       const fetchFn = reply(200, result);

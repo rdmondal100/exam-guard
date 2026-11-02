@@ -5,6 +5,7 @@ import { pickLanguage } from '@/lib/languages';
 import { isTimeUp, submitAnswers, submitRefusalText } from '@/lib/submit';
 import { saveNow, useAnswerStatus, useAutosave } from '@/hooks/useAutosave';
 import { useExamFilesStatus } from '@/hooks/useExamFilesStatus';
+import { usePasteGuard } from '@/hooks/usePasteGuard';
 import { CodeAnswer } from '../../components/student/CodeAnswer';
 import { ExamFilesNotice } from '../../components/student/ExamFilesNotice';
 import { ExamTimer } from '../../components/student/ExamTimer';
@@ -13,6 +14,9 @@ import { QuestionNav } from '../../components/student/QuestionNav';
 import { SaveChip } from '../../components/student/SaveChip';
 import { SubmitDialog } from '../../components/student/SubmitDialog';
 import { WrittenAnswer } from '../../components/student/WrittenAnswer';
+
+/** How long the "outside paste blocked" notice stays. */
+const PASTE_NOTICE_MS = 4000;
 
 const TerminalDock = lazy(() => import('../../components/student/TerminalDock'));
 const FilesPanel = lazy(() => import('../../components/student/FilesPanel'));
@@ -92,6 +96,9 @@ export function ExamScreen({
     return () => clearInterval(id);
   }, []);
   const timeUp = isTimeUp(deadline, now, status.offsetMs);
+  // Only text copied inside the exam may be pasted (M25).
+  const pasteBlockedAt = usePasteGuard();
+  const pasteNotice = pasteBlockedAt !== null && now - pasteBlockedAt < PASTE_NOTICE_MS;
   useEffect(() => {
     if (!timeUp) return;
     setConfirming(false);
@@ -171,6 +178,12 @@ export function ExamScreen({
         <p role="alert" className="bg-amber-100 px-6 py-2 text-sm text-amber-900">
           Time is up. Your work is being sent. Your receipt appears in a moment; keep this window
           open.
+        </p>
+      )}
+      {pasteNotice && (
+        <p role="status" className="bg-amber-100 px-6 py-2 text-sm text-amber-900">
+          Pasting text from outside the exam is not allowed. Only text copied inside the exam can be
+          pasted. Your teacher has been notified.
         </p>
       )}
       <div className="flex min-h-0 flex-1" {...(timeUp ? { inert: '' } : {})}>

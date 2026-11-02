@@ -5,6 +5,7 @@ import {
   AgentReportSchema,
   AgentServiceStatusSchema,
   AnswerSaveRequestSchema,
+  PasteBlockedReportSchema,
   RestoreResultSchema,
   AnswerStatusSchema,
   SubmitOutcomeSchema,
@@ -112,6 +113,9 @@ const api: ExamGuardApi = {
     await ipcRenderer.invoke(IPC.answerSave, AnswerSaveRequestSchema.parse(request));
   },
   submitExam: async () => SubmitOutcomeSchema.parse(await ipcRenderer.invoke(IPC.submitExam)),
+  reportPasteBlocked: async (report) => {
+    await ipcRenderer.invoke(IPC.pasteBlocked, PasteBlockedReportSchema.parse(report));
+  },
   onAnswerStatus: (listener) => {
     const handler = (_event: IpcRendererEvent, payload: unknown) => {
       const parsed = AnswerStatusSchema.safeParse(payload);

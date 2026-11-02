@@ -58,6 +58,8 @@ export const APP_EVENT_TYPES = [
   'internet_blocked',
   'internet_allowed',
   'internet_block_failed',
+  /** Text from outside the exam was pasted and blocked (M25). */
+  'paste_blocked',
   /** The agent link stayed down while the exam ran; the server locks the student (M24). */
   'agent_lost',
 ] as const;

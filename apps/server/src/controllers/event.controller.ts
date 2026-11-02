@@ -20,13 +20,14 @@ export function createEventController({ exams, events, screenshots }: EventContr
       if (!exams.get(req.params.id)) throw new ApiError(404, 'not_found', 'Exam not found');
       const query = EventQuerySchema.safeParse(req.query);
       if (!query.success) throw new ApiError(400, 'invalid_query', 'The filter is not valid');
-      const { studentId, severity, source, after, limit } = query.data;
+      const { studentId, severity, source, view, after, limit } = query.data;
       const body: EventsResponse = {
         events: events.list(req.params.id, {
           limit,
           ...(studentId ? { examStudentId: studentId } : {}),
           ...(severity ? { severity } : {}),
           ...(source ? { source } : {}),
+          ...(view ? { view } : {}),
           ...(after === undefined ? {} : { after }),
         }),
       };

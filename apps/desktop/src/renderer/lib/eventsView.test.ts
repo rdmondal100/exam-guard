@@ -114,7 +114,7 @@ describe('examApi events and screenshots', () => {
     });
     expect(events).toEqual([row]);
     expect(vi.mocked(fetchFn).mock.calls[0]?.[0]).toBe(
-      'http://127.0.0.1:47821/api/v1/exams/e%201/events?source=agent&studentId=s1&after=7&limit=50',
+      'http://127.0.0.1:47821/api/v1/exams/e%201/events?view=monitoring&studentId=s1&after=7&limit=50',
     );
   });
 
@@ -158,5 +158,31 @@ describe('tamper lock events (M24)', () => {
       describeEvent(event('agent_lost', { reason: 'The monitoring agent stopped answering.' })),
     ).toBe('Monitoring agent lost, student locked: The monitoring agent stopped answering.');
     expect(describeEvent(event('agent_lost', {}))).toBe('Monitoring agent lost, student locked');
+  });
+});
+
+describe('paste_blocked (M25)', () => {
+  it('says how much was pasted where, with a short preview', () => {
+    const details = {
+      surface: 'editor',
+      chars: 42,
+      lines: 3,
+      preview: 'def solve():\n    return 42',
+    };
+    expect(describeEvent(event('paste_blocked', details))).toBe(
+      'Paste from outside the exam blocked (42 chars, 3 lines) in the code editor: "def solve(): return 42"',
+    );
+    const folded = { surface: 'other', chars: 1, lines: 1, preview: '', suppressed: 4 };
+    expect(describeEvent(event('paste_blocked', folded))).toBe(
+      'Paste from outside the exam blocked (+4 more) (1 chars, 1 line)',
+    );
+  });
+
+  it('cuts a long preview', () => {
+    const line = describeEvent(
+      event('paste_blocked', { surface: 'answer', chars: 200, lines: 1, preview: 'a'.repeat(200) }),
+    );
+    expect(line).toContain(' in an answer box: "');
+    expect(line.endsWith('…"')).toBe(true);
   });
 });

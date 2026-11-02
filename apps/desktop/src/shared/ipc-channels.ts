@@ -20,6 +20,7 @@ export const IPC = {
   answerSave: 'answers:save',
   answerStatus: 'answers:status',
   submitExam: 'exam:submit',
+  pasteBlocked: 'clipboard:paste-blocked',
   runCode: 'runner:run',
   stopRun: 'runner:stop',
   runInput: 'runner:input',

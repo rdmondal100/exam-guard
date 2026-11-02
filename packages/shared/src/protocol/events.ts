@@ -6,6 +6,17 @@ export const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const;
 export const SeveritySchema = z.enum(SEVERITIES);
 export type Severity = z.infer<typeof SeveritySchema>;
 
+/**
+ * App events that belong in the teacher's monitoring list next to the agent's evidence
+ * (`GET /exams/:id/events?view=monitoring`, M25). The rest of the app's events (runs, terminal)
+ * are kept out of it.
+ */
+export const MONITORING_APP_EVENT_TYPES = ['agent_lost', 'paste_blocked'] as const;
+
+/** The teacher's event list views. `monitoring` = agent evidence plus `MONITORING_APP_EVENT_TYPES`. */
+export const EventViewSchema = z.enum(['monitoring']);
+export type EventView = z.infer<typeof EventViewSchema>;
+
 /** One event as the teacher sees it (`GET /exams/:id/events`). */
 export const EventRowSchema = z.object({
   id: z.number().int(),
