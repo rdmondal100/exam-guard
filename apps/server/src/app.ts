@@ -6,6 +6,7 @@ import { errorHandler, notFound } from './middlewares/error.middleware.js';
 import { requireLogin as requireLoginFor } from './middlewares/requireLogin.middleware.js';
 import { tokenMatches, verifyTeacherToken } from './middlewares/teacherToken.middleware.js';
 import { teacherRoutes } from './routes/index.js';
+import type { GradingService } from './services/grading/grading-service.js';
 import type { HostingManager } from './services/hosting/hosting-manager.js';
 import { onTeacherSocket } from './sockets/teacher.socket.js';
 import { attachWebSocket } from './sockets/wsServer.js';
@@ -22,6 +23,8 @@ export interface TeacherApp extends HttpListener {
   requireLogin: RequestHandler;
   /** Present when `hosting` options were given. */
   hosting?: HostingManager;
+  /** AI grading (M38): `resume()` after a restart. */
+  grading: GradingService;
 }
 
 /**
@@ -56,6 +59,7 @@ export function buildTeacherApp({ token, ...options }: TeacherAppOptions): Teach
     );
 
   const listener = httpListener(server, async () => {
+    c.grading.dispose();
     if (!live) return;
     await live.hosting.close();
     live.connections.reset();
@@ -69,6 +73,7 @@ export function buildTeacherApp({ token, ...options }: TeacherAppOptions): Teach
     },
     app,
     requireLogin,
+    grading: c.grading,
     ...(live ? { hosting: live.hosting } : {}),
   };
 }

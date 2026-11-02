@@ -12,6 +12,9 @@ import { TeacherRepo } from './db/repositories/teacher.repo.js';
 import { TeacherActionRepo } from './db/repositories/teacherAction.repo.js';
 import { TerminalRepo } from './db/repositories/terminal.repo.js';
 import { TerminalLogRepo } from './db/repositories/terminalLog.repo.js';
+import { AnswerGradeRepo } from './db/repositories/answerGrade.repo.js';
+import { EvaluationRepo } from './db/repositories/evaluation.repo.js';
+import { GradingJobRepo } from './db/repositories/gradingJob.repo.js';
 import { AnswerWriter } from './services/answers/answer-writer.js';
 import { AuthState } from './services/auth/auth-state.js';
 import { LoginLimiter } from './services/auth/login-limiter.js';
@@ -21,6 +24,9 @@ import { EventRecorder } from './services/events/event-recorder.js';
 import { StudentDeadlines } from './services/exams/student-deadlines.js';
 import { ConnectionEvents } from './services/hosting/connection-events.js';
 import { HostingManager, type HostingManagerDeps } from './services/hosting/hosting-manager.js';
+import { GradingService, type GradingServiceDeps } from './services/grading/grading-service.js';
+import { geminiSource } from './services/grading/provider-source.js';
+import { ReviewService } from './services/grading/review-service.js';
 import { ScreenshotStore } from './services/screenshots/screenshot-store.js';
 import { SubmissionService } from './services/submissions/submission-service.js';
 import { SessionHub } from './sockets/sessionHub.js';
@@ -56,6 +62,8 @@ export interface ContainerOptions {
     /** How long a student may be offline before `network_lost`; tests shorten it. */
     networkGraceMs?: number;
   };
+  /** The grader and pipeline settings (M38). Without it, grading asks for a Gemini key and gets none. */
+  grading?: Pick<GradingServiceDeps, 'source' | 'concurrency' | 'backoffMs' | 'progressMs'>;
 }
 
 /** The live hosting parts, present when `hosting` options and an exam-files folder exist. */
@@ -86,10 +94,20 @@ export interface Container {
   actions: TeacherActionRepo;
   examFiles?: ExamFileService;
   screenshots?: ScreenshotStore;
+  /** AI grading (M38). */
+  grading: GradingService;
+  /** Review, accept and edit (M39, M40). */
+  review: ReviewService;
   live?: Live;
 }
 
-export function createContainer({ db, now, filesDir, hosting }: ContainerOptions): Container {
+export function createContainer({
+  db,
+  now,
+  filesDir,
+  hosting,
+  grading: gradingOptions,
+}: ContainerOptions): Container {
   const exams = new ExamRepo(db);
   const questions = new QuestionRepo(db);
   const students = new ExamStudentRepo(db);
@@ -103,6 +121,31 @@ export function createContainer({ db, now, filesDir, hosting }: ContainerOptions
     ? new ExamFileService(new ExamFileRepo(db), new ExamFileStore(examFilesDir))
     : undefined;
   const screenshots = hosting && new ScreenshotStore(hosting.dataDir);
+  const finals = new FinalAnswerRepo(db);
+  const grades = new AnswerGradeRepo(db);
+  const evaluations = new EvaluationRepo(db);
+  // The hub exists only with hosting; progress is pushed once it is built (below).
+  let pushProgress: GradingServiceDeps['onProgress'] = undefined;
+  const grading = new GradingService({
+    exams,
+    questions,
+    jobs: new GradingJobRepo(db),
+    grades,
+    evaluations,
+    source: geminiSource(() => Promise.resolve(null)),
+    ...gradingOptions,
+    ...(now ? { now } : {}),
+    onProgress: (status) => pushProgress?.(status),
+  });
+  const review = new ReviewService({
+    exams,
+    questions,
+    students,
+    finals,
+    grades,
+    evaluations,
+    ...(now ? { now } : {}),
+  });
 
   const container: Container = {
     now,
@@ -120,6 +163,8 @@ export function createContainer({ db, now, filesDir, hosting }: ContainerOptions
     actions,
     ...(examFiles ? { examFiles } : {}),
     ...(screenshots ? { screenshots } : {}),
+    grading,
+    review,
   };
   if (!hosting || !examFiles) return container;
 
@@ -151,7 +196,7 @@ export function createContainer({ db, now, filesDir, hosting }: ContainerOptions
         `answer save ${row.clientSeq} refused: ${error instanceof Error ? error.message : String(error)}`,
       ),
   });
-  const finals = new FinalAnswerRepo(db);
+  pushProgress = (status) => hub.toExam(status.examId, { t: 'grading.progress', status });
   const manager = new HostingManager({
     connections,
     exams,

@@ -8,6 +8,7 @@ import { classListRoutes } from './classList.routes.js';
 import { eventRoutes } from './event.routes.js';
 import { examRoutes } from './exam.routes.js';
 import { examFileRoutes } from './examFile.routes.js';
+import { gradingRoutes } from './grading.routes.js';
 import { hostingRoutes } from './hosting.routes.js';
 import { questionRoutes } from './question.routes.js';
 import { terminalLogRoutes } from './terminalLog.routes.js';
@@ -44,6 +45,7 @@ export function teacherRoutes(c: Container, requireLogin: RequestHandler): Route
   router.use(eventRoutes({ exams, events, ...(screenshots ? { screenshots } : {}) }, requireLogin));
   router.use(terminalLogRoutes({ students, events, terminalLogs }, requireLogin));
   router.use(auditRoutes({ exams, actions: c.actions }, requireLogin));
+  router.use(gradingRoutes({ grading: c.grading, review: c.review }, requireLogin));
   if (c.live) {
     router.use(hostingRoutes({ hosting: c.live.hosting, exams, students }, requireLogin));
     router.use(thumbRoutes({ thumbs: c.live.thumbs }, requireLogin));

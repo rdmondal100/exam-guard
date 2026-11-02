@@ -16,3 +16,16 @@ body {
   color: var(--color-foreground);
   font-family: 'Segoe UI', system-ui, sans-serif;
 }
+
+/* Review (M39): lines the grader left a note on, in the read-only Monaco view. */
+.eg-note-line {
+  background: rgb(251 191 36 / 0.22);
+}
+.eg-note-glyph {
+  background: rgb(217 119 6);
+  border-radius: 9999px;
+  margin-left: 4px;
+  width: 8px !important;
+  height: 8px !important;
+  margin-top: 6px;
+}

@@ -193,3 +193,26 @@ describe('SessionHub alerts (M31)', () => {
     expect(mine).toHaveLength(0);
   });
 });
+
+describe('SessionHub grading progress (M38)', () => {
+  it('sends grading.progress only to the teachers of that exam', () => {
+    const { repo } = fakeRepo();
+    const hub = new SessionHub({ students: repo });
+    const mine: ServerToTeacher[] = [];
+    const other: ServerToTeacher[] = [];
+    hub.subscribe({ examId: 'e1', send: (m) => mine.push(m) });
+    hub.subscribe({ examId: 'e2', send: (m) => other.push(m) });
+    mine.length = 0;
+    other.length = 0;
+    const status = {
+      examId: 'e1',
+      examState: 'grading' as const,
+      provider: 'fake' as const,
+      jobs: [],
+      questions: [],
+    };
+    hub.toExam('e1', { t: 'grading.progress', status });
+    expect(mine).toEqual([{ t: 'grading.progress', status }]);
+    expect(other).toEqual([]);
+  });
+});

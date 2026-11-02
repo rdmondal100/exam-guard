@@ -77,6 +77,11 @@ export class FinalAnswerRepo {
     }));
   }
 
+  /** One final answer, for the review screen (M39). */
+  get(examStudentId: string, questionId: string): FinalAnswer | undefined {
+    return this.forStudent(examStudentId).find((a) => a.questionId === questionId);
+  }
+
   /** The stored receipt, or `null` while the student has not been finalized. */
   receiptFor(examStudentId: string): Receipt | null {
     const row = this.db

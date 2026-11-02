@@ -9,6 +9,7 @@ import {
 } from './agent-pipe.js';
 import { ExamStateSchema } from './exams.js';
 import { EventRowSchema } from './events.js';
+import { GradingStatusSchema } from './grading.js';
 import { StudentQuestionSchema } from './questions.js';
 import {
   InternetStateSchema,
@@ -309,11 +310,19 @@ export type ServerNotice = z.infer<typeof ServerNoticeSchema>;
 export const AlertSchema = z.object({ t: z.literal('alert'), event: EventRowSchema });
 export type Alert = z.infer<typeof AlertSchema>;
 
+/** Grading moved on (M38): the whole status, at most a few times a second per exam. */
+export const GradingProgressSchema = z.object({
+  t: z.literal('grading.progress'),
+  status: GradingStatusSchema,
+});
+export type GradingProgress = z.infer<typeof GradingProgressSchema>;
+
 export const ServerToTeacherSchema = z.discriminatedUnion('t', [
   RosterUpdateSchema,
   HostingStatusSchema,
   ServerNoticeSchema,
   AlertSchema,
+  GradingProgressSchema,
 ]);
 export type ServerToTeacher = z.infer<typeof ServerToTeacherSchema>;
 
