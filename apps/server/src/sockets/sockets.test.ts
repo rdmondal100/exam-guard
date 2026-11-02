@@ -700,6 +700,71 @@ describe('internet switch', () => {
   });
 });
 
+describe('tamper lock (M24)', () => {
+  const action = (payload: object) =>
+    app.inject({
+      method: 'POST',
+      url: `/api/v1/exams/${examId}/actions`,
+      headers: HEADERS,
+      payload,
+    });
+  const agentLost = (id: string) =>
+    JSON.stringify({ t: 'event', id, dedupeKey: id, clientTs: 1, type: 'agent_lost', details: {} });
+  const studentId = () =>
+    (db.prepare('SELECT id FROM exam_students ORDER BY id LIMIT 1').get() as { id: string }).id;
+
+  it('locks a working student on agent_lost and lets the teacher unlock them', async () => {
+    const token = await joinStudent('1');
+    const teacher = await teacherWs();
+    const c = await studentWs();
+    c.ws.send(hello(token));
+    await c.waitFor(() => has(c, 'welcome'));
+    await app.inject({ method: 'POST', url: `/api/v1/exams/${examId}/start`, headers: HEADERS });
+    await c.waitFor(() => last(c, 'state')?.state?.studentState === 'active');
+
+    c.ws.send(agentLost('lost-1'));
+    c.ws.send(agentLost('lost-1'));
+    await c.waitFor(() => last(c, 'state')?.state?.locked === true);
+    expect(last(c, 'state')?.state?.studentState).toBe('locked');
+    await teacher.waitFor(() => entry(teacher, '1')?.state === 'locked');
+    await c.waitFor(() => c.messages.filter((m) => m.t === 'event.ack').length === 2);
+    expect(db.prepare('SELECT type, severity, source FROM events').all()).toEqual([
+      { type: 'agent_lost', severity: 'critical', source: 'agent' },
+    ]);
+    expect(last(teacher, 'hosting')).toMatchObject({ active: 1 });
+
+    const unlocked = await action({ type: 'unlock', examStudentId: studentId() });
+    expect(unlocked.statusCode).toBe(200);
+    expect(unlocked.json()).toEqual({ ok: true, studentState: 'active' });
+    await c.waitFor(() => last(c, 'state')?.state?.locked === false);
+    await teacher.waitFor(() => entry(teacher, '1')?.state === 'active');
+    expect(db.prepare('SELECT action, exam_student_id FROM teacher_actions').all()).toEqual([
+      { action: 'unlock', exam_student_id: studentId() },
+    ]);
+
+    const again = await action({ type: 'unlock', examStudentId: studentId() });
+    expect(again.statusCode).toBe(409);
+    expect(again.json().error.code).toBe('invalid_state');
+  });
+
+  it('stores agent_lost before the start without locking anyone', async () => {
+    const token = await joinStudent('1');
+    const c = await studentWs();
+    c.ws.send(hello(token));
+    await c.waitFor(() => has(c, 'welcome'));
+    c.ws.send(agentLost('lost-early'));
+    await c.waitFor(() => has(c, 'event.ack'));
+    const row = db.prepare('SELECT state FROM exam_students WHERE id = ?').get(studentId());
+    expect(row).toEqual({ state: 'lobby' });
+    expect(has(c, 'state')).toBe(false);
+  });
+
+  it('refuses to unlock an unknown student', async () => {
+    const res = await action({ type: 'unlock', examStudentId: 'nobody' });
+    expect(res.statusCode).toBe(404);
+  });
+});
+
 describe('exam terminal', () => {
   const action = (payload: object, id = examId) =>
     app.inject({

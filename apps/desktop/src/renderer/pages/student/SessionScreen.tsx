@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { SessionState, SessionStatus } from '@examguard/shared';
 import { useRestoreAnswers } from '@/lib/restoreAnswers';
 import { useSessionExit } from '@/hooks/useSessionExit';
+import { ExamLockedOverlay } from '@/components/student/ExamLockedOverlay';
 import { ExamEndedScreen } from './ExamEndedScreen';
 import { ExamScreen } from './ExamScreen';
 import { LobbyScreen } from './LobbyScreen';
@@ -74,16 +75,19 @@ export function SessionScreen({ name, examTitle, onLeave }: Props) {
   }
   if (exam?.examState === 'running' && exam.questions && exam.deadline !== null) {
     return (
-      <ExamScreen
-        name={name}
-        examTitle={examTitle}
-        questions={exam.questions}
-        deadline={exam.deadline}
-        terminalOn={exam.terminal.enabled}
-        internetOff={exam.internet === 'blocked'}
-        filesOn={exam.filesEnabled}
-        status={status}
-      />
+      <>
+        <ExamScreen
+          name={name}
+          examTitle={examTitle}
+          questions={exam.questions}
+          deadline={exam.deadline}
+          terminalOn={exam.terminal.enabled}
+          internetOff={exam.internet === 'blocked'}
+          filesOn={exam.filesEnabled}
+          status={status}
+        />
+        {exam.locked && <ExamLockedOverlay />}
+      </>
     );
   }
   if (exam && ['ended', 'grading', 'in_review', 'finalized'].includes(exam.examState)) {

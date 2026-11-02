@@ -15,6 +15,7 @@ import type { ExamStudentRepo } from '../db/repositories/examStudent.repo.js';
 import type { TerminalLogRepo } from '../db/repositories/terminalLog.repo.js';
 import { hashToken } from '../services/join/join-service.js';
 import type { EvidenceIntake } from '../services/screenshots/evidence-intake.js';
+import { appEventSeverity } from '../services/screenshots/placeholder-severity.js';
 import type { SubmissionService } from '../services/submissions/submission-service.js';
 import type { SessionHub, StudentConn } from './sessionHub.js';
 
@@ -29,6 +30,8 @@ export interface StudentSocketDeps {
   submissions: Pick<SubmissionService, 'submit'>;
   /** What the agent saw: screenshot chunks (binary frames) and the events that name them (M22). */
   evidence: Pick<EvidenceIntake, 'chunk' | 'report' | 'forget'>;
+  /** The student's app lost its agent link (`agent_lost`, M24): lock them. */
+  onAgentLost?: (studentId: string) => void;
   /** The state the client should show; also activates a late joiner. */
   sessionState: (studentId: string) => SessionState;
   /** The hosted exam id, or `null` when nothing is hosted. */
@@ -104,19 +107,21 @@ export function onStudentSocket(socket: WebSocket, deps: StudentSocketDeps): voi
         deps.evidence.report(examId, studentId, message);
         return send({ t: 'event.ack', id: message.id });
       }
-      // App events are low until the classifier (M31) grades them. The key is namespaced so
-      // an app id can never collide with agent evidence keys.
-      deps.events.insert({
+      // The key is namespaced so an app id can never collide with agent evidence keys.
+      const stored = deps.events.insert({
         examId,
         examStudentId: studentId,
         type: message.type,
-        severity: 'low',
-        source: 'app',
+        severity: appEventSeverity(message.type),
+        // A lost agent link belongs in the teacher's monitoring list, next to the agent's evidence.
+        source: message.type === 'agent_lost' ? 'agent' : 'app',
         details: message.details,
         serverTs: now(),
         clientTs: message.clientTs,
         dedupeKey: `app:${message.dedupeKey}`,
       });
+      // Stored first, so the lock always has its event; a resend locks nothing again.
+      if (stored && message.type === 'agent_lost') deps.onAgentLost?.(studentId);
       return send({ t: 'event.ack', id: message.id });
     }
     if (message.t === 'agent.status') {

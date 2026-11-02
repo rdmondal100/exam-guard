@@ -3,6 +3,8 @@
 //! the SCM, for development. Design: docs/architecture.md §3.
 
 #[cfg(windows)]
+mod buffer;
+#[cfg(windows)]
 mod capture;
 #[cfg(windows)]
 mod config;
@@ -48,6 +50,8 @@ mod proc_snapshot;
 mod process_tree;
 #[cfg(windows)]
 mod procwatch;
+#[cfg(windows)]
+mod relaunch;
 #[cfg(windows)]
 mod service;
 #[cfg(windows)]

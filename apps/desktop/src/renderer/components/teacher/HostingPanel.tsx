@@ -143,7 +143,15 @@ export function HostingPanel({ examId, api, running, onStart, onStop, onEnd }: P
           students={sortedStudents(roster)}
         />
       )}
-      <RosterList students={sortedStudents(roster)} onTerminalLog={setLogOf} />
+      <RosterList
+        students={sortedStudents(roster)}
+        onTerminalLog={setLogOf}
+        onUnlock={(s) =>
+          void api.unlock(examId, s.id).catch((e: unknown) => {
+            setError(e instanceof Error ? e.message : String(e));
+          })
+        }
+      />
       {logOf && (
         <TerminalLogDialog
           examId={examId}

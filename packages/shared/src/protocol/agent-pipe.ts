@@ -8,16 +8,34 @@ export const MAX_PIPE_FRAME_BYTES = 4 * 1024 * 1024;
 /** The service sends a heartbeat this often; 3 missing acks (6 s) mean the link is lost. */
 export const HEARTBEAT_MS = 2_000;
 export const HEARTBEAT_LOST_MS = 6_000;
+/**
+ * While the exam runs, an agent link that stays down this long locks the student (`agent_lost`,
+ * M24). Counted from the moment the link dropped, or from the start of the exam on this app run.
+ */
+export const AGENT_LOST_LOCK_MS = 5_000;
 
 const seq = z.number().int().nonnegative();
 
 // ---- app → agent ----
+
+/**
+ * How the agent starts the app again if it disappears while monitoring (M24). The program is always
+ * the one the agent verified on the pipe; only the arguments, the folder and ExamGuard's own
+ * (`EG_*`) and Electron's dev (`ELECTRON_*`) variables come from here.
+ */
+export const PipeLaunchSchema = z.object({
+  args: z.array(z.string().max(2048)).max(32),
+  cwd: z.string().max(520).optional(),
+  env: z.record(z.string().max(64), z.string().max(4096)),
+});
+export type PipeLaunch = z.infer<typeof PipeLaunchSchema>;
 
 export const PipeAppHelloSchema = z.object({
   t: z.literal('hello'),
   seq,
   pipeVersion: z.literal(PIPE_VERSION),
   appVersion: z.string().max(64),
+  launch: PipeLaunchSchema.optional(),
 });
 export type PipeAppHello = z.infer<typeof PipeAppHelloSchema>;
 
@@ -144,7 +162,8 @@ export type PipeNetStatus = z.infer<typeof PipeNetStatusSchema>;
 
 /**
  * Evidence kinds the agent reports so far. `still_outside` is the periodic shot while away (M22);
- * `app_launched` and `processes_at_start` come from the service's process watcher (M23).
+ * `app_launched` and `processes_at_start` come from the service's process watcher (M23);
+ * `app_relaunched` when the agent started the app again after it disappeared (M24).
  */
 export const EVIDENCE_KINDS = [
   'focus_lost',
@@ -153,6 +172,7 @@ export const EVIDENCE_KINDS = [
   'still_outside',
   'app_launched',
   'processes_at_start',
+  'app_relaunched',
 ] as const;
 
 /** Most programs `processes_at_start` lists. */

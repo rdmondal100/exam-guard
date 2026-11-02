@@ -33,7 +33,26 @@ pub const NET_TICK: Duration = Duration::from_millis(500);
 /// `%ProgramData%\ExamGuard\spike`: logs and screenshots. It is still the M19 folder because the
 /// student app's "What the agent saw" view reads it; M22 moves the evidence into the pipe.
 pub fn data_dir() -> PathBuf {
-    let base = std::env::var_os("ProgramData")
-        .map_or_else(|| PathBuf::from(r"C:\ProgramData"), PathBuf::from);
-    base.join("ExamGuard").join("spike")
+    program_data().join("ExamGuard").join("spike")
+}
+
+/// `%ProgramData%\ExamGuard\buffer`: the encrypted evidence buffer (architecture §3). Created by the
+/// service with an access list for SYSTEM and administrators only.
+pub fn buffer_dir() -> PathBuf {
+    program_data().join("ExamGuard").join("buffer")
+}
+
+/// `--console` keeps its buffer in your own profile, since you cannot open the service's.
+pub fn console_buffer_dir() -> PathBuf {
+    std::env::var_os("LOCALAPPDATA")
+        .map_or_else(std::env::temp_dir, PathBuf::from)
+        .join("ExamGuard")
+        .join("agent-buffer")
+}
+
+/// SYSTEM and administrators, inherited by the key and every entry; no one else.
+pub const BUFFER_SDDL: &str = "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
+
+fn program_data() -> PathBuf {
+    std::env::var_os("ProgramData").map_or_else(|| PathBuf::from(r"C:\ProgramData"), PathBuf::from)
 }

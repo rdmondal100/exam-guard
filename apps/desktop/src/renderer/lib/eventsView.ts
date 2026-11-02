@@ -56,6 +56,12 @@ export function describeEvent(event: EventRow): string {
         ? 'No programs were running at the start'
         : `Running at the start: ${programs.length} program${programs.length === 1 ? '' : 's'}`;
     }
+    case 'app_relaunched':
+      return 'ExamGuard was closed and the agent started it again';
+    case 'agent_lost': {
+      const reason = text(details['reason']);
+      return `Monitoring agent lost, student locked${reason ? `: ${reason}` : ''}`;
+    }
     default:
       return event.type;
   }

@@ -13,5 +13,11 @@ export function placeholderSeverity(
   if (exe && highSeverityApps.some((app) => app.toLowerCase() === exe)) {
     return type === 'focus_returned' ? 'low' : 'high';
   }
-  return type === 'focus_lost' ? 'medium' : 'low';
+  // The app was gone (killed) long enough for the agent to start it again (M24).
+  return type === 'focus_lost' || type === 'app_relaunched' ? 'medium' : 'low';
+}
+
+/** App events are low until the classifier (M31), except a lost agent link, which is critical (M24). */
+export function appEventSeverity(type: string): Severity {
+  return type === 'agent_lost' ? 'critical' : 'low';
 }

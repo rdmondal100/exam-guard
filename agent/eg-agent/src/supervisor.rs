@@ -4,12 +4,13 @@
 //! A helper that ends after running for a while (killed, logoff) is relaunched at once. One that
 //! keeps dying young is relaunched with a growing delay, so a broken install does not spin.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
-use crate::config::{FIRST_RETRY, MAX_RETRY, POLL_INTERVAL, STABLE_AFTER};
+use crate::config::{self, FIRST_RETRY, MAX_RETRY, POLL_INTERVAL, STABLE_AFTER};
 use crate::pipe_security::{SDDL_HELPER_PIPE_CONSOLE, SDDL_HELPER_PIPE_SERVICE};
+use crate::relaunch::LaunchSpec;
 use crate::session::{self, Child};
 
 pub struct Platform {
@@ -19,6 +20,11 @@ pub struct Platform {
     pub allow_env_app: bool,
     pub active_session: fn() -> Option<u32>,
     pub launch: fn(session: u32, exe: &Path, args: &str) -> Result<Child, String>,
+    /// Starts the student app again as the student (M24). Returns its pid.
+    pub launch_app: fn(session: u32, spec: &LaunchSpec) -> Result<u32, String>,
+    /// The encrypted evidence buffer and the access list its folder is created with.
+    pub buffer_dir: fn() -> PathBuf,
+    pub buffer_sddl: Option<&'static str>,
 }
 
 impl Platform {
@@ -29,6 +35,9 @@ impl Platform {
             allow_env_app: false,
             active_session: session::active_user_session,
             launch: session::launch_in_session,
+            launch_app: session::launch_app_as_user,
+            buffer_dir: config::buffer_dir,
+            buffer_sddl: Some(config::BUFFER_SDDL),
         }
     }
 
@@ -39,6 +48,9 @@ impl Platform {
             allow_env_app: true,
             active_session: session::current_session,
             launch: session::launch_same_user,
+            launch_app: session::launch_app_same_user,
+            buffer_dir: config::console_buffer_dir,
+            buffer_sddl: None,
         }
     }
 }

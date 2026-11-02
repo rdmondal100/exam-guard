@@ -53,18 +53,23 @@ export function createHostingController({ hosting, exams, students }: HostingCon
       res.json(body);
     },
 
-    /** Exam-wide teacher actions (`terminal`, `internet`). */
+    /** Teacher actions: exam-wide `terminal` and `internet`, and `unlock` for one student (M24). */
     action(req: IdRequest, res: Response): void {
       const body = ExamActionSchema.safeParse(req.body);
       if (!body.success) throw new ApiError(400, 'invalid_body', 'Unknown or invalid action');
       const action = body.data;
+      const examId = req.params.id;
+      if (action.type === 'unlock') {
+        res.json(hosting.locks.unlock(examId, action.examStudentId));
+        return;
+      }
       if (action.type === 'terminal' && !action.enabled && action.minutes !== undefined) {
         throw new ApiError(400, 'invalid_body', 'Minutes only apply when turning it on');
       }
       res.json(
         action.type === 'internet'
-          ? hosting.internet.set(req.params.id, action.enabled)
-          : hosting.terminal.set(req.params.id, action.enabled, action.minutes),
+          ? hosting.internet.set(examId, action.enabled)
+          : hosting.terminal.set(examId, action.enabled, action.minutes),
       );
     },
   };

@@ -24,7 +24,10 @@ import { toAgentBlock } from './agent/agent-link.js';
 import { createAgentLink } from './agent/create-agent-link.js';
 import { InternetController } from './internet/internet-controller.js';
 import { announceExamWindow } from './monitor/exam-window.js';
-import { MonitorController } from './monitor/monitor-controller.js';
+import { MonitorController, wantsMonitoring } from './monitor/monitor-controller.js';
+import { createTamperLock } from './monitor/tamper-lock.js';
+import type { TamperWatch } from './monitor/tamper-watch.js';
+import { launchInfo } from './agent/launch-info.js';
 import { runCommand } from './agent/run-command.js';
 import { registerExamFilesIpc } from './exam-files/exam-files-ipc.js';
 import { registerFilesIpc } from './files/files-ipc.js';
@@ -65,7 +68,12 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     if (state.mode !== 'student') throw new Error('Discovery is for Student mode');
   };
   const agentLink = createAgentLink(
-    { isPackaged: app.isPackaged, env: process.env, appVersion: app.getVersion() },
+    {
+      isPackaged: app.isPackaged,
+      env: process.env,
+      appVersion: app.getVersion(),
+      launch: launchInfo(process.argv, process.cwd(), process.env),
+    },
     runCommand,
   );
   if (state.mode === 'student') agentLink.start();
@@ -110,6 +118,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
   let onTerminalExam: (exam: SessionState) => void = () => {};
   let internet: InternetController | null = null;
   let monitor: MonitorController | null = null;
+  let tamper: TamperWatch | null = null;
   // A failed session, or a link that stayed down past the deadline, must not trap the student.
   const exitWatch = new SessionExitWatch({ release: () => examLock.setActive(false) });
   app.once('will-quit', () => exitWatch.stop());
@@ -131,12 +140,14 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
       onExamFiles(exam);
       internet?.onExam(exam);
       monitor?.onExam(exam);
+      tamper?.setWorking(state.mode === 'student' && wantsMonitoring(exam));
       resume.hooks?.onExam(exam);
       for (const win of BrowserWindow.getAllWindows()) win.webContents.send(IPC.sessionExam, exam);
     },
     onStop: () => {
       internet?.reset();
       monitor?.reset();
+      tamper?.setWorking(false);
     },
   });
   // The teacher's internet switch: applied through the agent, confirmed back to the server.
@@ -146,6 +157,10 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     examStudentId: () => joinClient.examStudentId(),
     sendEvidence: (evidence, onAcked) => session.sendEvidence(evidence, onAcked),
   });
+  // An agent link that stays down while the exam runs locks the student (M24).
+  const watch = createTamperLock(agentLink, session);
+  tamper = watch;
+  app.once('will-quit', () => watch.dispose());
   // The server learns how the agent link looks after each welcome and whenever it changes.
   session.setAgentStatus(toAgentBlock(agentLink.status()));
   agentLink.onChange((link) => session.setAgentStatus(toAgentBlock(link)));

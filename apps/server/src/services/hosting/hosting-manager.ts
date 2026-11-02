@@ -37,6 +37,7 @@ import { generatePin } from '../../utils/pin.js';
 import { HostingError } from './hosting-error.js';
 import { DeadlineWatcher } from './deadline-watcher.js';
 import { InternetSwitch } from './internet-switch.js';
+import { StudentLock } from './student-lock.js';
 import { TerminalSwitch } from './terminal-switch.js';
 
 export { HostingError };
@@ -96,6 +97,8 @@ export class HostingManager {
   readonly terminal: TerminalSwitch;
   /** The teacher's internet switch. */
   readonly internet: InternetSwitch;
+  /** The tamper lock and the teacher's unlock (M24). */
+  readonly locks: StudentLock;
   private readonly watcher: DeadlineWatcher;
 
   constructor(private readonly deps: HostingManagerDeps) {
@@ -111,6 +114,13 @@ export class HostingManager {
       exams: deps.exams,
       actions: deps.actions,
       hub: deps.hub,
+      now: this.now,
+    });
+    this.locks = new StudentLock({
+      students: deps.students,
+      actions: deps.actions,
+      hub: deps.hub,
+      examState: (id) => deps.exams.get(id)?.state,
       now: this.now,
     });
     this.watcher = new DeadlineWatcher({
@@ -301,6 +311,7 @@ export class HostingManager {
           onDropped: createDropLogger((line) => console.warn(line), this.now),
         },
         sessionState: (id) => this.sessionState(id),
+        onAgentLost: (id) => this.locks.agentLost(id),
         submissions: this.deps.submissions,
         evidence: new EvidenceIntake({
           events: this.deps.events,

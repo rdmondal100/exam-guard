@@ -145,6 +145,16 @@ export class SessionClient {
     return this.exam;
   }
 
+  /**
+   * Shows the student as locked before the server says so (M24: the agent link was lost and
+   * `agent_lost` is on its way). The server's next state is the truth again.
+   */
+  lockLocally(): void {
+    if (!this.exam || this.exam.studentState !== 'active') return;
+    this.exam = { ...this.exam, studentState: 'locked', locked: true };
+    this.deps.onExam?.(this.exam);
+  }
+
   /** Reports an app event. It is re-sent after every reconnect until the server acks it. */
   sendEvent(type: AppEventType, details: Record<string, unknown>): void {
     const id = randomUUID();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { placeholderSeverity } from './placeholder-severity.js';
+import { appEventSeverity, placeholderSeverity } from './placeholder-severity.js';
 
 describe('placeholderSeverity', () => {
   it('rates leaving the exam medium and the rest low', () => {
@@ -30,5 +30,13 @@ describe('placeholderSeverity', () => {
 
   it('ignores an exe that is not text', () => {
     expect(placeholderSeverity('focus_lost', { exe: 5 }, ['5'])).toBe('medium');
+  });
+});
+
+describe('M24 severities', () => {
+  it('rates a relaunched app medium and a lost agent link critical', () => {
+    expect(placeholderSeverity('app_relaunched', { exe: 'ExamGuard.exe' }, [])).toBe('medium');
+    expect(appEventSeverity('agent_lost')).toBe('critical');
+    expect(appEventSeverity('run_executed')).toBe('low');
   });
 });

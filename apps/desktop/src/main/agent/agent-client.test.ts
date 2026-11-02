@@ -131,6 +131,16 @@ describe('AgentClient', () => {
       pipeVersion: PIPE_VERSION,
       appVersion: 'test',
     });
+    expect(agent.conversations[0]?.received[0]).not.toHaveProperty('launch');
+  });
+
+  it('tells the agent in its hello how to start the app again (M24)', async () => {
+    await agent.listen();
+    behaveLikeAgent();
+    const launch = { args: ['.', '--profile', 'student'], cwd: 'E:\\app', env: { EG_X: '1' } };
+    make({ launch }).start();
+    await until('hello', () => (agent.conversations[0]?.received.length ?? 0) > 0);
+    expect(agent.conversations[0]?.received[0]).toMatchObject({ t: 'hello', launch });
   });
 
   it('answers every heartbeat with an ack of the same hbSeq', async () => {

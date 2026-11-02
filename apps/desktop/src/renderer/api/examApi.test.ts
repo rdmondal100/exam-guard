@@ -116,6 +116,14 @@ describe('createExamApi', () => {
       expect(init?.method).toBe('POST');
     });
 
+    it('unlocks one student with an unlock action', async () => {
+      const fetchFn = reply(200, { ok: true, studentState: 'active' });
+      await createExamApi(CONNECTION, fetchFn).unlock('e1', 's9');
+      const [url, init] = vi.mocked(fetchFn).mock.calls[0] ?? [];
+      expect(url).toBe('http://127.0.0.1:47821/api/v1/exams/e1/actions');
+      expect(JSON.parse(String(init?.body))).toEqual({ type: 'unlock', examStudentId: 's9' });
+    });
+
     it('sets the terminal switch with a terminal action', async () => {
       const result = { ok: true, terminal: { enabled: true, until: 5000 }, pendingMinutes: null };
       const fetchFn = reply(200, result);

@@ -5,6 +5,7 @@ import {
   PIPE_VERSION,
   type AgentLinkStatus,
   type AgentToApp,
+  type PipeLaunch,
   type PipeSystemCheckResult,
 } from '@examguard/shared';
 import {
@@ -23,6 +24,8 @@ export interface AgentClientOptions {
   /** Whether the process id the agent named is really the installed agent service. */
   verifyService: (pid: number) => Promise<boolean>;
   appVersion: string;
+  /** Sent with the hello: how the agent starts this app again if it disappears (M24). */
+  launch?: PipeLaunch;
   /** No heartbeat for this long and the link counts as lost. */
   lostAfterMs?: number;
   reconnectMinMs?: number;
@@ -50,7 +53,7 @@ const NO_HELPER = 'The monitoring helper is not running.';
 /**
  * Pipe client of the student app. It connects to the agent, proves the other end is the installed
  * service, answers every heartbeat, and keeps the result of the latest system check. When the pipe
- * breaks or goes quiet it reconnects by itself. Locking the exam on a lost link is M24.
+ * breaks or goes quiet it reconnects by itself. A link that stays down locks the exam (`TamperWatch`).
  */
 export class AgentClient implements AgentLink {
   private socket: Socket | null = null;
@@ -211,6 +214,7 @@ export class AgentClient implements AgentLink {
         seq: this.nextSeq(),
         pipeVersion: PIPE_VERSION,
         appVersion: this.options.appVersion,
+        ...(this.options.launch ? { launch: this.options.launch } : {}),
       });
     });
     socket.on('data', (chunk: Buffer) => this.onData(socket, chunk));

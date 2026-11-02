@@ -81,3 +81,23 @@ describe('TerminalLogResponseSchema', () => {
     expect(TerminalLogResponseSchema.parse(log)).toEqual(log);
   });
 });
+
+describe('unlock action (M24)', () => {
+  it('names one student', () => {
+    expect(ExamActionSchema.safeParse({ type: 'unlock', examStudentId: 's1' }).success).toBe(true);
+    expect(ExamActionSchema.safeParse({ type: 'unlock' }).success).toBe(false);
+    expect(ExamActionSchema.safeParse({ type: 'unlock', examStudentId: '' }).success).toBe(false);
+  });
+
+  it('agent_lost is an app event', () => {
+    const event = {
+      t: 'event',
+      id: 'e',
+      dedupeKey: 'e',
+      clientTs: 1,
+      type: 'agent_lost',
+      details: {},
+    };
+    expect(StudentMessageSchema.safeParse(event).success).toBe(true);
+  });
+});

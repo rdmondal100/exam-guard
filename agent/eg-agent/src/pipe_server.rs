@@ -8,7 +8,7 @@
 //! `heartbeat`; no ack for `lost_after` ends the connection.
 
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
@@ -18,7 +18,7 @@ use crate::evidence_queue::Stored;
 use crate::net_control::NetStatus;
 use crate::pipe_conn::Conn;
 use crate::pipe_frame::{encode, FrameBuffer, MAX_FRAME};
-use crate::pipe_msg::{FromApp, MonitorPolicy, ToApp};
+use crate::pipe_msg::{FromApp, LaunchRequest, MonitorPolicy, ToApp};
 use crate::pipe_security::{image_path, same_image};
 use crate::system_check::CheckResult;
 
@@ -60,6 +60,13 @@ pub trait Health: Send + Sync {
     fn evidence_ack(&self, up_to: u64) {
         let _ = up_to;
     }
+    /// A verified app said hello on a connection (called once per connection): its program file,
+    /// and how it wants to be started again if it disappears.
+    fn app_linked(&self, image: &Path, launch: Option<&LaunchRequest>) {
+        let _ = (image, launch);
+    }
+    /// A connection that had said hello ended.
+    fn app_unlinked(&self) {}
 }
 
 #[derive(Clone)]
@@ -136,9 +143,9 @@ fn worker(conn: &Conn, config: &ServerConfig, health: &dyn Health, stop: &Atomic
             break;
         }
         match verify_peer(conn, config) {
-            Ok(pid) => {
+            Ok((pid, image)) => {
                 tracing::info!(pid, "app connected");
-                let reason = serve(conn, config, health, stop);
+                let reason = serve(conn, config, health, stop, &image);
                 tracing::info!(pid, reason, "app connection ended");
             }
             Err(reason) => tracing::warn!(reason, "rejected pipe peer"),
@@ -148,12 +155,12 @@ fn worker(conn: &Conn, config: &ServerConfig, health: &dyn Health, stop: &Atomic
 }
 
 /// The connecting process must be the registered student app.
-fn verify_peer(conn: &Conn, config: &ServerConfig) -> Result<u32, String> {
+fn verify_peer(conn: &Conn, config: &ServerConfig) -> Result<(u32, PathBuf), String> {
     let pid = conn.client_pid().ok_or("the client process is unknown")?;
     let allowed = (config.allowed_app)().ok_or("no student app is registered")?;
     let image = image_path(pid).ok_or_else(|| format!("pid {pid}: program file unreadable"))?;
     if same_image(&image, &allowed) {
-        Ok(pid)
+        Ok((pid, image))
     } else {
         Err(format!(
             "pid {pid} runs {}, not {}",
@@ -173,12 +180,30 @@ fn send_raw(conn: &Conn, json: &[u8]) -> io::Result<()> {
     conn.write_all(&wire)
 }
 
-/// Serves one verified connection; the returned text says why it ended.
+/// Serves one verified connection; the returned text says why it ended. The agent hears when the
+/// app links (its first hello) and when such a connection ends, whatever the reason.
 fn serve(
     conn: &Conn,
     config: &ServerConfig,
     health: &dyn Health,
     stop: &AtomicBool,
+    image: &Path,
+) -> &'static str {
+    let mut linked = false;
+    let reason = serve_linked(conn, config, health, stop, image, &mut linked);
+    if linked {
+        health.app_unlinked();
+    }
+    reason
+}
+
+fn serve_linked(
+    conn: &Conn,
+    config: &ServerConfig,
+    health: &dyn Health,
+    stop: &AtomicBool,
+    image: &Path,
+    linked: &mut bool,
 ) -> &'static str {
     let mut seq = 0u64;
     let mut next_seq = || {
@@ -232,7 +257,11 @@ fn serve(
                     let _ = send(conn, &error);
                     return "pipe version mismatch";
                 }
-                Ok(FromApp::Hello { .. }) => {
+                Ok(FromApp::Hello { launch, .. }) => {
+                    if !*linked {
+                        *linked = true;
+                        health.app_linked(image, launch.as_ref());
+                    }
                     greeted = true;
                     last_ack = Instant::now();
                     next_heartbeat = Instant::now();
@@ -321,7 +350,10 @@ fn serve(
                     }
                     _ => {
                         // It can never be sent; keeping it would block the ones behind it for good.
-                        tracing::warn!(evidence_seq = stored.evidence_seq, "evidence too large, dropped");
+                        tracing::warn!(
+                            evidence_seq = stored.evidence_seq,
+                            "evidence too large, dropped"
+                        );
                         health.evidence_ack(stored.evidence_seq);
                     }
                 }
@@ -366,6 +398,7 @@ mod tests {
         check: CheckResult,
         queue: crate::evidence_queue::EvidenceQueue,
         calls: std::sync::Mutex<Vec<String>>,
+        links: std::sync::Mutex<Vec<String>>,
     }
 
     impl FakeHealth {
@@ -374,6 +407,7 @@ mod tests {
                 check,
                 queue: crate::evidence_queue::EvidenceQueue::new(1),
                 calls: std::sync::Mutex::new(Vec::new()),
+                links: std::sync::Mutex::new(Vec::new()),
             }
         }
 
@@ -383,6 +417,17 @@ mod tests {
     }
 
     impl Health for FakeHealth {
+        fn app_linked(&self, image: &Path, launch: Option<&LaunchRequest>) {
+            let args = launch.map_or(String::from("-"), |l| l.args.join(" "));
+            let same = same_image(image, &std::env::current_exe().unwrap());
+            self.links
+                .lock()
+                .unwrap()
+                .push(format!("linked {same} {args}"));
+        }
+        fn app_unlinked(&self) {
+            self.links.lock().unwrap().push("unlinked".to_string());
+        }
         fn monitor_start(&self, exam_student_id: &str, policy: &MonitorPolicy) {
             self.note(format!("start {exam_student_id} {}", policy.max_width));
         }
@@ -393,7 +438,11 @@ mod tests {
             self.note(format!("window {hwnd} {pid}"));
         }
         fn monitoring(&self) -> bool {
-            self.calls.lock().unwrap().last().is_some_and(|c| c.starts_with("start"))
+            self.calls
+                .lock()
+                .unwrap()
+                .last()
+                .is_some_and(|c| c.starts_with("start"))
         }
         fn evidence_after(&self, after: u64) -> Vec<Stored> {
             self.queue.after(after)
@@ -684,8 +733,7 @@ mod tests {
             lost_after: Duration::from_millis(400),
             hello_within: Duration::from_millis(400),
         };
-        let server =
-            PipeServer::start(config, Arc::new(FakeHealth::new(good_check()))).unwrap();
+        let server = PipeServer::start(config, Arc::new(FakeHealth::new(good_check()))).unwrap();
         let client = Conn::connect(&server.name).unwrap();
         let mut frames = FrameBuffer::default();
         assert_eq!(next(&client, &mut frames).unwrap()["t"], "hello");
@@ -728,6 +776,43 @@ mod tests {
             drop(client);
         }
         server.stop();
+    }
+
+    #[test]
+    fn the_agent_hears_once_when_an_app_links_and_when_it_goes() {
+        let health = Arc::new(FakeHealth::new(good_check()));
+        let server = start_with(me(), health.clone());
+        let client = Conn::connect(&server.name).unwrap();
+        let mut frames = FrameBuffer::default();
+        assert_eq!(next(&client, &mut frames).unwrap()["t"], "hello");
+        put(
+            &client,
+            r#"{"t":"hello","seq":1,"pipeVersion":1,"appVersion":"t","launch":{"args":[".","--profile","student"]}}"#,
+        );
+        put(&client, HELLO);
+        put(&client, r#"{"t":"system.check","seq":2}"#);
+        while next_non_heartbeat(&client, &mut frames)["t"] != "system.check.result" {}
+        drop(client);
+        let give_up = Instant::now() + Duration::from_secs(3);
+        while health.links.lock().unwrap().len() < 2 {
+            assert!(Instant::now() < give_up, "the end was never reported");
+            thread::sleep(Duration::from_millis(5));
+        }
+        let links = health.links.lock().unwrap().clone();
+        assert_eq!(links, vec!["linked true . --profile student", "unlinked"]);
+        server.stop();
+    }
+
+    #[test]
+    fn a_connection_that_never_said_hello_is_not_reported() {
+        let health = Arc::new(FakeHealth::new(good_check()));
+        let server = start_with(me(), health.clone());
+        let client = Conn::connect(&server.name).unwrap();
+        let mut frames = FrameBuffer::default();
+        assert_eq!(next(&client, &mut frames).unwrap()["t"], "hello");
+        assert!(next(&client, &mut frames).is_none());
+        server.stop();
+        assert!(health.links.lock().unwrap().is_empty());
     }
 
     fn body(kind: &str) -> crate::pipe_msg::EvidenceBody {
@@ -776,7 +861,10 @@ mod tests {
                     break true;
                 }
             }
-            assert!(Instant::now() < give_up, "the heartbeat never said monitoring");
+            assert!(
+                Instant::now() < give_up,
+                "the heartbeat never said monitoring"
+            );
         };
         assert!(monitoring);
         put(&client, r#"{"t":"monitor.stop","seq":5}"#);

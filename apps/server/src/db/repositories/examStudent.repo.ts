@@ -129,6 +129,24 @@ export class ExamStudentRepo {
     return ids;
   }
 
+  /** `active` → `locked` (M24: the agent link was lost). Returns whether the row changed. */
+  lock(id: string): boolean {
+    return (
+      this.db
+        .prepare("UPDATE exam_students SET state = 'locked' WHERE id = ? AND state = 'active'")
+        .run(id).changes > 0
+    );
+  }
+
+  /** `locked` → `active` (the teacher unlocked). Returns whether the row changed. */
+  unlock(id: string): boolean {
+    return (
+      this.db
+        .prepare("UPDATE exam_students SET state = 'active' WHERE id = ? AND state = 'locked'")
+        .run(id).changes > 0
+    );
+  }
+
   /** Students still working (`active` or `locked`) with their personal extra time, seconds. */
   working(examId: string): { id: string; extensionSec: number }[] {
     const rows = this.db
@@ -200,7 +218,7 @@ export class ExamStudentRepo {
         `SELECT
            COUNT(CASE WHEN state <> 'not_joined' THEN 1 END) AS joined,
            COUNT(CASE WHEN state = 'lobby' THEN 1 END) AS in_lobby,
-           COUNT(CASE WHEN state = 'active' THEN 1 END) AS active,
+           COUNT(CASE WHEN state IN ('active', 'locked') THEN 1 END) AS active,
            COUNT(CASE WHEN state = 'submitted' THEN 1 END) AS submitted,
            COUNT(CASE WHEN state <> 'not_joined' AND connected = 1 THEN 1 END) AS connected
          FROM exam_students WHERE exam_id = ?`,

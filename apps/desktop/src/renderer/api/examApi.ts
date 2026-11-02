@@ -9,6 +9,7 @@ import {
   StartResultSchema,
   TerminalActionResultSchema,
   TerminalLogResponseSchema,
+  UnlockActionResultSchema,
   type EventRow,
   type ExamCreateBody,
   type ExamSummary,
@@ -45,6 +46,8 @@ export interface ExamApi {
   setTerminal(id: string, enabled: boolean, minutes?: number): Promise<TerminalActionResult>;
   /** The student internet switch, hosting or running only. `allowed: false` blocks it. */
   setInternet(id: string, allowed: boolean): Promise<InternetActionResult>;
+  /** Lets a locked student continue (M24). Rejects `invalid_state` when they are not locked. */
+  unlock(id: string, studentId: string): Promise<void>;
   /** One student's terminal events and transcript, in any exam state. */
   terminalLog(id: string, studentId: string): Promise<TerminalLogResponse>;
   /** What the agents saw, newest first. `after` is the id of the newest event already shown. */
@@ -95,6 +98,12 @@ export function createExamApi(connection: ServerConnection, fetchFn: FetchFn = f
         type: 'internet',
         enabled: allowed,
       }),
+    unlock: async (id, studentId) => {
+      await call(connection, fetchFn, `${path(id)}/actions`, UnlockActionResultSchema, {
+        type: 'unlock',
+        examStudentId: studentId,
+      });
+    },
     terminalLog: (id, studentId) =>
       call(
         connection,

@@ -39,7 +39,13 @@ export interface StudentAppDeps {
     examId: () => string | null;
   } & Pick<
     StudentSocketDeps,
-    'sessionState' | 'submissions' | 'evidence' | 'now' | 'helloTimeoutMs' | 'idleMs'
+    | 'sessionState'
+    | 'submissions'
+    | 'evidence'
+    | 'onAgentLost'
+    | 'now'
+    | 'helloTimeoutMs'
+    | 'idleMs'
   >;
 }
 

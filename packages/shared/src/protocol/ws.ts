@@ -58,6 +58,8 @@ export const APP_EVENT_TYPES = [
   'internet_blocked',
   'internet_allowed',
   'internet_block_failed',
+  /** The agent link stayed down while the exam ran; the server locks the student (M24). */
+  'agent_lost',
 ] as const;
 export const AppEventTypeSchema = z.enum(APP_EVENT_TYPES);
 export type AppEventType = z.infer<typeof AppEventTypeSchema>;
