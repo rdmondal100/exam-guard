@@ -9,13 +9,11 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use windows_sys::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CMONITORS};
-
 use crate::focus::Command;
 use crate::pipe_conn::Conn;
 use crate::pipe_frame::{encode, FrameBuffer};
 use crate::pipe_msg::{FromHelper, ToHelper};
-use crate::{capture, config};
+use crate::{capture, config, monitors};
 
 const RETRY: Duration = Duration::from_millis(500);
 const POLL: Duration = Duration::from_millis(10);
@@ -121,9 +119,7 @@ fn probe() -> (bool, u32) {
             false
         }
     };
-    // SAFETY: no pointers involved.
-    let monitors = unsafe { GetSystemMetrics(SM_CMONITORS) };
-    (capture_ok, u32::try_from(monitors).unwrap_or(0))
+    (capture_ok, monitors::count())
 }
 
 #[cfg(test)]

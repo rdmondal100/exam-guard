@@ -18,6 +18,7 @@ const entry = (id: string, studentCode: string, connected = true): RosterEntry =
   lastSeen: null,
   agentOk: true,
   internetBlocked: false,
+  monitors: 1,
 });
 
 describe('applyTeacherMessage', () => {

@@ -14,6 +14,7 @@ const entry = (id: string, connected: boolean): RosterEntry => ({
   lastSeen: null,
   agentOk: true,
   internetBlocked: false,
+  monitors: 1,
 });
 
 function fakeRepo() {
@@ -92,9 +93,36 @@ describe('SessionHub', () => {
     vi.advanceTimersByTime(250);
     expect(sent).toHaveLength(0);
 
-    hub.setAgent('a', { ok: true, helper: true, captureOk: true, monitors: 2 });
+    hub.setAgent('a', { ok: true, helper: true, captureOk: true, monitors: 1 });
     vi.advanceTimersByTime(250);
     expect(ok(sent)).toEqual([true]);
+  });
+
+  it('shows how many screens the agent reports and pushes a change (M26)', () => {
+    const { repo } = fakeRepo();
+    const hub = new SessionHub({ students: repo, batchMs: 250 });
+    const sent: ServerToTeacher[] = [];
+    hub.subscribe({ examId: 'e1', send: (m) => sent.push(m) });
+    const screens = () =>
+      sent.flatMap((m) => (m.t === 'roster' ? m.students : [])).map((e) => e.monitors);
+    hub.attach('a', conn(), 4409);
+    vi.advanceTimersByTime(250);
+    sent.length = 0;
+
+    const good = { ok: true, helper: true, captureOk: true };
+    hub.setAgent('a', { ...good, monitors: 1 });
+    vi.advanceTimersByTime(250);
+    expect(screens()).toEqual([1]);
+
+    sent.length = 0;
+    hub.setAgent('a', { ...good, monitors: 2 });
+    vi.advanceTimersByTime(250);
+    expect(screens()).toEqual([2]);
+
+    sent.length = 0;
+    hub.setAgent('a', { ...good, monitors: 2 });
+    vi.advanceTimersByTime(250);
+    expect(sent).toHaveLength(0);
   });
 
   it('only pushes to subscribers of that exam', () => {

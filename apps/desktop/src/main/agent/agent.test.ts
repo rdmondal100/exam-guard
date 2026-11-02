@@ -7,7 +7,6 @@ import { installAgent, uninstallAgent } from './agent-installer.js';
 import type { RunCommand } from './run-command.js';
 import { parseScQuery } from './service-state.js';
 import { INSTALL_SCRIPT } from './setup-scripts.js';
-import { lastEvents, shortenLogLine } from './spike-report.js';
 
 describe('parseScQuery', () => {
   const query = (n: string, word: string) =>
@@ -87,31 +86,5 @@ describe('installer', () => {
     const workDir = await mkdtemp(join(tmpdir(), 'eg-setup-'));
     const run = await fakeRun(null, []);
     expect(await installAgent('C:\\a.exe', { run, workDir })).toMatch(/declined/);
-  });
-});
-
-describe('spike report', () => {
-  const log = [
-    '2026-10-23T14:39:14.694726Z  INFO eg_agent::helper: helper started pid=4648 user=SYSTEM',
-    '2026-10-23T14:39:14.920210Z  INFO eg_agent::helper: foreground pid=7 exe=C:\\chrome.exe title=Tab',
-    '2026-10-23T14:39:15.000000Z  INFO eg_agent::helper: foreground hook installed',
-    'noise',
-  ].join('\n');
-
-  it('shortens a tracing line', () => {
-    expect(shortenLogLine(log.split('\n')[1] ?? '')).toBe(
-      '14:39:14Z foreground pid=7 exe=C:\\chrome.exe title=Tab',
-    );
-    expect(shortenLogLine('noise')).toBe('noise');
-  });
-  it('keeps the interesting lines, newest last, at most 8', () => {
-    expect(lastEvents(log)).toHaveLength(3);
-    const many = Array.from(
-      { length: 20 },
-      (_, i) => `2026-10-23T14:00:${String(i).padStart(2, '0')}Z  INFO a::b: foreground n=${i}`,
-    );
-    const out = lastEvents(many.join('\n'));
-    expect(out).toHaveLength(8);
-    expect(out.at(-1)).toContain('n=19');
   });
 });

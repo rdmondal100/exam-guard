@@ -228,6 +228,8 @@ export const RosterEntrySchema = z.object({
   agentOk: z.boolean(),
   /** The student's PC confirmed that its internet is blocked (M21b). */
   internetBlocked: z.boolean(),
+  /** Screens the student's PC shows the desktop on, from the agent's last report (M26). */
+  monitors: z.number().int().nonnegative(),
 });
 export type RosterEntry = z.infer<typeof RosterEntrySchema>;
 

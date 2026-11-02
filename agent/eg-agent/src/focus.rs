@@ -1,6 +1,7 @@
 //! The helper's monitoring: watches which window is in front (foreground and title hooks plus a
 //! timer on one message-loop thread), asks `policy::Tracker` what that means, and has a worker
-//! thread take the screenshots and hand the evidence to the service link.
+//! thread take the screenshots and hand the evidence to the service link. The same timer polls the
+//! monitor count and the input desktop for `screen_watch` (M26).
 //!
 //! Monitoring runs only when the service has sent both `monitor.start` and `exam.window`. Hook
 //! callbacks must stay quick, so nothing slow (capture, JPEG, the pipe) happens in them.
@@ -23,10 +24,13 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 
 use crate::pipe_msg::{EvidenceBody, EvidenceData, FromHelper, MonitorPolicy, Screenshot};
 use crate::policy::{Observation, Tracker, Window};
-use crate::{capture, process_tree, window_info};
+use crate::screen_watch::ScreenWatch;
+use crate::{capture, desktop, monitors, process_tree, window_info};
 
 /// How often commands are picked up and the periodic screenshot is considered.
 const TICK_MS: u32 = 250;
+/// Screens and the secure desktop are looked at every this many ticks (500 ms, M26).
+const SCREEN_EVERY_TICKS: u32 = 2;
 const MAX_TITLE_CHARS: usize = 500;
 const MAX_EXE_CHARS: usize = 260;
 const MAX_PATH_CHARS: usize = 520;
@@ -44,10 +48,11 @@ struct ExamWindow {
     pid: u32,
 }
 
-/// One observation waiting for its screenshot.
+/// One piece of evidence waiting for its screenshot.
 struct Job {
     ts: u64,
-    observation: Observation,
+    kind: String,
+    data: EvidenceData,
     /// Width and JPEG quality when a screenshot is wanted.
     shot: Option<(u32, u8)>,
 }
@@ -58,6 +63,9 @@ struct State {
     policy: Option<MonitorPolicy>,
     exam: Option<ExamWindow>,
     tracker: Option<Tracker>,
+    /// Monitors and the secure desktop; runs whenever monitoring is on (M26).
+    screen: ScreenWatch,
+    ticks: u32,
 }
 
 thread_local! {
@@ -107,6 +115,7 @@ impl State {
                 Command::Stop => {
                     self.policy = None;
                     self.tracker = None;
+                    self.screen = ScreenWatch::default();
                 }
                 Command::ExamWindow { hwnd, pid } => self.exam = Some(ExamWindow { hwnd, pid }),
             }
@@ -179,10 +188,29 @@ impl State {
             .map(|tracker| tracker.tick(Instant::now()))
             .unwrap_or_default();
         self.emit(seen);
+        self.ticks = self.ticks.wrapping_add(1);
+        if self.ticks.is_multiple_of(SCREEN_EVERY_TICKS) {
+            self.screen_tick();
+        }
+    }
+
+    /// Monitor count and secure desktop. Their shots skip the focus policy's gap: they are rare.
+    fn screen_tick(&mut self) {
+        if self.policy.is_none() {
+            return;
+        }
+        let seen = self.screen.observe(
+            Instant::now(),
+            monitors::count(),
+            &desktop::input_desktop(),
+        );
+        for event in seen {
+            tracing::info!(kind = event.kind, data = ?event.data, shot = event.shot, "screen");
+            self.send(event.kind.to_string(), event.data, event.shot);
+        }
     }
 
     fn emit(&self, seen: Vec<Observation>) {
-        let Some(policy) = &self.policy else { return };
         for observation in seen {
             tracing::info!(
                 kind = observation.kind.as_str(),
@@ -191,17 +219,21 @@ impl State {
                 shot = observation.shot,
                 "observation"
             );
-            let shot = observation
-                .shot
-                .then_some((policy.max_width, policy.jpeg_quality));
-            let job = Job {
-                ts: unix_ms(),
-                observation,
-                shot,
-            };
-            if self.jobs.send(job).is_err() {
-                tracing::error!("the evidence worker is gone");
-            }
+            let kind = observation.kind.as_str().to_string();
+            self.send(kind, evidence_data(&observation), observation.shot);
+        }
+    }
+
+    fn send(&self, kind: String, data: EvidenceData, shot: bool) {
+        let Some(policy) = &self.policy else { return };
+        let job = Job {
+            ts: unix_ms(),
+            kind,
+            data,
+            shot: shot.then_some((policy.max_width, policy.jpeg_quality)),
+        };
+        if self.jobs.send(job).is_err() {
+            tracing::error!("the evidence worker is gone");
         }
     }
 }
@@ -282,8 +314,8 @@ fn worker(jobs: &Receiver<Job>, out: &Sender<FromHelper>) {
         let screenshot = job.shot.and_then(|(width, quality)| shoot(width, quality));
         let body = EvidenceBody {
             ts: job.ts,
-            kind: job.observation.kind.as_str().to_string(),
-            data: evidence_data(&job.observation),
+            kind: job.kind,
+            data: job.data,
             screenshot,
         };
         if out.send(FromHelper::Evidence { body }).is_err() {
@@ -303,6 +335,8 @@ pub fn run(commands: Receiver<Command>, evidence: Sender<FromHelper>) -> Result<
             policy: None,
             exam: None,
             tracker: None,
+            screen: ScreenWatch::default(),
+            ticks: 0,
         });
     });
 

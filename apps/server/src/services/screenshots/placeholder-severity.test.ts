@@ -33,6 +33,24 @@ describe('placeholderSeverity', () => {
   });
 });
 
+describe('M26 severities', () => {
+  it('rates a screen plugged in mid-exam high, two at the start medium, one removed low', () => {
+    expect(placeholderSeverity('monitor_changed', { monitors: 2, monitorsBefore: 1 }, [])).toBe(
+      'high',
+    );
+    expect(placeholderSeverity('monitor_changed', { monitors: 2 }, [])).toBe('medium');
+    expect(placeholderSeverity('monitor_changed', { monitors: 1, monitorsBefore: 2 }, [])).toBe(
+      'low',
+    );
+    expect(placeholderSeverity('monitor_changed', { monitors: 1 }, [])).toBe('low');
+  });
+
+  it('rates Task Manager and the security screen medium', () => {
+    expect(placeholderSeverity('taskmgr_opened', { exe: 'Taskmgr.exe' }, [])).toBe('medium');
+    expect(placeholderSeverity('secure_desktop', { desktop: 'Winlogon' }, [])).toBe('medium');
+  });
+});
+
 describe('M24 severities', () => {
   it('rates a relaunched app medium and a lost agent link critical', () => {
     expect(placeholderSeverity('app_relaunched', { exe: 'ExamGuard.exe' }, [])).toBe('medium');

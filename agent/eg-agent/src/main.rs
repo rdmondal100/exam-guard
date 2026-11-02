@@ -11,6 +11,8 @@ mod config;
 #[cfg(windows)]
 mod console;
 #[cfg(windows)]
+mod desktop;
+#[cfg(windows)]
 mod evidence_queue;
 #[cfg(windows)]
 mod focus;
@@ -26,6 +28,8 @@ mod install;
 mod link;
 #[cfg(windows)]
 mod log;
+#[cfg(windows)]
+mod monitors;
 #[cfg(windows)]
 mod net_block;
 #[cfg(windows)]
@@ -52,6 +56,8 @@ mod process_tree;
 mod procwatch;
 #[cfg(windows)]
 mod relaunch;
+#[cfg(windows)]
+mod screen_watch;
 #[cfg(windows)]
 mod service;
 #[cfg(windows)]

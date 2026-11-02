@@ -19,6 +19,12 @@ export function parseFakeFailure(value: string | undefined): FakeFailure {
     : null;
 }
 
+/** `EG_FAKE_AGENT_MONITORS`: how many screens the fake reports (1–8, default 1; M26). */
+export function parseFakeMonitors(value: string | undefined): number {
+  const count = Number(value);
+  return Number.isInteger(count) && count >= 1 && count <= 8 ? count : 1;
+}
+
 /**
  * Dev stand-in for the agent (`EG_FAKE_AGENT=1`): the same `AgentLink`, no Windows service, no
  * pipe. It reports a healthy agent unless `EG_FAKE_AGENT_FAIL` names a failure to try out; `lose`
@@ -28,6 +34,7 @@ export class FakeAgent implements AgentLink {
   constructor(
     private readonly failure: FakeFailure = null,
     private readonly loseAfterMs = LOSE_AFTER_MS,
+    private readonly monitors = 1,
   ) {}
 
   /** `lose`: the link has gone down. */
@@ -60,7 +67,7 @@ export class FakeAgent implements AgentLink {
           ok: false,
           helper: true,
           captureOk: false,
-          monitors: 1,
+          monitors: this.monitors,
           problems: ['The monitoring agent cannot capture the screen. (fake agent)'],
         };
       default:
@@ -69,7 +76,7 @@ export class FakeAgent implements AgentLink {
           ok: true,
           helper: true,
           captureOk: true,
-          monitors: 1,
+          monitors: this.monitors,
           problems: [],
         };
     }

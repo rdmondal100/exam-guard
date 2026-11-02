@@ -161,6 +161,33 @@ describe('tamper lock events (M24)', () => {
   });
 });
 
+describe('screens and Task Manager (M26)', () => {
+  it('describes a screen change, screens at the start, the security screen and Task Manager', () => {
+    expect(describeEvent(event('monitor_changed', { monitors: 2, monitorsBefore: 1 }))).toBe(
+      'Screens changed: 1 → 2',
+    );
+    expect(describeEvent(event('monitor_changed', { monitors: 2 }))).toBe(
+      '2 screens connected at the start',
+    );
+    expect(describeEvent(event('monitor_changed', {}))).toBe('Screens changed');
+    expect(describeEvent(event('secure_desktop', { desktop: 'Winlogon' }))).toBe(
+      'Security screen opened (Ctrl+Alt+Del, lock screen or UAC prompt)',
+    );
+    expect(describeEvent(event('secure_desktop', { desktop: 'Screen-saver' }))).toBe(
+      'Another desktop took the screen: Screen-saver',
+    );
+    expect(describeEvent(event('secure_desktop', {}))).toBe(
+      'Security screen opened (Ctrl+Alt+Del, lock screen or UAC prompt)',
+    );
+    expect(describeEvent(event('taskmgr_opened', { exe: 'Taskmgr.exe' }))).toBe(
+      'Opened Task Manager',
+    );
+    expect(
+      describeEvent(event('taskmgr_opened', { exe: 'Taskmgr.exe', parentExe: 'winlogon.exe' })),
+    ).toBe('Opened Task Manager (from winlogon.exe)');
+  });
+});
+
 describe('paste_blocked (M25)', () => {
   it('says how much was pasted where, with a short preview', () => {
     const details = {

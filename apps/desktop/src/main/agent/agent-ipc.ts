@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { app, ipcMain, shell } from 'electron';
+import { app, ipcMain } from 'electron';
 import type { AgentChangeResult, AgentServiceStatus } from '@examguard/shared';
 import { IPC } from '../../shared/ipc-channels.js';
 import { resolveAgentExe } from './agent-exe.js';
@@ -8,7 +8,6 @@ import { isFakeAgent } from './create-agent-link.js';
 import { installAgent, uninstallAgent } from './agent-installer.js';
 import { runCommand } from './run-command.js';
 import { queryAgentService } from './service-state.js';
-import { readReport, spikeDir } from './spike-report.js';
 
 interface Deps {
   userData: string;
@@ -68,13 +67,5 @@ export function registerAgentIpc(deps: Deps): void {
     deps.requireStudent();
     if (fake || app.isPackaged) return change(null);
     return change(await uninstallAgent(installer));
-  });
-  ipcMain.handle(IPC.agentReport, () => {
-    deps.requireStudent();
-    return readReport(spikeDir(process.env));
-  });
-  ipcMain.handle(IPC.agentOpenShots, async () => {
-    deps.requireStudent();
-    await shell.openPath(spikeDir(process.env));
   });
 }

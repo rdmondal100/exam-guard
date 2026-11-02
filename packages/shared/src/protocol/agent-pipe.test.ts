@@ -104,4 +104,22 @@ describe('M24: relaunch info and the new kinds', () => {
     };
     expect(AgentToAppSchema.safeParse(evidence).success).toBe(true);
   });
+
+  it('accepts the screen and Task Manager evidence of M26', () => {
+    const base = { t: 'evidence', seq: 3, evidenceSeq: 10, ts: 1 };
+    const cases = [
+      { kind: 'monitor_changed', data: { monitors: 2, monitorsBefore: 1 } },
+      { kind: 'monitor_changed', data: { monitors: 3 } },
+      { kind: 'secure_desktop', data: { desktop: 'Winlogon' } },
+      { kind: 'secure_desktop', data: {} },
+      { kind: 'taskmgr_opened', data: { exe: 'Taskmgr.exe', pid: 7, parentExe: 'winlogon.exe' } },
+    ];
+    for (const item of cases) {
+      expect(AgentToAppSchema.safeParse({ ...base, ...item }).success).toBe(true);
+    }
+    const tooMany = { ...base, kind: 'monitor_changed', data: { monitors: 99 } };
+    expect(AgentToAppSchema.safeParse(tooMany).success).toBe(false);
+    const longName = { ...base, kind: 'secure_desktop', data: { desktop: 'x'.repeat(65) } };
+    expect(AgentToAppSchema.safeParse(longName).success).toBe(false);
+  });
 });

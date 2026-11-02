@@ -49,6 +49,18 @@ pub struct EvidenceData {
     /// `processes_at_start`: the user's programs running when monitoring began.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub processes: Option<Vec<ProcessRef>>,
+    /// `monitor_changed` (M26): the screens now, and before the change (absent = at the start).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub monitors: Option<u32>,
+    #[serde(
+        default,
+        rename = "monitorsBefore",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub monitors_before: Option<u32>,
+    /// `secure_desktop` (M26): the desktop that took the input (`Winlogon`), when it could be read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub desktop: Option<String>,
 }
 
 /// A running program in `processes_at_start`.
@@ -126,6 +138,8 @@ pub enum FromApp {
 }
 
 /// Agent → app.
+// Built once per frame and serialised at once; boxing the evidence would only add an indirection.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(tag = "t")]
 pub enum ToApp {
@@ -358,6 +372,23 @@ mod tests {
                 "screenshot":{"jpegBase64":"/9j/","width":800,"height":450}
             })
         );
+    }
+
+    #[test]
+    fn screen_evidence_uses_the_shared_field_names() {
+        let changed = serde_json::to_value(EvidenceData {
+            monitors: Some(2),
+            monitors_before: Some(1),
+            ..EvidenceData::default()
+        })
+        .unwrap();
+        assert_eq!(changed, serde_json::json!({"monitors":2,"monitorsBefore":1}));
+        let secure = serde_json::to_value(EvidenceData {
+            desktop: Some("Winlogon".into()),
+            ..EvidenceData::default()
+        })
+        .unwrap();
+        assert_eq!(secure, serde_json::json!({"desktop":"Winlogon"}));
     }
 
     #[test]

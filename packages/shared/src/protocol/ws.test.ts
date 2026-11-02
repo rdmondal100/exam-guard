@@ -94,6 +94,7 @@ describe('teacher messages', () => {
     lastSeen: null,
     agentOk: true,
     internetBlocked: false,
+    monitors: 1,
   };
 
   it('accepts subscribe and rejects an empty exam id', () => {
