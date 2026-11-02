@@ -3,6 +3,7 @@ import type { RosterEntry } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
 import type { ExamApi } from '@/api/examApi';
 import type { RosterView } from '@/hooks/useRoster';
+import { usePageVisible } from '@/hooks/usePageVisible';
 import {
   GRID_SORTS,
   gridOrder,
@@ -21,17 +22,6 @@ interface Props {
   students: RosterEntry[];
   selectedId: string | null;
   onSelect: (student: RosterEntry) => void;
-}
-
-/** True while the window is shown; a minimized teacher window streams nothing. */
-function usePageVisible(): boolean {
-  const [visible, setVisible] = useState(() => document.visibilityState === 'visible');
-  useEffect(() => {
-    const update = () => setVisible(document.visibilityState === 'visible');
-    document.addEventListener('visibilitychange', update);
-    return () => document.removeEventListener('visibilitychange', update);
-  }, []);
-  return visible;
 }
 
 /**

@@ -38,6 +38,7 @@ import type { ConnectionEvents } from './connection-events.js';
 import { generatePin } from '../../utils/pin.js';
 import { HostingError } from './hosting-error.js';
 import { DeadlineWatcher } from './deadline-watcher.js';
+import { GlobalActions } from './global-actions.js';
 import { InternetSwitch } from './internet-switch.js';
 import { StudentActions } from './student-actions.js';
 import { StudentLock } from './student-lock.js';
@@ -111,6 +112,8 @@ export class HostingManager {
   readonly messages: TeacherMessages;
   /** The teacher's per-student actions (M35). */
   readonly studentActions: StudentActions;
+  /** Extra time for everyone and the broadcast (M36). */
+  readonly globalActions: GlobalActions;
   private readonly watcher: DeadlineWatcher;
 
   constructor(private readonly deps: HostingManagerDeps) {
@@ -145,6 +148,15 @@ export class HostingManager {
       examState: (id) => deps.exams.get(id)?.state,
       now: this.now,
     });
+    this.globalActions = new GlobalActions({
+      exams: deps.exams,
+      students: deps.students,
+      actions: deps.actions,
+      hub: deps.hub,
+      messages: this.messages,
+      deadlines: deps.deadlines,
+      now: this.now,
+    });
     this.watcher = new DeadlineWatcher({
       deadlines: deps.deadlines,
       submissions: deps.submissions,
@@ -174,6 +186,7 @@ export class HostingManager {
     const opened = await this.open(exam.id, pin);
     this.internet.reset(exam.id);
     exams.startHosting(exam.id, pin, this.now());
+    this.audit(exam.id, 'host', {});
     return this.describe(opened);
   }
 
@@ -188,6 +201,7 @@ export class HostingManager {
     assertTransition(exam.state, 'ready');
     await this.close();
     exams.stopHosting(exam.id, this.now());
+    this.audit(exam.id, 'stop_hosting', {});
   }
 
   /** hosting → running. Everyone in the lobby becomes active and gets the questions and deadline. */
@@ -201,6 +215,7 @@ export class HostingManager {
     assertTransition(exam.state, 'running');
     const startedAt = this.now();
     exams.startRunning(examId, startedAt);
+    this.audit(examId, 'start', {});
     this.terminal.examStarted(examId, startedAt);
     for (const id of students.activateAllInLobby(examId, startedAt)) hub.changed(id);
     hub.broadcast((id) => ({ t: 'state', state: this.sessionState(id) }));
@@ -226,6 +241,8 @@ export class HostingManager {
     this.watcher.stop();
     submissions.finalizeAll(examId, reason === 'manual' ? 'teacher_end' : 'time_up');
     exams.endRunning(examId, this.now());
+    // The exam-wide end (M36): by the teacher, or by the server at time up.
+    this.audit(examId, 'end_all', { reason });
     hub.broadcast((id) => ({ t: 'state', state: this.sessionState(id) }));
     await this.close();
   }
@@ -393,6 +410,11 @@ export class HostingManager {
       terminal: this.terminal.state(active.examId),
       terminalPendingMinutes: this.terminal.pendingMinutes(active.examId),
       internet: this.internet.state(active.examId),
+      ...this.globalActions.timing(active.examId),
     };
+  }
+
+  private audit(examId: string, action: string, payload: Record<string, unknown>): void {
+    this.deps.actions.insert({ examId, examStudentId: null, action, payload, ts: this.now() });
   }
 }

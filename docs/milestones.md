@@ -299,6 +299,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Accept:** opening and closing 10 times leaves no leaked peer connections. Failure falls back to the fast thumbnail.
 - **Fallback if deferred:** "fast thumbnail" mode in M33 (960 px every 1 s for the selected student).
 - **Manual test:** open a live view of the laptop, close it, reopen it.
+- **Built (2026-11-03, fallback only, with M36/M37):** the "fast thumbnail" mode. Shared `thumbs.focus` (at most 2 ids), `FAST_THUMB_*`; `ThumbRelay.focus` (a focus wins over a grid page: `thumb.start {1000 ms, 960 px}`, back to the grid values or `thumb.stop` after), teacher `useRoster.focusThumbs`, `FastThumbView` ("Live screen" in the student detail while running; streams only while the window is shown, closes after 60 s hidden). WebRTC (`live.*`, `rtc.signal`) is not built and waits for the M30 laptop spike; decide at that point whether to build it or keep the fallback.
 
 ### M35 Per-student actions
 - **Goal:** message/warning, lock/unlock, extend time, end exam (save + submit), reset session.
@@ -311,6 +312,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Goal:** extend all, end all, broadcast, and a teacher action log view.
 - **Touches:** global action endpoint, confirmation dialogs, audit log tab.
 - **Accept / demo:** the teacher watches the laptop + 200 sim students, sees a Chrome alert from the laptop, opens its live view (or fast thumbnail), warns and locks the student, extends time for all, and ends the exam.
+- **Built (2026-11-03, with M34 fallback and M37):** shared `extend_all` and `broadcast` in `ExamActionSchema` (+ results), `AuditEntry`/`AuditResponse`, `HostingInfo.deadline`/`extensionMin`; server `GlobalActions` (extend all only while running: `exams.global_extension_sec` plus a `state {deadline}` push to every working student; broadcast = an M35 message to every joined student), `GET /exams/:id/actions` (audit with student code and name), `host`/`start`/`stop_hosting`/`end_all {reason}` now logged; teacher `GlobalActionsPanel` in the hosting panel (message/warn everyone, +5/+10/+15/custom for all, each confirmed; "Ends at" line), `AuditLogPanel` on the board (closed by default, refreshes every 5 s while live). The Phase 5 demo with the laptop and 200 sim students was not run.
 
 ---
 
@@ -322,6 +324,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** `server/services/grading/{provider,prompt,validate}.ts`, `providers/{gemini,fake}.ts`, `fixtures/grading/`, `scripts/record-fixture` (manual, uses the teacher key, never in tests).
 - **Accept:** validation rejects awarded > max, non-half steps, wrong criteria and a total mismatch. All tests use the fake. Inputs contain only the anon ID.
 - **Manual test:** run a one-answer smoke script against real Gemini with your key, then inspect the stored raw response.
+- **Built (2026-11-03, with M34 fallback and M36):** `services/grading/{provider,prompt,validate,input}.ts`, `providers/{fake,gemini}.ts`, six hand-written fixtures in `apps/server/fixtures/grading/` (valid, fenced JSON, over-max then valid, two 429s then valid, never JSON, empty answer), `src/scripts/record-fixture.ts` (`pnpm record-fixture`, manual; it is also the smoke test). Validation returns half-units in the guide's order and short problem sentences for the repair hint. No real Gemini call was made; no pipeline, tables or UI yet (M38).
 
 ### M38 Grading pipeline + progress
 - **Goal:** "Evaluate with AI" grades question by question with concurrency, retries, flagging and progress.

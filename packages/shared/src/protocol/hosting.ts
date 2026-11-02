@@ -15,6 +15,10 @@ export const HostingInfoSchema = z.object({
   /** An "on for N minutes" window that starts counting at Start. */
   terminalPendingMinutes: z.number().int().nullable(),
   internet: InternetStateSchema,
+  /** The exam's shared end (server time, extra time for all included); `null` before Start (M36). */
+  deadline: z.number().nullable(),
+  /** Extra time everyone got, minutes (M36). */
+  extensionMin: z.number().int().nonnegative(),
 });
 export type HostingInfo = z.infer<typeof HostingInfoSchema>;
 

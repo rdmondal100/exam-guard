@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { EventRow, ExamState, RosterEntry } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
 import type { ExamApi } from '@/api/examApi';
@@ -8,6 +8,7 @@ import { clockTime } from '@/lib/terminalLog';
 import { useEvents } from '@/hooks/useEvents';
 import type { RosterView } from '@/hooks/useRoster';
 import { EventLine } from './EventLine';
+import { FastThumbView } from './FastThumbView';
 import { ScreenshotDialog } from './ScreenshotDialog';
 import { StudentActionsPanel } from './StudentActionsPanel';
 
@@ -24,7 +25,8 @@ interface Props {
 
 /**
  * One student's status and event timeline with the screenshots inline (M32), kept current by the
- * live alerts. A side panel over the dashboard.
+ * live alerts, and while the exam runs a live screen (fast thumbnail, M34). A side panel over the
+ * dashboard.
  */
 export function StudentDetail({
   examId,
@@ -36,6 +38,9 @@ export function StudentDetail({
   onClose,
 }: Props) {
   const [shown, setShown] = useState<EventRow | null>(null);
+  const [liveScreen, setLiveScreen] = useState(false);
+  const closeLiveScreen = useCallback(() => setLiveScreen(false), []);
+  const canWatch = examState === 'running' && s.connected;
   const { events, error } = useEvents(examId, api, {
     studentId: s.id,
     live: roster.alerts,
@@ -62,6 +67,11 @@ export function StudentDetail({
           <p className="font-mono text-muted">{s.studentCode}</p>
         </div>
         <div className="ml-auto flex gap-2">
+          {canWatch && !liveScreen && (
+            <Button variant="outline" className="h-8 px-3" onClick={() => setLiveScreen(true)}>
+              Live screen
+            </Button>
+          )}
           <Button variant="outline" className="h-8 px-3" onClick={() => onTerminalLog(s)}>
             Terminal log
           </Button>
@@ -78,6 +88,9 @@ export function StudentDetail({
           </div>
         ))}
       </dl>
+      {liveScreen && examState === 'running' && (
+        <FastThumbView student={s} roster={roster} onClose={closeLiveScreen} />
+      )}
       <StudentActionsPanel examId={examId} examState={examState} api={api} student={s} />
       <h3 className="font-semibold">Timeline</h3>
       {error && (

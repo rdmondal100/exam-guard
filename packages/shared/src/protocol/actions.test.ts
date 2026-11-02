@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ExamActionSchema, StudentActionSchema, TerminalLogResponseSchema } from './actions.js';
+import { AuditResponseSchema } from './audit.js';
 import { ServerToStudentSchema, StudentMessageSchema } from './ws.js';
 
 describe('ExamActionSchema', () => {
@@ -115,5 +116,58 @@ describe('student actions (M35)', () => {
       details: {},
     };
     expect(StudentMessageSchema.safeParse(event).success).toBe(true);
+  });
+});
+
+describe('global actions (M36)', () => {
+  const ok = (a: object) => ExamActionSchema.safeParse(a).success;
+
+  it('accepts extend_all and broadcast', () => {
+    expect(ok({ type: 'extend_all', minutes: 10 })).toBe(true);
+    expect(ok({ type: 'broadcast', kind: 'info', text: '10 minutes left' })).toBe(true);
+    expect(ok({ type: 'broadcast', kind: 'warning', text: 'Eyes on your own screen' })).toBe(true);
+  });
+
+  it.each([
+    { type: 'extend_all' },
+    { type: 'extend_all', minutes: 0 },
+    { type: 'extend_all', minutes: 601 },
+    { type: 'extend_all', minutes: 2.5 },
+    { type: 'broadcast', kind: 'info', text: '   ' },
+    { type: 'broadcast', kind: 'shout', text: 'hi' },
+    { type: 'broadcast', kind: 'info', text: 'x'.repeat(501) },
+  ])('rejects %j', (action) => {
+    expect(ok(action)).toBe(false);
+  });
+
+  it('trims the broadcast text', () => {
+    const parsed = ExamActionSchema.parse({ type: 'broadcast', kind: 'info', text: '  hi  ' });
+    expect(parsed).toEqual({ type: 'broadcast', kind: 'info', text: 'hi' });
+  });
+});
+
+describe('AuditResponseSchema', () => {
+  it('accepts exam-wide and per-student rows', () => {
+    const rows = [
+      {
+        id: 2,
+        action: 'warn',
+        examStudentId: 's1',
+        studentCode: '2021001',
+        studentName: 'Ana',
+        payload: { text: 'Stop' },
+        ts: 5,
+      },
+      {
+        id: 1,
+        action: 'extend_all',
+        examStudentId: null,
+        studentCode: null,
+        studentName: null,
+        payload: { minutes: 10 },
+        ts: 4,
+      },
+    ];
+    expect(AuditResponseSchema.parse({ actions: rows }).actions).toHaveLength(2);
   });
 });

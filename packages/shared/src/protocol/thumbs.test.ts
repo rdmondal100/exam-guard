@@ -49,3 +49,14 @@ describe('thumbnail frames', () => {
     ).toBe(false);
   });
 });
+
+describe('fast thumbnail focus (M34 fallback)', () => {
+  it('accepts up to two students and an empty list', () => {
+    const ok = (ids: string[]) =>
+      TeacherMessageSchema.safeParse({ t: 'thumbs.focus', examStudentIds: ids }).success;
+    expect(ok([])).toBe(true);
+    expect(ok(['a', 'b'])).toBe(true);
+    expect(ok(['a', 'b', 'c'])).toBe(false);
+    expect(ok([''])).toBe(false);
+  });
+});

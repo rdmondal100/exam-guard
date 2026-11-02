@@ -3,6 +3,7 @@ import type { ExamState, RosterEntry } from '@examguard/shared';
 import type { ExamApi } from '@/api/examApi';
 import { sortedStudents } from '@/lib/rosterState';
 import type { RosterView } from '@/hooks/useRoster';
+import { AuditLogPanel } from './AuditLogPanel';
 import { EventsPanel } from './EventsPanel';
 import { RosterTable } from './RosterTable';
 import { StudentDetail } from './StudentDetail';
@@ -21,8 +22,8 @@ interface Props {
 
 /**
  * The live dashboard (M31, M32, M33): the sortable roster or the thumbnail grid of screens, the
- * alert feed, and a student's detail with their timeline when a row, a tile or a name in the feed
- * is clicked.
+ * alert feed, the teacher action log (M36), and a student's detail with their timeline when a row, a
+ * tile or a name in the feed is clicked.
  */
 export function MonitoringBoard({ examId, api, roster, examState }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -83,6 +84,11 @@ export function MonitoringBoard({ examId, api, roster, examState }: Props) {
         roster={roster}
         students={students}
         onStudent={setSelectedId}
+      />
+      <AuditLogPanel
+        examId={examId}
+        api={api}
+        live={examState === 'hosting' || examState === 'running'}
       />
       {selected && (
         <StudentDetail

@@ -1,0 +1,44 @@
+{
+  "name": "fenced-python",
+  "description": "A Python answer to a C sample; the reply is wrapped in a Markdown code fence.",
+  "source": "hand-written",
+  "provider": "gemini",
+  "model": "",
+  "promptVersion": "grade-v1",
+  "input": {
+    "anonId": "anon-fenced",
+    "question": {
+      "type": "code",
+      "body": "Write a function int sum(int *a, int n) that returns the sum of the n numbers in a.",
+      "allowedLanguages": ["c", "cpp", "py"],
+      "studentNote": "Use a loop, not recursion.",
+      "marks": 8,
+      "sampleAnswer": "int sum(int *a, int n) {\n  int s = 0;\n  for (int i = 0; i < n; i++) s += a[i];\n  return s;\n}",
+      "sampleLanguage": "c",
+      "aiNotes": "Accept any loop form.",
+      "criteria": [
+        {
+          "name": "Correct logic",
+          "maxMarks": 5
+        },
+        {
+          "name": "Uses a loop",
+          "maxMarks": 2
+        },
+        {
+          "name": "Code style",
+          "maxMarks": 1
+        }
+      ]
+    },
+    "answer": {
+      "language": "py",
+      "content": "def sum(a, n):\n    total = 0\n    for x in a[:n]:\n        total += x\n    return total"
+    }
+  },
+  "responses": [
+    {
+      "text": "```json\n{\n  \"criteria\": [\n    {\n      \"name\": \"Correct logic\",\n      \"max\": 5,\n      \"awarded\": 5,\n      \"reason\": \"Correct sum in Python.\"\n    },\n    {\n      \"name\": \"Uses a loop\",\n      \"max\": 2,\n      \"awarded\": 2,\n      \"reason\": \"Uses a for loop.\"\n    },\n    {\n      \"name\": \"Code style\",\n      \"max\": 1,\n      \"awarded\": 1,\n      \"reason\": \"Readable.\"\n    }\n  ],\n  \"total\": 8,\n  \"feedback\": \"Correct and readable. Python is allowed for this question.\",\n  \"teacher_notes\": [],\n  \"confidence\": \"medium\"\n}\n```"
+    }
+  ]
+}

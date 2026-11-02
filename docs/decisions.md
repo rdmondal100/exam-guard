@@ -370,3 +370,13 @@ ode_moduleselectron` to `node_modules.pnpmelectron@x...`; Windows reports the re
 **M35** — same session as M29/M33.
 - 2026-11-02 — No per-student `serverSeq`: the lock lives in the student row (with `lock_reason`, migration 0012) and reaches a reconnecting app in `welcome`; messages are an in-memory queue per student, re-sent after each `welcome` until `ack`. The app acks when main receives a message (before the popup is closed). The exam-wide `{type:'unlock'}` action was removed; all per-student actions use `/students/:sid/actions`. — M35.
 - 2026-11-02 — Reset clears `token_hash`, `device_id` and `pinned_fp` but keeps the state and answers, and closes the socket with 4401; the student re-joins with the PIN and continues (a late reset of a working student keeps their deadline). Extending only adds time. — M35.
+
+**M36** — built with the M34 fallback and M37 in one session (several milestones at once, as the user asked).
+- 2026-11-03 — Extra time for everyone only while running (before Start the teacher edits the duration; a hosting-time global extension would survive a stop-hosting). Broadcast goes to every joined student, finished ones too ("you may leave"), through the M35 per-student queue. End for all stays `POST /exams/:id/end`. Lifecycle actions (`host`, `start`, `stop_hosting`, `end_all {reason}`) are now logged so the audit view tells the whole story; the time-up end is logged like the terminal time-out (server-written). — M36.
+
+**M34** — fallback only, same session.
+- 2026-11-03 — Built the "fast thumbnail" now, since WebRTC needs the M30 laptop spike: `thumbs.focus` per teacher socket, a focus anywhere wins over a grid page, and the same kind-1 frames feed the grid tile and the live panel. The panel streams only while the window is shown. Whether WebRTC is still built is decided after M30. — M34.
+
+**M37** — same session.
+- 2026-11-03 — `@google/genai` pinned exactly to 2.30.0 (newest at least two weeks old). The response schema is a hand-written `responseJsonSchema` (not `z.toJSONSchema`, whose `$schema`/`additionalProperties` Gemini may reject). Default model `gemini-2.5-flash` until Settings (M43). Criterion names match ignoring case and spaces; the stored grade uses the guide's names and order. The six fixtures are hand-written (`source: hand-written`) until real ones are recorded. — M37.
+- 2026-11-03 — Until Settings exists (M43), the manual `record-fixture` script reads the key from `EG_GEMINI_API_KEY` in the shell (never from a file); the pipeline will take it from main at grading time. — M37.

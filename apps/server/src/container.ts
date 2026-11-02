@@ -82,6 +82,8 @@ export interface Container {
   recorder: EventRecorder;
   terminalLogs: TerminalLogRepo;
   answers: AnswerRepo;
+  /** The audit log of teacher actions (M36 view). */
+  actions: TeacherActionRepo;
   examFiles?: ExamFileService;
   screenshots?: ScreenshotStore;
   live?: Live;
@@ -95,6 +97,7 @@ export function createContainer({ db, now, filesDir, hosting }: ContainerOptions
   const recorder = new EventRecorder({ events, students, exams });
   const terminalLogs = new TerminalLogRepo(db);
   const answers = new AnswerRepo(db);
+  const actions = new TeacherActionRepo(db);
   const examFilesDir = filesDir ?? (hosting && join(hosting.dataDir, 'exam-files'));
   const examFiles = examFilesDir
     ? new ExamFileService(new ExamFileRepo(db), new ExamFileStore(examFilesDir))
@@ -114,6 +117,7 @@ export function createContainer({ db, now, filesDir, hosting }: ContainerOptions
     recorder,
     terminalLogs,
     answers,
+    actions,
     ...(examFiles ? { examFiles } : {}),
     ...(screenshots ? { screenshots } : {}),
   };
@@ -171,7 +175,7 @@ export function createContainer({ db, now, filesDir, hosting }: ContainerOptions
       hub,
       now: now ?? Date.now,
     }),
-    actions: new TeacherActionRepo(db),
+    actions,
     examFiles,
     hub,
     thumbs,

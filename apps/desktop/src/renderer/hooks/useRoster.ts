@@ -17,17 +17,23 @@ export interface RosterView extends RosterState {
   thumbs: ThumbStore;
   /** The students on the visible grid page; `[]` stops every stream. Re-sent after a reconnect. */
   watchThumbs(ids: readonly string[]): void;
+  /** The students whose fast thumbnail is open (M34 fallback, at most 2); `[]` ends it. */
+  focusThumbs(ids: readonly string[]): void;
 }
 
 const RETRY_MS = 1000;
 
-function sendWatch(ws: WebSocket | null, ids: readonly string[]): void {
+function sendIds(
+  ws: WebSocket | null,
+  t: 'thumbs.subscribe' | 'thumbs.focus',
+  ids: readonly string[],
+): void {
   if (ws?.readyState !== WebSocket.OPEN) return;
-  ws.send(JSON.stringify({ t: 'thumbs.subscribe', examStudentIds: ids }));
+  ws.send(JSON.stringify({ t, examStudentIds: ids }));
 }
 
 /**
- * Live roster, alerts and grid thumbnails for one exam over the loopback teacher WebSocket,
+ * Live roster, alerts, grid thumbnails and fast thumbnails for one exam over the loopback teacher WebSocket,
  * reconnecting when it drops. With `enabled` false no socket is opened.
  */
 export function useRoster(examId: string, enabled = true): RosterView {
@@ -38,11 +44,19 @@ export function useRoster(examId: string, enabled = true): RosterView {
   const socketRef = useRef<WebSocket | null>(null);
   /** The page the grid wants, kept so a new socket asks for it again. */
   const watching = useRef<readonly string[]>([]);
+  /** The fast thumbnails that are open, also re-sent on a new socket. */
+  const focusing = useRef<readonly string[]>([]);
 
   const watchThumbs = useCallback((ids: readonly string[]) => {
     if (watchKey(ids) === watchKey(watching.current)) return;
     watching.current = [...ids];
-    sendWatch(socketRef.current, watching.current);
+    sendIds(socketRef.current, 'thumbs.subscribe', watching.current);
+  }, []);
+
+  const focusThumbs = useCallback((ids: readonly string[]) => {
+    if (watchKey(ids) === watchKey(focusing.current)) return;
+    focusing.current = [...ids];
+    sendIds(socketRef.current, 'thumbs.focus', focusing.current);
   }, []);
 
   useEffect(() => {
@@ -65,7 +79,8 @@ export function useRoster(examId: string, enabled = true): RosterView {
         setLive(true);
         setConnects((n) => n + 1);
         ws.send(JSON.stringify({ t: 'subscribe', examId }));
-        if (watching.current.length > 0) sendWatch(ws, watching.current);
+        if (watching.current.length > 0) sendIds(ws, 'thumbs.subscribe', watching.current);
+        if (focusing.current.length > 0) sendIds(ws, 'thumbs.focus', focusing.current);
       };
       ws.onmessage = (event) => {
         if (event.data instanceof ArrayBuffer) return void thumbs.addFrame(event.data);
@@ -92,5 +107,5 @@ export function useRoster(examId: string, enabled = true): RosterView {
     };
   }, [examId, enabled, thumbs]);
 
-  return { ...roster, live, connects, thumbs, watchThumbs };
+  return { ...roster, live, connects, thumbs, watchThumbs, focusThumbs };
 }

@@ -2,6 +2,7 @@ import { Router, type RequestHandler } from 'express';
 import type { Container } from '../container.js';
 import { health } from '../controllers/health.controller.js';
 import { jsonBody, largeJsonBody } from '../middlewares/body.middleware.js';
+import { auditRoutes } from './audit.routes.js';
 import { authRoutes } from './auth.routes.js';
 import { classListRoutes } from './classList.routes.js';
 import { eventRoutes } from './event.routes.js';
@@ -42,6 +43,7 @@ export function teacherRoutes(c: Container, requireLogin: RequestHandler): Route
   router.use(questionRoutes({ exams, questions, now }, requireLogin));
   router.use(eventRoutes({ exams, events, ...(screenshots ? { screenshots } : {}) }, requireLogin));
   router.use(terminalLogRoutes({ students, events, terminalLogs }, requireLogin));
+  router.use(auditRoutes({ exams, actions: c.actions }, requireLogin));
   if (c.live) {
     router.use(hostingRoutes({ hosting: c.live.hosting, exams, students }, requireLogin));
     router.use(thumbRoutes({ thumbs: c.live.thumbs }, requireLogin));

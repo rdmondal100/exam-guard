@@ -169,6 +169,15 @@ export class ExamRepo {
       .run(blocked ? 1 : 0, now, id);
   }
 
+  /** Adds extra time for everyone (M36), seconds. */
+  addGlobalExtension(id: string, seconds: number, now: number): void {
+    this.db
+      .prepare(
+        'UPDATE exams SET global_extension_sec = global_extension_sec + ?, updated_at = ? WHERE id = ?',
+      )
+      .run(Math.max(0, Math.round(seconds)), now, id);
+  }
+
   /** hosting → running: the PIN stays so late joiners and a restart can still use it. */
   startRunning(id: string, now: number): ExamSummary | undefined {
     this.db
