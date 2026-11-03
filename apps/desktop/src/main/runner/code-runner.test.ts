@@ -214,6 +214,34 @@ describe('CodeRunner', () => {
     expect(result.message).toMatch(message);
   });
 
+  it("runs with the exam's own limits from Settings (M43) and names them", async () => {
+    const limits = { timeMs: 30_000, memoryMb: 128, outputBytes: 8192, processes: 2 };
+    const custom = new CodeRunner({
+      toolchain: () => tools,
+      workRoot: () => root,
+      spawn: fakeSpawn,
+      openPty: fakePty,
+      now: () => clock,
+      limits: () => limits,
+    });
+    script = [{}, { reason: 'memory_limit' }];
+    const result = await custom.run(req());
+    expect(opened[0]?.[0].args.slice(0, 7)).toEqual([
+      '--shell',
+      '--mem',
+      '128',
+      '--time',
+      '30000',
+      '--procs',
+      '2',
+    ]);
+    expect(spawned[0]?.outputCap).toBe(8192);
+    expect(result.message).toMatch(/128 MB/);
+    clock += 10_000;
+    script = [{}, { reason: 'time_limit' }];
+    expect((await custom.run(req())).message).toMatch(/longer than 30 s/);
+  });
+
   it('explains a crash exit code', async () => {
     script = [{}, { exitCode: 0xc0000005 | 0 }];
     expect((await runner().run(req())).message).toMatch(/access violation/);

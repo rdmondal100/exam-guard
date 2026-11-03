@@ -6,6 +6,7 @@ import {
   type HostingInfo,
   type SessionState,
   type StartResult,
+  type TeacherSettings,
 } from '@examguard/shared';
 import type { StudentDeadlines } from '../exams/student-deadlines.js';
 import type { FinalAnswerRepo } from '../../db/repositories/finalAnswer.repo.js';
@@ -75,7 +76,9 @@ export interface HostingManagerDeps {
   /** Grid thumbnail fan-out (M29, M33). Its cache is dropped when hosting stops. */
   thumbs?: ThumbRelay;
   dataDir: string;
-  /** Tests use 0 (any free port) and 127.0.0.1. */
+  /** The teacher's run limits and student port (M43), read at each hosting start. */
+  settings?: () => Pick<TeacherSettings, 'runLimits' | 'server'>;
+  /** Tests use 0 (any free port) and 127.0.0.1. Wins over the Settings port. */
   port?: number;
   host?: string;
   /** Called when the listener opens or closes; main blocks sleep while it is open. */
@@ -185,7 +188,7 @@ export class HostingManager {
     const pin = (this.deps.makePin ?? generatePin)();
     const opened = await this.open(exam.id, pin);
     this.internet.reset(exam.id);
-    exams.startHosting(exam.id, pin, this.now());
+    exams.startHosting(exam.id, pin, this.now(), this.deps.settings?.().runLimits ?? null);
     this.audit(exam.id, 'host', {});
     return this.describe(opened);
   }
@@ -276,6 +279,7 @@ export class HostingManager {
       terminal: this.terminal.state(student.examId),
       internet: this.internet.state(student.examId),
       filesEnabled: exam?.filesEnabled ?? true,
+      runLimits: exams.runLimits(student.examId),
       examFiles: exam?.filesEnabled ? this.deps.examFiles.list(student.examId) : [],
       receipt: this.deps.finals.receiptFor(studentId),
     };
@@ -373,7 +377,7 @@ export class HostingManager {
     try {
       await app.listen({
         host: this.deps.host ?? '0.0.0.0',
-        port: this.deps.port ?? STUDENT_API_PORT,
+        port: this.deps.port ?? this.deps.settings?.().server.studentPort ?? STUDENT_API_PORT,
       });
     } catch (e) {
       await app.close();

@@ -9,3 +9,4 @@ export * from './session-exit.js';
 export * from './clipboard.js';
 export * from './insertion.js';
 export * from './exports.js';
+export * from './ai-key.js';

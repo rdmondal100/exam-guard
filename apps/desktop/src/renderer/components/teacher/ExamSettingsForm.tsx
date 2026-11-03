@@ -1,12 +1,16 @@
 import { useState, type FormEvent } from 'react';
 import {
+  DEFAULT_EXAM_DURATION_MIN,
   DEFAULT_MONITORING,
   type ClassListSummary,
+  type TeacherSettings,
   type ExamSummary,
   type MonitoringSettings,
 } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { splitApps } from '@/lib/appList';
+import { MonitoringFields } from './MonitoringFields';
 
 /** What the form hands back. `classListId: null` means no list yet. */
 export interface ExamFormValues {
@@ -21,6 +25,8 @@ interface Props {
   /** The exam being edited; absent when creating. */
   exam?: ExamSummary;
   classLists: ClassListSummary[];
+  /** The teacher's defaults from Settings (M43) for a new exam. */
+  defaults?: TeacherSettings['defaults'] | undefined;
   onSubmit: (values: ExamFormValues) => Promise<void>;
   onCancel: () => void;
 }
@@ -28,11 +34,15 @@ interface Props {
 const FIELD = 'flex flex-col gap-1 text-sm font-medium';
 
 /** Title, duration, class list and monitoring settings for one exam. */
-export function ExamSettingsForm({ exam, classLists, onSubmit, onCancel }: Props) {
+export function ExamSettingsForm({ exam, classLists, defaults, onSubmit, onCancel }: Props) {
   const [title, setTitle] = useState(exam?.title ?? '');
-  const [durationMin, setDurationMin] = useState(String(exam?.durationMin ?? 90));
+  const [durationMin, setDurationMin] = useState(
+    String(exam?.durationMin ?? defaults?.durationMin ?? DEFAULT_EXAM_DURATION_MIN),
+  );
   const [classListId, setClassListId] = useState(exam?.classListId ?? '');
-  const [monitoring, setMonitoring] = useState(exam?.monitoring ?? DEFAULT_MONITORING);
+  const [monitoring, setMonitoring] = useState(
+    exam?.monitoring ?? defaults?.monitoring ?? DEFAULT_MONITORING,
+  );
   const [filesEnabled, setFilesEnabled] = useState(exam?.filesEnabled ?? true);
   const [apps, setApps] = useState(monitoring.highSeverityApps.join(', '));
   const [error, setError] = useState<string | null>(null);
@@ -54,10 +64,7 @@ export function ExamSettingsForm({ exam, classLists, onSubmit, onCancel }: Props
         filesEnabled,
         monitoring: {
           ...monitoring,
-          highSeverityApps: apps
-            .split(',')
-            .map((a) => a.trim())
-            .filter((a) => a !== ''),
+          highSeverityApps: splitApps(apps),
         },
       });
     } catch (err) {
@@ -65,12 +72,6 @@ export function ExamSettingsForm({ exam, classLists, onSubmit, onCancel }: Props
       setBusy(false);
     }
   };
-
-  const setNumber =
-    (key: 'screenshotIntervalSec' | 'minScreenshotGapSec' | 'graceSec') => (value: string) => {
-      const n = Number(value);
-      if (Number.isFinite(n)) setMonitoring({ ...monitoring, [key]: Math.trunc(n) });
-    };
 
   return (
     <form onSubmit={(e) => void submit(e)} className="flex max-w-xl flex-col gap-4">
@@ -121,65 +122,12 @@ export function ExamSettingsForm({ exam, classLists, onSubmit, onCancel }: Props
         </p>
       </fieldset>
 
-      <fieldset className="flex flex-col gap-3 rounded-md border border-border p-4">
-        <legend className="px-1 text-sm font-medium">Monitoring</legend>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={monitoring.screenshotOnSwitch}
-            onChange={(e) => setMonitoring({ ...monitoring, screenshotOnSwitch: e.target.checked })}
-          />
-          Screenshot when a student leaves ExamGuard
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={monitoring.screenshotOnTitleChange}
-            onChange={(e) =>
-              setMonitoring({ ...monitoring, screenshotOnTitleChange: e.target.checked })
-            }
-          />
-          Screenshot when the window title changes while outside
-        </label>
-        <label className={FIELD}>
-          Screenshot every (seconds, while outside)
-          <Input
-            type="number"
-            min={5}
-            max={300}
-            value={monitoring.screenshotIntervalSec}
-            onChange={(e) => setNumber('screenshotIntervalSec')(e.target.value)}
-          />
-        </label>
-        <label className={FIELD}>
-          At most one screenshot per (seconds)
-          <Input
-            type="number"
-            min={1}
-            max={60}
-            value={monitoring.minScreenshotGapSec}
-            onChange={(e) => setNumber('minScreenshotGapSec')(e.target.value)}
-          />
-        </label>
-        <label className={FIELD}>
-          High-severity apps (comma separated)
-          <Input
-            value={apps}
-            placeholder="chrome.exe, discord.exe"
-            onChange={(e) => setApps(e.target.value)}
-          />
-        </label>
-        <label className={FIELD}>
-          Grace period at time-up (seconds)
-          <Input
-            type="number"
-            min={0}
-            max={600}
-            value={monitoring.graceSec}
-            onChange={(e) => setNumber('graceSec')(e.target.value)}
-          />
-        </label>
-      </fieldset>
+      <MonitoringFields
+        monitoring={monitoring}
+        apps={apps}
+        onMonitoring={setMonitoring}
+        onApps={setApps}
+      />
 
       {error && (
         <p role="alert" className="text-red-700">

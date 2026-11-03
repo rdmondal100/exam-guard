@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { TeacherApiError } from '@/api/teacherApi';
 import { useClassLists } from '@/hooks/useClassLists';
 import { useExams } from '@/hooks/useExams';
+import { useSettings } from '@/hooks/useSettings';
 import { DataTable } from '../../components/teacher/DataTable';
 import { ExamDetailPage } from './ExamDetailPage';
 import { ExamSettingsForm, type ExamFormValues } from '../../components/teacher/ExamSettingsForm';
@@ -30,6 +31,8 @@ function actionMessage(e: unknown): string {
 /** Exam list with create, edit settings, duplicate and delete. */
 export function ExamsPage() {
   const { api, exams, error, reload } = useExams();
+  // The teacher's defaults for a new exam (Settings, M43).
+  const { settings } = useSettings();
   const { lists } = useClassLists();
   const [form, setForm] = useState<{ exam?: ExamSummary } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -162,6 +165,7 @@ export function ExamsPage() {
           key={form.exam?.id ?? 'new'}
           exam={form.exam}
           classLists={lists}
+          defaults={settings?.defaults}
           onSubmit={save}
           onCancel={() => setForm(null)}
         />

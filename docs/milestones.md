@@ -370,6 +370,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** settings pages, `safeStorage` key storage in main, settings schema.
 - **Accept:** the key is never visible after saving or present in DB/logs. Changed run limits reach students at the next exam.
 - **Manual test:** change each setting, restart, and confirm it persisted. Search the data folder for the key text → not found.
+- **Built (2026-11-03):** `packages/shared` `TeacherSettingsSchema` + `DEFAULT_SETTINGS`; server `SettingsService` (one row per section), `MaintenanceService` (backup, cert, regenerate refused while hosting), `GET/PATCH /settings`, `/settings/backup`, `/settings/cert`, `/settings/regenerate-cert`, `POST /auth/change`; migration 0015 (`exams.run_limits_json`, copied at hosting start, sent as `SessionState.runLimits`, used by the student `CodeRunner`); student port, Gemini model and grading pool size read from Settings; main `AiKeyStore` (`safeStorage` → `secrets.bin`, `EG_GEMINI_API_KEY` as dev fallback) with IPC; Settings page (password, AI + key, new-exam defaults, run limits, port + certificate, backup). Risk thresholds/points and a teacher value for the long wall time are still constants.
 
 ### M44 [D] Data folder relocation + retention
 - **Goal:** move the data folder, and purge screenshots older than N days.

@@ -1,6 +1,7 @@
 import type {
   AgentChangeResult,
   AgentServiceStatus,
+  AiKeyStatus,
   AnswerSaveRequest,
   TeacherMessageToStudent,
   PasteBlockedReport,
@@ -127,4 +128,9 @@ export interface ExamGuardApi {
   uninstallAgent(): Promise<AgentChangeResult>;
   /** Teacher mode (M42): shows `exports/<fileName>` in Explorer; false when the file is gone. */
   revealExport(fileName: string): Promise<boolean>;
+  /** Teacher mode (M43): whether an AI key is saved; never the key itself. */
+  aiKeyStatus(): Promise<AiKeyStatus>;
+  /** Saves the key encrypted in main. Rejects when Windows cannot encrypt it. */
+  setAiKey(apiKey: string): Promise<AiKeyStatus>;
+  clearAiKey(): Promise<AiKeyStatus>;
 }

@@ -7,6 +7,8 @@ import { registerIpc, type AppState } from './ipc.js';
 import { loadStoredMode, resolveMode } from './mode-store.js';
 import { parseProfile, userDataPathFor } from './profile.js';
 import { ServerHost } from './server-host.js';
+import { createAiKeyStore } from './grading-key.js';
+import { registerAiKeyIpc } from './settings/ai-key-ipc.js';
 import { createMainWindow, installCsp } from './window.js';
 
 // The profile must be applied before anything reads userData.
@@ -37,11 +39,17 @@ if (!app.requestSingleInstanceLock()) {
       installType,
       mode: resolveMode(installType, await loadStoredMode(userData)),
     };
-    const server = new ServerHost(userData, join(userData, 'logs'), (status) => {
-      for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send(IPC.serverStatus, status);
-      }
-    });
+    const aiKeys = createAiKeyStore(userData);
+    const server = new ServerHost(
+      userData,
+      join(userData, 'logs'),
+      (status) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send(IPC.serverStatus, status);
+        }
+      },
+      () => aiKeys.key(),
+    );
     // EG_ALLOW_CLOSE is a dev escape hatch for the exam lock; a packaged app ignores it.
     const examLock = new ExamLock(!app.isPackaged && process.env['EG_ALLOW_CLOSE'] === '1');
     app.on('before-quit', (event) => {
@@ -49,6 +57,7 @@ if (!app.requestSingleInstanceLock()) {
       server.stop();
     });
     const ipc = registerIpc(state, server, examLock);
+    registerAiKeyIpc({ store: aiKeys, isTeacher: () => state.mode === 'teacher' });
     installCsp();
     window = createMainWindow(`ExamGuard AI (${profile})`);
     examLock.attach(window);

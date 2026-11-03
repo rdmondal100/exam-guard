@@ -48,4 +48,7 @@ export const IPC = {
   agentInstall: 'agent:install',
   agentUninstall: 'agent:uninstall',
   revealExport: 'exports:reveal',
+  aiKeyStatus: 'settings:ai-key-status',
+  aiKeySet: 'settings:ai-key-set',
+  aiKeyClear: 'settings:ai-key-clear',
 } as const;

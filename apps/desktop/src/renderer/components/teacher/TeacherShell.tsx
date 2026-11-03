@@ -3,12 +3,13 @@ import type { AppInfo, ServerStatus } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
 import { ClassListsPage } from '../../pages/teacher/ClassListsPage';
 import { ExamsPage } from '../../pages/teacher/ExamsPage';
+import { SettingsPage } from '../../pages/teacher/SettingsPage';
 import { ServerRestartBanner } from '../common/ServerRestartBanner';
 import { ServerStatusChip } from '../common/ServerStatusChip';
 
 const NAV = ['Home', 'Class lists', 'Exams', 'Settings'] as const;
 type Page = (typeof NAV)[number];
-const AVAILABLE: readonly Page[] = ['Home', 'Class lists', 'Exams'];
+const AVAILABLE: readonly Page[] = NAV;
 
 interface Props {
   info: AppInfo;
@@ -16,7 +17,7 @@ interface Props {
   onLogout: () => void;
 }
 
-/** Shell behind the login gate: nav plus the current page. Settings comes later. */
+/** Shell behind the login gate: nav plus the current page. */
 export function TeacherShell({ info, serverStatus, onLogout }: Props) {
   const [page, setPage] = useState<Page>('Home');
   return (
@@ -39,14 +40,20 @@ export function TeacherShell({ info, serverStatus, onLogout }: Props) {
         ))}
       </nav>
       <main className="flex-1 p-8">
-        {page === 'Class lists' || page === 'Exams' ? (
+        {page !== 'Home' ? (
           <>
             <div className="mb-4 flex justify-end">
               <Button variant="outline" onClick={onLogout}>
                 Log out
               </Button>
             </div>
-            {page === 'Exams' ? <ExamsPage /> : <ClassListsPage />}
+            {page === 'Exams' ? (
+              <ExamsPage />
+            ) : page === 'Settings' ? (
+              <SettingsPage />
+            ) : (
+              <ClassListsPage />
+            )}
           </>
         ) : (
           <>

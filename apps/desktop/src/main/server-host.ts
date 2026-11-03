@@ -10,7 +10,7 @@ import {
   type ServerConnection,
   type ServerStatus,
 } from '@examguard/shared';
-import { fakeGraderEnabled, gradingKey } from './grading-key.js';
+import { fakeGraderEnabled } from './grading-key.js';
 import { STABLE_UPTIME_MS, restartDelayMs } from './server-backoff.js';
 
 /** Runs the exam server in a utilityProcess and restarts it when it exits. */
@@ -29,6 +29,8 @@ export class ServerHost {
     private readonly dataDir: string,
     private readonly logDir: string,
     private readonly onStatus: (status: ServerStatus) => void,
+    /** The AI key for a grading run (Settings, M43); read only when the server asks. */
+    private readonly gradingKey: () => string | null = () => null,
   ) {}
 
   getStatus(): ServerStatus {
@@ -95,7 +97,7 @@ export class ServerHost {
       this.child?.postMessage({
         type: 'grading-key',
         requestId: parsed.data.requestId,
-        apiKey: gradingKey(),
+        apiKey: this.gradingKey(),
       });
     } else {
       this.write('err', Buffer.from(`start error: ${parsed.data.message}\n`));

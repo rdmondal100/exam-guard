@@ -30,6 +30,9 @@ import { geminiSource } from './services/grading/provider-source.js';
 import { ReviewService } from './services/grading/review-service.js';
 import { ResultsService } from './services/results/results-service.js';
 import { ResultsRepo } from './db/repositories/results.repo.js';
+import { SettingsRepo } from './db/repositories/settings.repo.js';
+import { MaintenanceService } from './services/settings/maintenance-service.js';
+import { SettingsService } from './services/settings/settings-service.js';
 import { ScreenshotStore } from './services/screenshots/screenshot-store.js';
 import { SubmissionService } from './services/submissions/submission-service.js';
 import { SessionHub } from './sockets/sessionHub.js';
@@ -61,12 +64,18 @@ export interface ContainerOptions {
     | 'hub'
     | 'connections'
     | 'thumbs'
+    | 'settings'
   > & {
     /** How long a student may be offline before `network_lost`; tests shorten it. */
     networkGraceMs?: number;
   };
   /** The grader and pipeline settings (M38). Without it, grading asks for a Gemini key and gets none. */
-  grading?: Pick<GradingServiceDeps, 'source' | 'concurrency' | 'backoffMs' | 'progressMs'>;
+  grading?: Partial<
+    Pick<GradingServiceDeps, 'source' | 'concurrency' | 'backoffMs' | 'progressMs'>
+  > & {
+    /** Asks main for the AI key (Gemini with the Settings model) when there is no `source`. */
+    getKey?: () => Promise<string | null>;
+  };
   /** The app data folder for backups and exports (M42). Defaults to the hosting data folder. */
   dataDir?: string;
 }
@@ -105,6 +114,9 @@ export interface Container {
   review: ReviewService;
   /** Finalize and the CSV export (M42). */
   results: ResultsService;
+  /** The teacher's settings, backup and certificate (M43). */
+  settings: SettingsService;
+  maintenance: MaintenanceService;
   live?: Live;
 }
 
@@ -134,6 +146,8 @@ export function createContainer({
   const evaluations = new EvaluationRepo(db);
   // The hub exists only with hosting; progress is pushed once it is built (below).
   let pushProgress: GradingServiceDeps['onProgress'] = undefined;
+  const settings = new SettingsService(new SettingsRepo(db));
+  const { getKey, ...pipelineOptions } = gradingOptions ?? {};
   const grading = new GradingService({
     exams,
     questions,
@@ -141,8 +155,9 @@ export function createContainer({
     grades,
     evaluations,
     queue: new ReevaluateQueueRepo(db),
-    source: geminiSource(() => Promise.resolve(null)),
-    ...gradingOptions,
+    source: geminiSource(getKey ?? (() => Promise.resolve(null)), () => settings.get().ai.model),
+    concurrencyOf: () => settings.get().grading.concurrency,
+    ...pipelineOptions,
     ...(now ? { now } : {}),
     onProgress: (status) => pushProgress?.(status),
   });
@@ -186,6 +201,13 @@ export function createContainer({
     grading,
     review,
     results,
+    settings,
+    maintenance: new MaintenanceService({
+      db,
+      exams,
+      ...(resultsDir ? { dataDir: resultsDir } : {}),
+      ...(now ? { now } : {}),
+    }),
   };
   if (!hosting || !examFiles) return container;
 
@@ -246,6 +268,7 @@ export function createContainer({
     hub,
     thumbs,
     now,
+    settings: () => settings.get(),
     ...managerOptions,
   });
   container.live = { hosting: manager, hub, connections, thumbs };

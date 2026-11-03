@@ -12,6 +12,7 @@ import { gradingRoutes } from './grading.routes.js';
 import { hostingRoutes } from './hosting.routes.js';
 import { questionRoutes } from './question.routes.js';
 import { resultsRoutes } from './results.routes.js';
+import { settingsRoutes } from './settings.routes.js';
 import { terminalLogRoutes } from './terminalLog.routes.js';
 import { thumbRoutes } from './thumb.routes.js';
 
@@ -27,7 +28,9 @@ export function teacherRoutes(c: Container, requireLogin: RequestHandler): Route
   router.use(jsonBody);
 
   router.get('/health', health);
-  router.use(authRoutes({ teacher: c.teacher, state: c.state, limiter: c.limiter, now }));
+  router.use(
+    authRoutes({ teacher: c.teacher, state: c.state, limiter: c.limiter, now }, requireLogin),
+  );
   router.use(classListRoutes({ classLists: c.classLists, now }, requireLogin));
   router.use(
     examRoutes(
@@ -35,6 +38,7 @@ export function teacherRoutes(c: Container, requireLogin: RequestHandler): Route
         exams,
         questions,
         now,
+        defaultMonitoring: () => c.settings.get().defaults.monitoring,
         ...(examFiles ? { examFiles } : {}),
         ...(screenshots ? { screenshots } : {}),
       },
@@ -48,6 +52,7 @@ export function teacherRoutes(c: Container, requireLogin: RequestHandler): Route
   router.use(auditRoutes({ exams, actions: c.actions }, requireLogin));
   router.use(gradingRoutes({ grading: c.grading, review: c.review }, requireLogin));
   router.use(resultsRoutes({ results: c.results }, requireLogin));
+  router.use(settingsRoutes({ settings: c.settings, maintenance: c.maintenance }, requireLogin));
   if (c.live) {
     router.use(hostingRoutes({ hosting: c.live.hosting, exams, students }, requireLogin));
     router.use(thumbRoutes({ thumbs: c.live.thumbs }, requireLogin));

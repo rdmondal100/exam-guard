@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { z } from 'zod';
 import {
   AgentChangeResultSchema,
+  AiKeySetRequestSchema,
+  AiKeyStatusSchema,
   AgentServiceStatusSchema,
   AnswerSaveRequestSchema,
   PasteBlockedReportSchema,
@@ -228,6 +230,12 @@ const api: ExamGuardApi = {
       .parse(
         await ipcRenderer.invoke(IPC.revealExport, RevealExportRequestSchema.parse({ fileName })),
       ),
+  aiKeyStatus: async () => AiKeyStatusSchema.parse(await ipcRenderer.invoke(IPC.aiKeyStatus)),
+  setAiKey: async (apiKey: string) =>
+    AiKeyStatusSchema.parse(
+      await ipcRenderer.invoke(IPC.aiKeySet, AiKeySetRequestSchema.parse({ apiKey })),
+    ),
+  clearAiKey: async () => AiKeyStatusSchema.parse(await ipcRenderer.invoke(IPC.aiKeyClear)),
 };
 
 contextBridge.exposeInMainWorld('examguard', api);

@@ -1,7 +1,11 @@
 import {
   DEFAULT_MONITORING,
+  DEFAULT_RUN_LIMITS,
   MonitoringSettingsSchema,
+  RunLimitsSchema,
   type ExamCreateBody,
+  type MonitoringSettings,
+  type RunLimits,
   type ExamState,
   type ExamSummary,
   type ExamUpdateBody,
@@ -76,14 +80,19 @@ export class ExamRepo {
     return this.db.prepare('SELECT 1 FROM class_lists WHERE id = ?').get(id) !== undefined;
   }
 
-  create(body: ExamCreateBody, now: number): ExamSummary {
+  /** `defaultMonitoring` is the teacher's default from Settings (M43) when the body has none. */
+  create(
+    body: ExamCreateBody,
+    now: number,
+    defaultMonitoring: MonitoringSettings = DEFAULT_MONITORING,
+  ): ExamSummary {
     const id = newId(now);
     this.insert(
       id,
       body.title,
       body.durationMin * 60,
       body.classListId ?? null,
-      body.monitoring ?? DEFAULT_MONITORING,
+      body.monitoring ?? defaultMonitoring,
       body.filesEnabled ?? true,
       now,
     );
@@ -151,15 +160,32 @@ export class ExamRepo {
     );
   }
 
-  /** ready → hosting: stores the PIN and the hosting start time. */
-  startHosting(id: string, pin: string, now: number): ExamSummary | undefined {
+  /**
+   * ready → hosting: stores the PIN, the hosting start time and the run limits from Settings
+   * (M43; `null` keeps the defaults).
+   */
+  startHosting(
+    id: string,
+    pin: string,
+    now: number,
+    runLimits: RunLimits | null = null,
+  ): ExamSummary | undefined {
     this.db
       .prepare(
-        `UPDATE exams SET state = 'hosting', pin = ?, hosting_started_at = ?, updated_at = ?
-           WHERE id = ?`,
+        `UPDATE exams SET state = 'hosting', pin = ?, hosting_started_at = ?, updated_at = ?,
+           run_limits_json = ? WHERE id = ?`,
       )
-      .run(pin, now, now, id);
+      .run(pin, now, now, runLimits && JSON.stringify(runLimits), id);
     return this.get(id);
+  }
+
+  /** The exam's run limits as fixed at hosting start (M43), else the defaults. */
+  runLimits(id: string): RunLimits {
+    const row = this.db.prepare('SELECT run_limits_json FROM exams WHERE id = ?').get(id) as
+      { run_limits_json: string | null } | undefined;
+    if (!row?.run_limits_json) return DEFAULT_RUN_LIMITS;
+    const parsed = RunLimitsSchema.safeParse(JSON.parse(row.run_limits_json));
+    return parsed.success ? parsed.data : DEFAULT_RUN_LIMITS;
   }
 
   /** hosting → ready: clears the PIN and the hosting start time. */

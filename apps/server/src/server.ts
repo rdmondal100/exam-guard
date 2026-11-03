@@ -5,7 +5,7 @@ import {
 } from '@examguard/shared';
 import { initDatabase } from './db/connectDb.js';
 import { buildTeacherApp } from './app.js';
-import { geminiSource, syntheticSource } from './services/grading/provider-source.js';
+import { syntheticSource } from './services/grading/provider-source.js';
 
 /** The slice of Electron's `process.parentPort` this entry uses. */
 interface ParentPort {
@@ -64,7 +64,8 @@ async function start(
       onActive: (active) => port.postMessage({ type: 'hosting', active }),
     },
     grading: {
-      source: config.fakeGrader ? syntheticSource() : geminiSource(() => keys.request()),
+      // Gemini with the Settings model and the key main keeps encrypted (M43).
+      ...(config.fakeGrader ? { source: syntheticSource() } : { getKey: () => keys.request() }),
     },
   });
   await teacher.listen({ host: config.host, port: config.port });

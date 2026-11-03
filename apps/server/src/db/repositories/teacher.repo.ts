@@ -14,6 +14,13 @@ export class TeacherRepo {
     return row?.password_hash;
   }
 
+  /** M43: a new password. */
+  setPasswordHash(passwordHash: string, now: number): void {
+    this.db
+      .prepare('UPDATE teacher SET password_hash = ?, updated_at = ? WHERE id = 1')
+      .run(passwordHash, now);
+  }
+
   /** Throws if the teacher already exists. */
   create(passwordHash: string, now: number): void {
     this.db

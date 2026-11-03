@@ -1,5 +1,11 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { RunInputSchema, RunRequestSchema, RunSizeSchema, type RunResult } from '@examguard/shared';
+import {
+  DEFAULT_RUN_LIMITS,
+  RunInputSchema,
+  RunRequestSchema,
+  RunSizeSchema,
+  type RunResult,
+} from '@examguard/shared';
 import { IPC } from '../../shared/ipc-channels.js';
 import type { SessionClient } from '../session-client.js';
 import { spawnPtyProcess } from '../terminal/pty.js';
@@ -35,6 +41,8 @@ export function registerRunnerIpc({ session, examStudentId, requireStudent }: Ru
       }),
     workRoot: () => runRoot(process.env.LOCALAPPDATA ?? app.getPath('temp'), examStudentId()),
     baseEnv: process.env,
+    // The exam's limits, fixed by the teacher's Settings when hosting started (M43).
+    limits: () => session.examState?.runLimits ?? DEFAULT_RUN_LIMITS,
     openPty: spawnPtyProcess,
     onData: (data) => {
       for (const win of BrowserWindow.getAllWindows()) win.webContents.send(IPC.runData, data);

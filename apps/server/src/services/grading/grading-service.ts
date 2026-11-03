@@ -28,6 +28,8 @@ export interface GradingServiceDeps {
   source: ProviderSource;
   now?: () => number;
   concurrency?: number;
+  /** The Settings value (M43), read at each job; `concurrency` wins (tests). */
+  concurrencyOf?: () => number;
   /** Tests pass a 0 backoff. */
   backoffMs?: number;
   /** Pushed as `grading.progress`, at most once per `progressMs` per exam. */
@@ -227,7 +229,7 @@ export class GradingService {
     try {
       await runPool(
         answers,
-        this.deps.concurrency ?? DEFAULT_CONCURRENCY,
+        this.deps.concurrency ?? this.deps.concurrencyOf?.() ?? DEFAULT_CONCURRENCY,
         async (answer) => {
           try {
             const outcome = await gradeAnswer(deps, job, question, answer, signal);

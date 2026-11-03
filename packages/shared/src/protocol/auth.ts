@@ -13,6 +13,13 @@ export type AuthSetupBody = z.infer<typeof AuthSetupBodySchema>;
 export const AuthLoginBodySchema = z.object({ password: z.string().max(MAX_PASSWORD_LENGTH) });
 export type AuthLoginBody = z.infer<typeof AuthLoginBodySchema>;
 
+/** `POST /auth/change` (M43, logged in): the current password, then the new one. */
+export const AuthChangeBodySchema = z.object({
+  currentPassword: z.string().max(MAX_PASSWORD_LENGTH),
+  newPassword: PasswordSchema,
+});
+export type AuthChangeBody = z.infer<typeof AuthChangeBodySchema>;
+
 /** `GET /auth/status`: what the renderer needs to pick setup, login or home. */
 export const AuthStatusSchema = z.object({
   setupRequired: z.boolean(),

@@ -52,7 +52,11 @@ export interface LiveExam {
  * A hosted exam (two students on the list, one written question) on real loopback listeners, for
  * socket tests that need both the student and the teacher side.
  */
-export async function startLiveExam(students = '1,Ada\n2,Bob\n'): Promise<LiveExam> {
+export async function startLiveExam(
+  students = '1,Ada\n2,Bob\n',
+  /** `PATCH /settings` before hosting starts (M43). */
+  settings?: object,
+): Promise<LiveExam> {
   const dir = mkdtempSync(joinPath(tmpdir(), 'eg-live-'));
   const db = initDatabase(dir);
   const sockets: WebSocket[] = [];
@@ -93,6 +97,14 @@ export async function startLiveExam(students = '1,Ada\n2,Bob\n'): Promise<LiveEx
     criteria: [{ name: 'Accuracy', maxMarks: 2 }],
   });
   await call('POST', `/exams/${examId}/ready`);
+  if (settings) {
+    await app.inject({
+      method: 'PATCH',
+      url: '/api/v1/settings',
+      headers: HEADERS,
+      payload: settings,
+    });
+  }
   const studentPort = (await call('POST', `/exams/${examId}/host`)).json().port as number;
 
   const post = (path: string, body: object, token?: string) =>

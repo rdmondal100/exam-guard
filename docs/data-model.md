@@ -14,7 +14,7 @@ SQLite on the teacher PC only, accessed by the server process (better-sqlite3, `
 ### settings
 | col | type | notes |
 |---|---|---|
-| key | TEXT PK | e.g. `ai.provider`, `ai.model`, `defaults.durationMin`, `runner.limits`, `monitoring.highSeverityApps`, `retention.screenshotDays`, `server.port` |
+| key | TEXT PK | one row per section (M43, `TeacherSettingsSchema` in `packages/shared`): `ai` `{provider, model}`, `grading` `{concurrency}`, `defaults` `{durationMin, monitoring}`, `runner.limits` `{timeMs, memoryMb, outputBytes, processes}`, `server` `{studentPort}`; a missing or invalid row reads as that section's default. Later: `retention.screenshotDays` (M44) |
 | value | TEXT | JSON |
 
 The AI API key is **not** here. It's stored by Electron main with `safeStorage` in `secrets.bin` (see layout).
@@ -58,6 +58,7 @@ UNIQUE(class_list_id, student_code)
 | terminal_until | INTEGER | server time the terminal turns off by itself; NULL = no end |
 | files_enabled | INTEGER DEFAULT 1 | student Files panel switch (M15e, migration 0007); on by default; copied by duplicate |
 | hosting_started_at, started_at, ended_at, finalized_at | INTEGER | nullable |
+| run_limits_json | TEXT, nullable | M43 (migration 0015): the Settings run limits copied at hosting start; NULL = the defaults |
 | created_at, updated_at | INTEGER | |
 INDEX(state)
 

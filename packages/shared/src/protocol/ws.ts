@@ -10,6 +10,7 @@ import {
 import { ExamStateSchema } from './exams.js';
 import { EventRowSchema } from './events.js';
 import { GradingStatusSchema } from './grading.js';
+import { RunLimitsSchema } from './settings.js';
 import { StudentQuestionSchema } from './questions.js';
 import {
   InternetStateSchema,
@@ -174,6 +175,8 @@ export const SessionStateSchema = z.object({
   internet: InternetStateSchema,
   /** The teacher's Files panel switch for this exam (server-authoritative). */
   filesEnabled: z.boolean(),
+  /** The run limits of this exam, fixed when hosting started (M43); defaults when absent. */
+  runLimits: RunLimitsSchema.optional(),
   /** The files the teacher attached; students download them in the lobby (M15f). */
   examFiles: ExamFilesSchema,
   /** Set once the student's answers are final (submitted, auto-submitted or ended by the teacher). */

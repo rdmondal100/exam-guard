@@ -22,7 +22,10 @@ export class GradingError extends ApiError {
  * Gemini with the teacher's key, asked from main at the start of each run (and on resume), so
  * the key lives only in memory while grading. No key → 422 `no_api_key`.
  */
-export function geminiSource(getKey: () => Promise<string | null>, model?: string): ProviderSource {
+export function geminiSource(
+  getKey: () => Promise<string | null>,
+  model?: string | (() => string),
+): ProviderSource {
   return {
     id: 'gemini',
     create: async () => {
@@ -31,10 +34,11 @@ export function geminiSource(getKey: () => Promise<string | null>, model?: strin
         throw new GradingError(
           422,
           'no_api_key',
-          'No Gemini API key is set. Until Settings exists, start the app with EG_GEMINI_API_KEY set.',
+          'No Gemini API key is set. Add one in Settings → AI grading.',
         );
       }
-      return new GeminiProvider({ apiKey, ...(model ? { model } : {}) });
+      const name = typeof model === 'function' ? model() : model;
+      return new GeminiProvider({ apiKey, ...(name ? { model: name } : {}) });
     },
   };
 }

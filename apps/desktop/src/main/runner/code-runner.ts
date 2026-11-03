@@ -1,12 +1,19 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { RUN_LIMITS, type RunRequest, type RunResult, type RunSize } from '@examguard/shared';
+import {
+  DEFAULT_RUN_LIMITS,
+  RUN_LIMITS,
+  type RunLimits,
+  type RunRequest,
+  type RunResult,
+  type RunSize,
+} from '@examguard/shared';
 import type { PtyOpen } from '../terminal/pty.js';
 import { terminalEnv, terminalPaths } from '../terminal/terminal-env.js';
 import { LANGUAGES, type LanguageConfig } from './languages.js';
 import { parseGcc } from './parse-gcc.js';
 import { ptyRun, type PtyRunHandle } from './pty-run.js';
-import { crashMessage, RUN_MESSAGES, timeLimitMessage } from './run-messages.js';
+import { crashMessage, limitMessage, RUN_MESSAGES } from './run-messages.js';
 import {
   runnerArgs,
   spawnLimited,
@@ -28,7 +35,9 @@ export interface CodeRunnerDeps {
   openPty?: PtyOpen;
   /** Output of the program as it is produced. */
   onData?: (data: string) => void;
-  /** Wall time of the program; tests shorten it. */
+  /** The exam's limits (M43: from the session state, fixed when hosting started). */
+  limits?: () => RunLimits;
+  /** Wall time of the program; tests shorten it (wins over `limits`). */
   runTimeMs?: number;
   now?: () => number;
   /** Called after every real run (not for busy/cooldown refusals). */
@@ -149,16 +158,17 @@ export class CodeRunner {
       ...lang.env,
     };
     const reportPath = join(dir, '.eg-report.json');
-    const runMs = this.deps.runTimeMs ?? RUN_LIMITS.timeMs;
+    const limits = this.deps.limits?.() ?? DEFAULT_RUN_LIMITS;
+    const runMs = this.deps.runTimeMs ?? limits.timeMs;
     // Only the compiler runs piped; the program itself runs in the console (`execPty`).
-    const exec = (argv: string[], limits: { memMb: number; timeMs: number }) => {
+    const exec = (argv: string[], compileLimits: { memMb: number; timeMs: number }) => {
       const handle = (this.deps.spawn ?? spawnLimited)({
         command: tools.runner ?? '',
-        args: runnerArgs({ ...limits, procs: RUN_LIMITS.processes }, reportPath, argv),
+        args: runnerArgs({ ...compileLimits, procs: limits.processes }, reportPath, argv),
         cwd: dir,
         env,
         stdin: '',
-        outputCap: RUN_LIMITS.outputBytes,
+        outputCap: limits.outputBytes,
         reportPath,
       });
       this.current = handle;
@@ -172,14 +182,14 @@ export class CodeRunner {
         {
           command: tools.runner ?? '',
           args: runnerArgs(
-            { memMb: RUN_LIMITS.memoryMb, timeMs: runMs, procs: RUN_LIMITS.processes },
+            { memMb: limits.memoryMb, timeMs: runMs, procs: limits.processes },
             reportPath,
             argv,
             true,
           ),
           cwd: paths.workspace,
           env,
-          outputCap: RUN_LIMITS.outputBytes,
+          outputCap: limits.outputBytes,
           reportPath,
           size: this.size,
         },
@@ -206,7 +216,7 @@ export class CodeRunner {
     }
     const argv = lang.run(tools, dir, lang.compile ? [] : flags);
     const ran = await execPty(argv);
-    return { ...this.toResult(ran, runMs), compileOutput, diagnostics };
+    return { ...this.toResult(ran, limits, runMs), compileOutput, diagnostics };
   }
 
   private compileFailure(
@@ -229,6 +239,7 @@ export class CodeRunner {
 
   private toResult(
     r: LimitedResult,
+    limits: RunLimits,
     timeLimitMs: number,
   ): Omit<RunResult, 'compileOutput' | 'diagnostics'> {
     const base = { exitCode: r.exitCode, timeMs: r.timeMs, stdout: r.stdout, stderr: r.stderr };
@@ -237,7 +248,7 @@ export class CodeRunner {
       return { ...base, status: 'failed', message: r.error ?? 'The program could not be started.' };
     }
     const message =
-      r.reason === 'time_limit' ? timeLimitMessage(timeLimitMs) : RUN_MESSAGES[r.reason];
+      r.reason === 'stopped' ? RUN_MESSAGES.stopped : limitMessage(r.reason, limits, timeLimitMs);
     return { ...base, status: r.reason, message };
   }
 }

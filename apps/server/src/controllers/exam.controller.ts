@@ -1,5 +1,9 @@
 import type { Request, Response } from 'express';
-import { ExamCreateBodySchema, ExamUpdateBodySchema } from '@examguard/shared';
+import {
+  ExamCreateBodySchema,
+  ExamUpdateBodySchema,
+  type MonitoringSettings,
+} from '@examguard/shared';
 import type { ExamRepo } from '../db/repositories/exam.repo.js';
 import type { QuestionRepo } from '../db/repositories/question.repo.js';
 import type { ExamFileService } from '../services/exam-files/exam-file-service.js';
@@ -15,6 +19,8 @@ export interface ExamControllerDeps {
   examFiles?: ExamFileService;
   /** Deleting an exam also deletes its screenshots. */
   screenshots?: Pick<ScreenshotStore, 'removeExam'>;
+  /** The teacher's default monitoring for a new exam (Settings, M43). */
+  defaultMonitoring?: () => MonitoringSettings;
   now?: () => number;
 }
 
@@ -26,6 +32,7 @@ export function createExamController({
   questions,
   examFiles,
   screenshots,
+  defaultMonitoring,
   now = Date.now,
 }: ExamControllerDeps) {
   const found = (id: string) => {
@@ -51,7 +58,7 @@ export function createExamController({
       if (body.data.classListId != null && !exams.classListExists(body.data.classListId)) {
         throw new ApiError(400, 'class_list_not_found', 'That class list does not exist');
       }
-      res.status(201).json(exams.create(body.data, now()));
+      res.status(201).json(exams.create(body.data, now(), defaultMonitoring?.()));
     },
 
     update(req: IdRequest, res: Response): void {

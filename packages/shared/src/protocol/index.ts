@@ -19,3 +19,4 @@ export * from './screenshot-frame.js';
 export * from './thumbs.js';
 export * from './audit.js';
 export * from './grading.js';
+export * from './settings.js';
