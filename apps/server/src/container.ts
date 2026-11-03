@@ -15,6 +15,7 @@ import { TerminalLogRepo } from './db/repositories/terminalLog.repo.js';
 import { AnswerGradeRepo } from './db/repositories/answerGrade.repo.js';
 import { EvaluationRepo } from './db/repositories/evaluation.repo.js';
 import { GradingJobRepo } from './db/repositories/gradingJob.repo.js';
+import { ReevaluateQueueRepo } from './db/repositories/reevaluateQueue.repo.js';
 import { AnswerWriter } from './services/answers/answer-writer.js';
 import { AuthState } from './services/auth/auth-state.js';
 import { LoginLimiter } from './services/auth/login-limiter.js';
@@ -27,6 +28,8 @@ import { HostingManager, type HostingManagerDeps } from './services/hosting/host
 import { GradingService, type GradingServiceDeps } from './services/grading/grading-service.js';
 import { geminiSource } from './services/grading/provider-source.js';
 import { ReviewService } from './services/grading/review-service.js';
+import { ResultsService } from './services/results/results-service.js';
+import { ResultsRepo } from './db/repositories/results.repo.js';
 import { ScreenshotStore } from './services/screenshots/screenshot-store.js';
 import { SubmissionService } from './services/submissions/submission-service.js';
 import { SessionHub } from './sockets/sessionHub.js';
@@ -64,6 +67,8 @@ export interface ContainerOptions {
   };
   /** The grader and pipeline settings (M38). Without it, grading asks for a Gemini key and gets none. */
   grading?: Pick<GradingServiceDeps, 'source' | 'concurrency' | 'backoffMs' | 'progressMs'>;
+  /** The app data folder for backups and exports (M42). Defaults to the hosting data folder. */
+  dataDir?: string;
 }
 
 /** The live hosting parts, present when `hosting` options and an exam-files folder exist. */
@@ -98,6 +103,8 @@ export interface Container {
   grading: GradingService;
   /** Review, accept and edit (M39, M40). */
   review: ReviewService;
+  /** Finalize and the CSV export (M42). */
+  results: ResultsService;
   live?: Live;
 }
 
@@ -107,6 +114,7 @@ export function createContainer({
   filesDir,
   hosting,
   grading: gradingOptions,
+  dataDir,
 }: ContainerOptions): Container {
   const exams = new ExamRepo(db);
   const questions = new QuestionRepo(db);
@@ -132,6 +140,7 @@ export function createContainer({
     jobs: new GradingJobRepo(db),
     grades,
     evaluations,
+    queue: new ReevaluateQueueRepo(db),
     source: geminiSource(() => Promise.resolve(null)),
     ...gradingOptions,
     ...(now ? { now } : {}),
@@ -144,6 +153,17 @@ export function createContainer({
     finals,
     grades,
     evaluations,
+    ...(now ? { now } : {}),
+  });
+  const resultsDir = dataDir ?? hosting?.dataDir;
+  const results = new ResultsService({
+    db,
+    exams,
+    questions,
+    grades,
+    results: new ResultsRepo(db),
+    actions,
+    ...(resultsDir ? { dataDir: resultsDir } : {}),
     ...(now ? { now } : {}),
   });
 
@@ -165,6 +185,7 @@ export function createContainer({
     ...(screenshots ? { screenshots } : {}),
     grading,
     review,
+    results,
   };
   if (!hosting || !examFiles) return container;
 

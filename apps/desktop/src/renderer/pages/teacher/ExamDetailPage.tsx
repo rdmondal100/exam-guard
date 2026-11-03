@@ -17,6 +17,7 @@ import { useRoster } from '@/hooks/useRoster';
 import { useGrading } from '@/hooks/useGrading';
 import { GradingPanel } from '../../components/teacher/GradingPanel';
 import { ReviewPanel } from '../../components/teacher/ReviewPanel';
+import { ResultsPanel } from '../../components/teacher/ResultsPanel';
 import { ExamFilesSection } from '../../components/teacher/ExamFilesSection';
 import { HostingPanel } from '../../components/teacher/HostingPanel';
 import { ReadyPanel } from '../../components/teacher/ReadyPanel';
@@ -204,8 +205,19 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
                 api={grading.api}
                 status={grading.status}
                 questions={questions}
+                onGrading={(status) => {
+                  grading.set(status);
+                  void reloadExams();
+                }}
               />
             )}
+          {(exam.state === 'in_review' || exam.state === 'finalized') && (
+            <ResultsPanel
+              examId={exam.id}
+              grading={grading}
+              onStateChange={() => void reloadExams()}
+            />
+          )}
           {(live || AFTER_EXAM.has(exam.state)) && examApi && (
             <MonitoringBoard
               examId={exam.id}

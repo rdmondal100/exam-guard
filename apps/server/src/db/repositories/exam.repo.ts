@@ -139,6 +139,18 @@ export class ExamRepo {
     return this.get(id);
   }
 
+  /** in_review → finalized (M42): the marks are locked. Returns false when it was not in review. */
+  finalize(id: string, now: number): boolean {
+    return (
+      this.db
+        .prepare(
+          `UPDATE exams SET state = 'finalized', finalized_at = ?, updated_at = ?
+             WHERE id = ? AND state = 'in_review'`,
+        )
+        .run(now, now, id).changes === 1
+    );
+  }
+
   /** ready → hosting: stores the PIN and the hosting start time. */
   startHosting(id: string, pin: string, now: number): ExamSummary | undefined {
     this.db

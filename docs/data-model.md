@@ -230,8 +230,9 @@ INDEX(exam_student_id, question_id, id DESC); INDEX(job_id)
 | current_evaluation_id | INTEGER FK → evaluations, nullable | NULL while pending and for `needs_manual` |
 | total | INTEGER | half-units, denormalised, nullable |
 | confidence | TEXT | denormalised from the current evaluation (low-confidence counts) |
+| queued_job_id | TEXT FK → grading_jobs ON DELETE SET NULL, nullable | M41 (migration 0014): the `reevaluate` job that still has to grade this answer. The grade stays as it is until then; cleared when a new grade is set, and for jobs that stop (cancelled, failed) |
 | updated_at | INTEGER | |
-INDEX(question_id, status)
+INDEX(question_id, status); INDEX(queued_job_id)
 
 ## Relationships (summary)
 `class_lists 1─* class_students`, `exams 1─* questions 1─* marking_criteria`, `exams 1─* exam_students *─1 class_students`, `exam_students 1─* answer_versions`, `exam_students 1─* final_answers 1─1 answer_grades`, `exam_students 1─* terminal_chunks`, `answer_grades → evaluations (current)`, `exams 1─* events / teacher_actions / grading_jobs`.
@@ -246,11 +247,11 @@ secrets.bin                      safeStorage-encrypted: AI API key
 certs/server.key, server.crt     self-signed TLS (key never leaves the PC)
 screenshots/<examId>/<examStudentId>/<eventId>.jpg
 exam-files/<examId>/<fileId>     the files the teacher attached to the exam (M15f)
-exports/<examTitle>_<yyyyMMdd-HHmm>.csv
-backups/<yyyyMMdd-HHmmss>/       SQLite online backup + copy of screenshots/
+exports/<examTitle>_<yyyyMMdd-HHmm>.csv   results (M42): UTF-8 with BOM, CRLF; Windows-illegal title characters become `_`
+backups/<yyyyMMdd-HHmmss>/       examguard.sqlite (online backup) + copy of screenshots/ (`-2`, `-3` … within one second)
 logs/main.log, server.log        rotated, 5 × 5 MB
 ```
-- Backups use the better-sqlite3 `backup()` API (safe while running). A backup is taken automatically at exam end and before finalize, plus manually from Settings.
+- Backups use the better-sqlite3 `backup()` API (safe while running). Built (M42): before finalize (`services/results/backup.ts`); planned: at exam end and manually from Settings (M43).
 - Retention: `retention.screenshotDays` (default: keep until the exam is deleted) purges screenshot files and nulls `screenshot_path`.
 
 ## Student PC local storage

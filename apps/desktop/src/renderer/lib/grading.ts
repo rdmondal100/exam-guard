@@ -124,3 +124,14 @@ export function draftBody(draft: GradeDraft): AnswerEditBody {
 export function marksText(total: number | null, max: number): string {
   return total === null ? `— / ${max}` : `${total} / ${max}`;
 }
+
+/** What stops the teacher from finalizing (M42): answers still without a grade. */
+export function finalizeBlockers(status: GradingStatus): { pending: number; needsManual: number } {
+  return status.questions.reduce(
+    (sum, q) => ({
+      pending: sum.pending + q.pending,
+      needsManual: sum.needsManual + q.needsManual,
+    }),
+    { pending: 0, needsManual: 0 },
+  );
+}

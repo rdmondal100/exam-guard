@@ -25,6 +25,7 @@ import {
   JoinResultSchema,
   ProbeRequestSchema,
   ProbeResultSchema,
+  RevealExportRequestSchema,
   RunInputSchema,
   RunRequestSchema,
   RunResultSchema,
@@ -221,6 +222,12 @@ const api: ExamGuardApi = {
     AgentChangeResultSchema.parse(await ipcRenderer.invoke(IPC.agentInstall)),
   uninstallAgent: async () =>
     AgentChangeResultSchema.parse(await ipcRenderer.invoke(IPC.agentUninstall)),
+  revealExport: async (fileName: string) =>
+    z
+      .boolean()
+      .parse(
+        await ipcRenderer.invoke(IPC.revealExport, RevealExportRequestSchema.parse({ fileName })),
+      ),
 };
 
 contextBridge.exposeInMainWorld('examguard', api);

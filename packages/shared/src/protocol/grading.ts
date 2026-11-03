@@ -189,3 +189,33 @@ export const AnswerEditBodySchema = z.object({
   teacherNotes: z.array(TeacherNoteSchema).max(100).optional(),
 });
 export type AnswerEditBody = z.input<typeof AnswerEditBodySchema>;
+
+/**
+ * `POST /exams/:id/grading/reevaluate` (M41): grade one question again with the teacher's
+ * instruction, for the chosen students or all of them. Verified and Modified answers are left
+ * alone unless `includeEdited`.
+ */
+export const ReevaluateBodySchema = z.object({
+  questionId: z.string().min(1),
+  examStudentIds: z.union([z.literal('all'), z.array(z.string().min(1)).min(1).max(500)]),
+  includeEdited: z.boolean().default(false),
+  instruction: z.string().trim().min(1).max(2000),
+});
+export type ReevaluateBody = z.input<typeof ReevaluateBodySchema>;
+
+/** `POST /exams/:id/finalize` (M42): the marks are locked; `backup` is the folder name in `backups/`. */
+export const FinalizeResultSchema = z.object({
+  examId: z.string(),
+  examState: ExamStateSchema,
+  finalizedAt: z.number(),
+  backup: z.string(),
+});
+export type FinalizeResult = z.infer<typeof FinalizeResultSchema>;
+
+/** `POST /exams/:id/export` (M42): the CSV was written to `exports/<fileName>` on the teacher PC. */
+export const ExportResultSchema = z.object({
+  fileName: z.string(),
+  path: z.string(),
+  rows: z.number().int().nonnegative(),
+});
+export type ExportResult = z.infer<typeof ExportResultSchema>;

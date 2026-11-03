@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
-import type { AnswerDetail, Question } from '@examguard/shared';
+import type { AnswerDetail, GradingStatus, Question } from '@examguard/shared';
 import type { ExamApi } from '@/api/examApi';
 import type { GradingApi } from '@/api/gradingApi';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { formatDuration } from '@/lib/eventsView';
 import { AnswerTimeline } from './AnswerTimeline';
 import { GradeEditor } from './GradeEditor';
 import { GradeHistory } from './GradeHistory';
+import { ReevaluateForm } from './ReevaluateForm';
 
 const ReadOnlyCode = lazy(() => import('./ReadOnlyCode'));
 
@@ -18,6 +19,10 @@ interface Props {
   api: GradingApi;
   question: Question;
   examStudentId: string;
+  /** Changes when grading moves on: the answer reloads (a re-evaluation landed). */
+  version: string;
+  /** A re-evaluation of this answer started (M41). */
+  onGrading: (status: GradingStatus) => void;
   /** A grade changed: the table reloads. */
   onChanged: () => void;
   onClose: () => void;
@@ -34,10 +39,11 @@ const label = (language: string) => LABELS[language] ?? language;
  * the student's event timeline. In review the teacher accepts or edits it (M40).
  */
 export function AnswerReview(props: Props) {
-  const { examId, examApi, api, question, examStudentId, onChanged } = props;
+  const { examId, examApi, api, question, examStudentId, onChanged, version } = props;
   const [detail, setDetail] = useState<AnswerDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [reevaluating, setReevaluating] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -50,7 +56,7 @@ export function AnswerReview(props: Props) {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, version]);
 
   const change = async (action: () => Promise<AnswerDetail>) => {
     setBusy(true);
@@ -123,6 +129,31 @@ export function AnswerReview(props: Props) {
           The AI was not sure about this grade (low confidence). Check it before accepting.
         </p>
       )}
+      {detail?.examState === 'grading' && (
+        <p role="status" className="text-sm text-muted">
+          Grading is running; marks can be changed again when it finishes.
+        </p>
+      )}
+      {detail?.examState === 'in_review' &&
+        (reevaluating ? (
+          <ReevaluateForm
+            api={api}
+            examId={examId}
+            questionId={question.id}
+            examStudentId={examStudentId}
+            edited={detail.grade.status === 'verified' || detail.grade.status === 'modified'}
+            onStarted={props.onGrading}
+            onClose={() => setReevaluating(false)}
+          />
+        ) : (
+          <Button
+            variant="outline"
+            className="h-8 self-start px-3"
+            onClick={() => setReevaluating(true)}
+          >
+            Re-evaluate this answer…
+          </Button>
+        ))}
       {detail && (
         <>
           <div className="grid gap-4 lg:grid-cols-2">

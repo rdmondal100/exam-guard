@@ -13,6 +13,7 @@ import {
 } from '@/lib/grading';
 import { AnswerReview } from './AnswerReview';
 import { DataTable } from './DataTable';
+import { ReevaluateForm } from './ReevaluateForm';
 
 interface Props {
   examId: string;
@@ -20,22 +21,27 @@ interface Props {
   api: GradingApi;
   status: GradingStatus;
   questions: readonly Question[];
+  /** A re-evaluation started (M41): show its status. */
+  onGrading: (status: GradingStatus) => void;
 }
 
 /**
  * The review (M39): per question, a table of every student's answer with the AI total,
  * confidence and status, low confidence highlighted and what needs attention first. A row opens
- * the answer beside the sample, with the grade, the history and the student's timeline.
+ * the answer beside the sample, with the grade, the history and the student's timeline. In
+ * review the question can be re-evaluated with an instruction (M41).
  */
-export function ReviewPanel({ examId, examApi, api, status, questions }: Props) {
+export function ReviewPanel({ examId, examApi, api, status, questions, onGrading }: Props) {
   const [questionId, setQuestionId] = useState(questions[0]?.id ?? '');
   const [table, setTable] = useState<ReviewTable | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [reevaluating, setReevaluating] = useState(false);
   const question = questions.find((q) => q.id === questionId);
-  // Reload the table whenever grading moves on, so new grades show up.
+  // Reload whenever grading moves on (counts or a job's progress), so new grades show up.
   const counts = status.questions.find((q) => q.questionId === questionId);
-  const countsKey = JSON.stringify(counts ?? null);
+  const job = status.jobs.find((j) => j.questionId === questionId);
+  const countsKey = JSON.stringify([counts ?? null, job ?? null, status.examState]);
 
   const load = useCallback(async () => {
     if (!questionId) return;
@@ -108,6 +114,8 @@ export function ReviewPanel({ examId, examApi, api, status, questions }: Props) 
         api={api}
         question={question}
         examStudentId={open}
+        version={countsKey}
+        onGrading={onGrading}
         onChanged={() => void load()}
         onClose={() => setOpen(null)}
         onPrev={index > 0 ? () => setOpen(rows[index - 1]?.examStudentId ?? null) : undefined}
@@ -142,7 +150,26 @@ export function ReviewPanel({ examId, examApi, api, status, questions }: Props) 
             </Button>
           );
         })}
+        {status.examState === 'in_review' && !reevaluating && (
+          <Button
+            variant="outline"
+            className="ml-auto h-8 px-3"
+            onClick={() => setReevaluating(true)}
+          >
+            Re-evaluate Q{question?.position}…
+          </Button>
+        )}
       </div>
+      {reevaluating && status.examState === 'in_review' && (
+        <ReevaluateForm
+          key={questionId}
+          api={api}
+          examId={examId}
+          questionId={questionId}
+          onStarted={onGrading}
+          onClose={() => setReevaluating(false)}
+        />
+      )}
       {error && (
         <p role="alert" className="text-sm text-red-700">
           {error}
