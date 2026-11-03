@@ -40,10 +40,16 @@ describe('parsing sc output', () => {
     expect(parseBinaryPath('nothing here')).toBeNull();
   });
 
-  it('names the installed agent under Program Files', () => {
-    expect(installedAgentPath({ ProgramFiles: 'D:\\PF' })).toBe(
+  it('names the dev-installed agent under Program Files', () => {
+    const env = { ProgramFiles: 'D:\\PF' };
+    expect(installedAgentPath({ isPackaged: false, resourcesPath: 'unused', env })).toBe(
       'D:\\PF\\ExamGuard\\agent\\eg-agent.exe',
     );
+  });
+
+  it("expects an installed app's agent next to its resources", () => {
+    const where = { isPackaged: true, resourcesPath: 'C:\\EG\\resources', env: {} };
+    expect(installedAgentPath(where)).toBe('C:\\EG\\resources\\eg-agent.exe');
   });
 });
 

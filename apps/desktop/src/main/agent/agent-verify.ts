@@ -19,9 +19,21 @@ export function parseBinaryPath(stdout: string): string | null {
   return bare ?? null;
 }
 
-/** Where the install script puts the agent: a folder a standard user cannot write to. */
-export function installedAgentPath(env: NodeJS.ProcessEnv = process.env): string {
-  return join(env['ProgramFiles'] ?? 'C:\\Program Files', 'ExamGuard', 'agent', 'eg-agent.exe');
+export interface AgentPathEnv {
+  isPackaged: boolean;
+  /** `process.resourcesPath` of a packaged app. */
+  resourcesPath: string;
+  env: NodeJS.ProcessEnv;
+}
+
+/**
+ * The program file the service must run, in a folder a standard user cannot write to. Packaged:
+ * the installer registers the copy next to this app's resources (the per-machine install folder).
+ * Dev: where the install script copies it.
+ */
+export function installedAgentPath(t: AgentPathEnv): string {
+  if (t.isPackaged) return join(t.resourcesPath, 'eg-agent.exe');
+  return join(t.env['ProgramFiles'] ?? 'C:\\Program Files', 'ExamGuard', 'agent', 'eg-agent.exe');
 }
 
 const same = (a: string, b: string) =>

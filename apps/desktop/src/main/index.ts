@@ -4,7 +4,7 @@ import { readInstallType } from './install-type.js';
 import { ExamLock } from './exam-lock.js';
 import { registerIpc, type AppState } from './ipc.js';
 import { loadStoredMode, resolveMode } from './mode-store.js';
-import { parseProfile, userDataPathFor } from './profile.js';
+import { DEFAULT_PROFILE, parseProfile, userDataPathFor } from './profile.js';
 import { ServerHost } from './server-host.js';
 import { createAiKeyStore } from './grading-key.js';
 import { DataFolder } from './data-folder/data-folder.js';
@@ -71,7 +71,9 @@ if (!app.requestSingleInstanceLock()) {
       isTeacher,
     });
     installCsp();
-    window = createMainWindow(`ExamGuard AI (${profile})`);
+    window = createMainWindow(
+      profile === DEFAULT_PROFILE ? 'ExamGuard AI' : `ExamGuard AI (${profile})`,
+    );
     examLock.attach(window);
     ipc.announceWindow(window);
     if (state.mode === 'teacher') server.start();

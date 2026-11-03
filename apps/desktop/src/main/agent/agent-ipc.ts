@@ -9,6 +9,10 @@ import { installAgent, uninstallAgent } from './agent-installer.js';
 import { runCommand } from './run-command.js';
 import { queryAgentService } from './service-state.js';
 
+const PACKAGED_REPAIR =
+  'The ExamGuard Agent service is set up by the installer. Ask lab IT to run the ExamGuard ' +
+  'installer again and choose Student computer.';
+
 interface Deps {
   userData: string;
   link: AgentLink;
@@ -16,15 +20,11 @@ interface Deps {
 }
 
 /**
- * Student mode: tells the renderer whether the agent service is running and can set it up (one
- * UAC prompt) from inside the app. `EG_FAKE_AGENT=1` in a dev build skips all of it.
+ * Student mode: tells the renderer whether the agent service is running. A dev build can set it up
+ * (one UAC prompt); an installed app leaves that to the installer. `EG_FAKE_AGENT=1` skips it all.
  */
 export function registerAgentIpc(deps: Deps): void {
-  const fake = isFakeAgent({
-    isPackaged: app.isPackaged,
-    env: process.env,
-    appVersion: app.getVersion(),
-  });
+  const fake = isFakeAgent({ isPackaged: app.isPackaged, env: process.env });
   const exeEnv = () => ({
     isPackaged: app.isPackaged,
     appPath: app.getAppPath(),
@@ -55,13 +55,13 @@ export function registerAgentIpc(deps: Deps): void {
   ipcMain.handle(IPC.agentInstall, async () => {
     deps.requireStudent();
     if (fake) return change(null);
+    // An installed app trusts only the service the installer registered (installedAgentPath).
+    if (app.isPackaged) return change(PACKAGED_REPAIR);
     const exe = resolveAgentExe(exeEnv());
     if (!exe) {
       return change('eg-agent.exe was not found. Run "cargo build -p eg-agent --release" first.');
     }
-    return change(
-      await installAgent(exe, installer, app.isPackaged ? undefined : process.execPath),
-    );
+    return change(await installAgent(exe, installer, process.execPath));
   });
   ipcMain.handle(IPC.agentUninstall, async () => {
     deps.requireStudent();

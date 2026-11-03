@@ -3,7 +3,8 @@ import { promisify } from 'node:util';
 import { InstallTypeSchema, type InstallType } from '@examguard/shared';
 
 const run = promisify(execFile);
-const REG_KEY = 'HKLM\\Software\\ExamGuard';
+/** Written by the installer (build/installer.nsh, 64-bit registry view). */
+export const INSTALL_REG_KEY = 'HKLM\\Software\\ExamGuard';
 
 /** Pulls the value out of `reg query ... /v InstallType` output. Anything unexpected is `dev`. */
 export function parseRegQueryOutput(text: string): InstallType {
@@ -27,7 +28,7 @@ export async function readInstallType({
     if (parsed.success) return parsed.data;
   }
   try {
-    const { stdout } = await run('reg', ['query', REG_KEY, '/v', 'InstallType'], {
+    const { stdout } = await run('reg', ['query', INSTALL_REG_KEY, '/v', 'InstallType'], {
       windowsHide: true,
     });
     return parseRegQueryOutput(stdout);

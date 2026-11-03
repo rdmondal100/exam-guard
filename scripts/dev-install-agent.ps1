@@ -75,4 +75,4 @@ public static extern uint GetFinalPathNameByHandleW(System.IntPtr h, System.Text
 }
 
 Write-Host "Installed and started $name from $exe"
-Write-Host "Logs: $env:ProgramData\ExamGuard\spike\service.log and helper.log"
+Write-Host "Logs: $env:ProgramData\ExamGuard\logs\service.log and helper.log"

@@ -25,7 +25,7 @@ export interface ToolchainEnv {
 /**
  * Finds eg-runner and the toolchains. Dev: the Cargo `target` folder and `resources/toolchains`
  * from `pnpm fetch-toolchains`, with `EG_RUNNER_PATH` and `EG_MINGW_DIR` as overrides. Packaged:
- * next to the app resources (final layout in M45); the overrides are ignored there.
+ * next to the app resources (`electron-builder.config.ts`); the overrides are ignored there.
  */
 export function resolveToolchain(t: ToolchainEnv): Toolchain {
   const exists = t.exists ?? existsSync;

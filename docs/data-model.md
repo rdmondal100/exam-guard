@@ -266,5 +266,5 @@ logs/main.log, server.log        rotated, 5 × 5 MB
   .examguard\                          bin\ shims, pacman.conf, gnupg\ keyring copy (ExamGuard's, not the student's)
   .examguard\exam-files\               the teacher's files while they wait for the exam to start: <fileId>, revealed.json (ids already copied into workspace\)
 %ProgramData%\ExamGuard\buffer\        agent evidence buffer (M24): key.bin + <examStudentId>\<evidenceSeq>.bin (AES-256-GCM), folder ACL SYSTEM + Administrators only; a file goes on evidence.ack. `--console` uses %LOCALAPPDATA%\ExamGuard\agent-buffer\
-%ProgramData%\ExamGuard\agent.log
+%ProgramData%\ExamGuard\logs\         agent service.log + helper.log (rotated at the size limit, one .old copy). The uninstaller removes all of %ProgramData%\ExamGuard
 ```

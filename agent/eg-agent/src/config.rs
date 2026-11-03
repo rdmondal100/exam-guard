@@ -30,10 +30,10 @@ pub const NET_LEASE: Duration = Duration::from_secs(180);
 /// How often the lease is checked.
 pub const NET_TICK: Duration = Duration::from_millis(500);
 
-/// `%ProgramData%\ExamGuard\spike`: logs and screenshots. It is still the M19 folder because the
-/// student app's "What the agent saw" view reads it; M22 moves the evidence into the pipe.
-pub fn data_dir() -> PathBuf {
-    program_data().join("ExamGuard").join("spike")
+/// `%ProgramData%\ExamGuard\logs`: `service.log` and `helper.log`. The uninstaller removes the
+/// whole `%ProgramData%\ExamGuard` folder.
+pub fn log_dir() -> PathBuf {
+    program_data().join("ExamGuard").join("logs")
 }
 
 /// `%ProgramData%\ExamGuard\buffer`: the encrypted evidence buffer (architecture §3). Created by the

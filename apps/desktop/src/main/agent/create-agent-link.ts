@@ -8,6 +8,8 @@ import type { RunCommand } from './run-command.js';
 
 export interface AgentLinkEnv {
   isPackaged: boolean;
+  /** `process.resourcesPath`: a packaged app expects the agent there (`installedAgentPath`). */
+  resourcesPath: string;
   env: NodeJS.ProcessEnv;
   appVersion: string;
   /** How the agent starts this app again (M24); see `launchInfo`. */
@@ -15,7 +17,10 @@ export interface AgentLinkEnv {
 }
 
 /** Whether `EG_FAKE_AGENT=1` is in force (dev builds only). */
-export function isFakeAgent({ isPackaged, env }: AgentLinkEnv): boolean {
+export function isFakeAgent({
+  isPackaged,
+  env,
+}: Pick<AgentLinkEnv, 'isPackaged' | 'env'>): boolean {
   return !isPackaged && env['EG_FAKE_AGENT'] === '1';
 }
 
@@ -36,7 +41,7 @@ export function createAgentLink(where: AgentLinkEnv, run: RunCommand): AgentLink
     connect: () => net.connect(AGENT_PIPE_NAME),
     verifyService: withoutService
       ? async () => true
-      : (pid) => verifyAgentService(pid, run, installedAgentPath(where.env)),
+      : (pid) => verifyAgentService(pid, run, installedAgentPath(where)),
     appVersion: where.appVersion,
     ...(where.launch ? { launch: where.launch } : {}),
   });

@@ -3,6 +3,7 @@ node_modules/
 dist/
 .turbo/
 out/
+release/
 *.tsbuildinfo
 coverage/
 target/

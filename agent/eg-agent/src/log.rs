@@ -1,11 +1,11 @@
-//! `tracing` output for the service and the helper: a file in the data folder, or stderr.
+//! `tracing` output for the service and the helper: a file in the log folder, or stderr.
 
 use std::fs::OpenOptions;
 use std::io;
 use std::path::Path;
 use std::sync::Mutex;
 
-use crate::config::{data_dir, MAX_LOG_BYTES};
+use crate::config::{log_dir, MAX_LOG_BYTES};
 
 /// `RUST_LOG` if set, else `info`.
 fn filter() -> tracing_subscriber::EnvFilter {
@@ -39,11 +39,11 @@ fn rotate(path: &Path, max: u64) -> io::Result<bool> {
     }
 }
 
-/// Sends tracing output to `<data dir>\<file>` (appended). Falls back to stderr if the file can't
+/// Sends tracing output to `<log dir>\<file>` (appended). Falls back to stderr if the file can't
 /// be opened.
 pub fn init_file(file: &str) {
-    let path = data_dir().join(file);
-    let opened = std::fs::create_dir_all(data_dir()).and_then(|()| {
+    let path = log_dir().join(file);
+    let opened = std::fs::create_dir_all(log_dir()).and_then(|()| {
         // A failed rotation only means a bigger file.
         let _ = rotate(&path, MAX_LOG_BYTES);
         OpenOptions::new().create(true).append(true).open(&path)

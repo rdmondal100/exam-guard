@@ -1,6 +1,6 @@
 <#
   Removes the ExamGuard agent service from THIS PC (undoes dev-install-agent.ps1). Needs an
-  elevated PowerShell. Logs and screenshots in %ProgramData%\ExamGuard\spike are kept.
+  elevated PowerShell. Logs in %ProgramData%\ExamGuard\logs are kept.
 #>
 $ErrorActionPreference = 'Stop'
 

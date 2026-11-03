@@ -19,6 +19,7 @@
     "sim": "turbo run build --filter=@examguard/student-sim && pnpm --filter @examguard/student-sim sim",
     "record-fixture": "turbo run build --filter=@examguard/server && pnpm --filter @examguard/server record-fixture",
     "fetch-toolchains": "node scripts/fetch-toolchains.mjs",
+    "package": "node scripts/package-desktop.mjs",
     "test:root": "vitest run"
   },
   "devDependencies": {

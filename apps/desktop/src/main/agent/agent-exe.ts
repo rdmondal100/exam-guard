@@ -13,7 +13,7 @@ export interface AgentExeEnv {
 
 /**
  * Finds `eg-agent.exe`. Dev: `EG_AGENT_PATH`, then the Cargo `target` folder. Packaged: next to the
- * app resources (final layout in M45; the override is ignored there).
+ * app resources (`electron-builder.config.ts`; the override is ignored there).
  */
 export function resolveAgentExe(t: AgentExeEnv): string | null {
   const exists = t.exists ?? existsSync;

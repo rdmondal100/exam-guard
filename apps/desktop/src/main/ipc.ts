@@ -74,6 +74,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
   const agentLink = createAgentLink(
     {
       isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
       env: process.env,
       appVersion: app.getVersion(),
       launch: launchInfo(process.argv, process.cwd(), process.env),
