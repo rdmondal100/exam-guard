@@ -4,8 +4,8 @@ import type { AiKeyStatus } from '@examguard/shared';
 import type { SecretBox } from '../resume/secret-box.js';
 
 export interface AiKeyStoreDeps {
-  /** The profile folder; the key lives in `<userData>/secrets.bin` (data-model). */
-  userData: string;
+  /** The data folder; the key lives in `<dataDir>/secrets.bin` (data-model). It can move (M44). */
+  dataDir: () => string;
   box: SecretBox;
   /** `safeStorage.isEncryptionAvailable()`. */
   encryptionAvailable: () => boolean;
@@ -20,10 +20,10 @@ export interface AiKeyStoreDeps {
  * saved: the teacher sees why and the key stays unset.
  */
 export class AiKeyStore {
-  private readonly file: string;
+  constructor(private readonly deps: AiKeyStoreDeps) {}
 
-  constructor(private readonly deps: AiKeyStoreDeps) {
-    this.file = join(deps.userData, 'secrets.bin');
+  private get file(): string {
+    return join(this.deps.dataDir(), 'secrets.bin');
   }
 
   /** The key for a grading run: the saved one, else the dev variable. */

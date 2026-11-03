@@ -2,9 +2,11 @@ import {
   AuthOkSchema,
   BackupResultSchema,
   CertInfoSchema,
+  RetentionPurgeResultSchema,
   TeacherSettingsSchema,
   type BackupResult,
   type CertInfo,
+  type RetentionPurgeResult,
   type ServerConnection,
   type SettingsPatch,
   type TeacherSettings,
@@ -22,6 +24,8 @@ export interface SettingsApi {
   cert(): Promise<CertInfo>;
   /** Rejects `hosting_active` while an exam is hosted or running. */
   regenerateCert(): Promise<CertInfo>;
+  /** Applies screenshot retention now (M44). */
+  purgeScreenshots(): Promise<RetentionPurgeResult>;
 }
 
 export function createSettingsApi(
@@ -42,5 +46,7 @@ export function createSettingsApi(
     cert: () => call(connection, fetchFn, '/settings/cert', CertInfoSchema),
     regenerateCert: () =>
       call(connection, fetchFn, '/settings/regenerate-cert', CertInfoSchema, {}),
+    purgeScreenshots: () =>
+      call(connection, fetchFn, '/settings/retention/purge', RetentionPurgeResultSchema, {}),
   };
 }

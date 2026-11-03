@@ -4,6 +4,9 @@ import {
   AgentChangeResultSchema,
   AiKeySetRequestSchema,
   AiKeyStatusSchema,
+  DataFolderInfoSchema,
+  DataFolderMoveRequestSchema,
+  DataFolderMoveResultSchema,
   AgentServiceStatusSchema,
   AnswerSaveRequestSchema,
   PasteBlockedReportSchema,
@@ -236,6 +239,20 @@ const api: ExamGuardApi = {
       await ipcRenderer.invoke(IPC.aiKeySet, AiKeySetRequestSchema.parse({ apiKey })),
     ),
   clearAiKey: async () => AiKeyStatusSchema.parse(await ipcRenderer.invoke(IPC.aiKeyClear)),
+  dataFolderInfo: async () =>
+    DataFolderInfoSchema.parse(await ipcRenderer.invoke(IPC.dataFolderInfo)),
+  openDataFolder: async () => {
+    await ipcRenderer.invoke(IPC.dataFolderOpen);
+  },
+  chooseDataFolder: async () =>
+    z
+      .string()
+      .nullable()
+      .parse(await ipcRenderer.invoke(IPC.dataFolderChoose)),
+  moveDataFolder: async (path: string | null) =>
+    DataFolderMoveResultSchema.parse(
+      await ipcRenderer.invoke(IPC.dataFolderMove, DataFolderMoveRequestSchema.parse({ path })),
+    ),
 };
 
 contextBridge.exposeInMainWorld('examguard', api);

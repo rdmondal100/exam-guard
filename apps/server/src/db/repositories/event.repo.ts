@@ -80,6 +80,29 @@ export class EventRepo {
     return row?.screenshot_path ? { examId: row.exam_id, path: row.screenshot_path } : undefined;
   }
 
+  /**
+   * Screenshots stored before `before` (server time) whose exam is not hosting or running, oldest
+   * first, at most `limit` (retention, M44).
+   */
+  screenshotsBefore(before: number, limit: number): { id: number; path: string }[] {
+    return this.db
+      .prepare(
+        `SELECT e.id, e.screenshot_path AS path FROM events e JOIN exams x ON x.id = e.exam_id
+           WHERE e.screenshot_path IS NOT NULL AND e.server_ts < ?
+             AND x.state NOT IN ('hosting', 'running')
+           ORDER BY e.id LIMIT ?`,
+      )
+      .all(before, limit) as { id: number; path: string }[];
+  }
+
+  /** Forgets the screenshot of these events (the files are already deleted). */
+  clearScreenshots(ids: readonly number[]): void {
+    const clear = this.db.prepare('UPDATE events SET screenshot_path = NULL WHERE id = ?');
+    this.db.transaction(() => {
+      for (const id of ids) clear.run(id);
+    })();
+  }
+
   /** An exam's events for the teacher, newest first, with the student's code and name. */
   list(examId: string, filter: EventFilter): EventDto[] {
     const where = ['e.exam_id = ?'];

@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import { app, BrowserWindow } from 'electron';
 import { IPC } from '../shared/ipc-channels.js';
 import { readInstallType } from './install-type.js';
@@ -8,6 +7,10 @@ import { loadStoredMode, resolveMode } from './mode-store.js';
 import { parseProfile, userDataPathFor } from './profile.js';
 import { ServerHost } from './server-host.js';
 import { createAiKeyStore } from './grading-key.js';
+import { DataFolder } from './data-folder/data-folder.js';
+import { registerDataFolderIpc } from './data-folder/data-folder-ipc.js';
+import { DataFolderMover } from './data-folder/data-folder-mover.js';
+import { registerExportsIpc } from './exports-ipc.js';
 import { registerAiKeyIpc } from './settings/ai-key-ipc.js';
 import { createMainWindow, installCsp } from './window.js';
 
@@ -39,10 +42,12 @@ if (!app.requestSingleInstanceLock()) {
       installType,
       mode: resolveMode(installType, await loadStoredMode(userData)),
     };
-    const aiKeys = createAiKeyStore(userData);
+    // The teacher's data folder: the profile folder unless it was moved in Settings (M44).
+    const dataFolder = new DataFolder(userData);
+    const dataDir = () => dataFolder.current();
+    const aiKeys = createAiKeyStore(dataDir);
     const server = new ServerHost(
-      userData,
-      join(userData, 'logs'),
+      dataDir,
       (status) => {
         for (const win of BrowserWindow.getAllWindows()) {
           win.webContents.send(IPC.serverStatus, status);
@@ -57,7 +62,14 @@ if (!app.requestSingleInstanceLock()) {
       server.stop();
     });
     const ipc = registerIpc(state, server, examLock);
-    registerAiKeyIpc({ store: aiKeys, isTeacher: () => state.mode === 'teacher' });
+    const isTeacher = () => state.mode === 'teacher';
+    registerAiKeyIpc({ store: aiKeys, isTeacher });
+    registerExportsIpc({ dataDir, isTeacher });
+    registerDataFolderIpc({
+      folder: dataFolder,
+      mover: new DataFolderMover(dataFolder, server),
+      isTeacher,
+    });
     installCsp();
     window = createMainWindow(`ExamGuard AI (${profile})`);
     examLock.attach(window);

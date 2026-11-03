@@ -8,6 +8,8 @@ import { tokenMatches, verifyTeacherToken } from './middlewares/teacherToken.mid
 import { teacherRoutes } from './routes/index.js';
 import type { GradingService } from './services/grading/grading-service.js';
 import type { HostingManager } from './services/hosting/hosting-manager.js';
+import type { ScreenshotRetention } from './services/screenshots/screenshot-retention.js';
+import type { MaintenanceService } from './services/settings/maintenance-service.js';
 import { onTeacherSocket } from './sockets/teacher.socket.js';
 import { attachWebSocket } from './sockets/wsServer.js';
 import { httpListener, type HttpListener } from './utils/httpListener.js';
@@ -25,6 +27,10 @@ export interface TeacherApp extends HttpListener {
   hosting?: HostingManager;
   /** AI grading (M38): `resume()` after a restart. */
   grading: GradingService;
+  /** Whether the data folder may move (M44). */
+  maintenance: MaintenanceService;
+  /** Screenshot retention (M44): run once at start. */
+  retention?: ScreenshotRetention;
 }
 
 /**
@@ -74,6 +80,8 @@ export function buildTeacherApp({ token, ...options }: TeacherAppOptions): Teach
     app,
     requireLogin,
     grading: c.grading,
+    maintenance: c.maintenance,
+    ...(c.retention ? { retention: c.retention } : {}),
     ...(live ? { hosting: live.hosting } : {}),
   };
 }

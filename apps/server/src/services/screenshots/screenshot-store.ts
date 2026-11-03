@@ -30,15 +30,27 @@ export class ScreenshotStore {
 
   /** A stream of a stored picture, or `null` when the path points outside the screenshots folder. */
   open(path: string): ReadStream | null {
-    const root = resolve(this.dataDir, FOLDER);
-    const full = resolve(this.dataDir, path);
-    const inside = relative(root, full);
-    if (inside === '' || inside.startsWith('..') || inside.split(sep).includes('..')) return null;
-    return createReadStream(full);
+    const full = this.inside(path);
+    return full === null ? null : createReadStream(full);
+  }
+
+  /** Deletes one picture (retention, M44). A missing file or a path outside the folder is ignored. */
+  remove(path: string): void {
+    const full = this.inside(path);
+    if (full !== null) rmSync(full, { force: true });
   }
 
   /** Everything of one exam (when the exam is deleted). */
   removeExam(examId: string): void {
     rmSync(join(this.dataDir, FOLDER, safe(examId)), { recursive: true, force: true });
+  }
+
+  /** The full path when `path` lies inside the screenshots folder, else `null`. */
+  private inside(path: string): string | null {
+    const root = resolve(this.dataDir, FOLDER);
+    const full = resolve(this.dataDir, path);
+    const inside = relative(root, full);
+    if (inside === '' || inside.startsWith('..') || inside.split(sep).includes('..')) return null;
+    return full;
   }
 }

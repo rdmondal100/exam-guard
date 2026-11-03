@@ -15,6 +15,7 @@ const KEYS: Record<Section, string> = {
   defaults: 'defaults',
   runLimits: 'runner.limits',
   server: 'server',
+  retention: 'retention',
 };
 
 const SECTIONS = Object.keys(KEYS) as Section[];
@@ -41,6 +42,7 @@ export class SettingsService {
       defaults: read('defaults'),
       runLimits: read('runLimits'),
       server: read('server'),
+      retention: read('retention'),
     };
     return this.cache;
   }

@@ -10,6 +10,8 @@ import {
 } from '@examguard/shared';
 import { buildTeacherApp, type TeacherApp } from '../app.js';
 import { initDatabase, type Db } from '../db/connectDb.js';
+import { EventRepo } from '../db/repositories/event.repo.js';
+import { ScreenshotStore } from '../services/screenshots/screenshot-store.js';
 import { withInject, type Injectable } from '../testing/inject.js';
 import { startLiveExam, type LiveExam } from '../testing/liveExam.js';
 
@@ -143,5 +145,93 @@ describe('run limits reach students at the next exam (M43)', () => {
     });
     const again = await live.reconnect(token);
     expect(again.last('welcome')?.state).toMatchObject({ runLimits: limits });
+  });
+});
+
+describe('screenshot retention (M44)', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  const seed = async () => {
+    const exam = (await call('POST', '/exams', { title: 'Lab', durationMin: 60 })).json();
+    db.exec(`
+      INSERT INTO class_lists (id, name, created_at) VALUES ('l1', 'CSE', 1);
+      INSERT INTO class_students (id, class_list_id, student_code, name) VALUES ('c1', 'l1', '1', 'Ada');
+      INSERT INTO exam_students (id, exam_id, class_student_id, anon_id) VALUES ('s1', '${exam.id}', 'c1', 'a');
+    `);
+    const events = new EventRepo(db);
+    const store = new ScreenshotStore(dir);
+    const add = (serverTs: number) => {
+      const id = events.insertReturningId({
+        examId: exam.id,
+        examStudentId: 's1',
+        type: 'focus_lost',
+        severity: 'medium',
+        source: 'agent',
+        details: {},
+        serverTs,
+      });
+      if (id === null) throw new Error('not stored');
+      const path = store.save(exam.id, 's1', id, Buffer.from([0xff, 0xd8]));
+      events.setScreenshot(id, path);
+      return { id, path };
+    };
+    return {
+      examId: exam.id as string,
+      events,
+      old: add(Date.now() - 10 * DAY),
+      fresh: add(Date.now()),
+    };
+  };
+
+  it('keeps everything by default and deletes old pictures once days are set', async () => {
+    const { events, old, fresh } = await seed();
+    expect((await call('POST', '/settings/retention/purge')).json()).toEqual({ removed: 0 });
+
+    await call('PATCH', '/settings', { retention: { screenshotDays: 7 } });
+    expect((await call('POST', '/settings/retention/purge')).json()).toEqual({ removed: 1 });
+    expect(existsSync(join(dir, old.path))).toBe(false);
+    expect(events.screenshotOf(old.id)).toBeUndefined();
+    expect(events.screenshotOf(fresh.id)?.path).toBe(fresh.path);
+    expect(existsSync(join(dir, fresh.path))).toBe(true);
+  });
+
+  it('0 days clears an ended exam but never a live one', async () => {
+    const { examId, events, fresh } = await seed();
+    await call('PATCH', '/settings', { retention: { screenshotDays: 0 } });
+    db.prepare("UPDATE exams SET state = 'running' WHERE id = ?").run(examId);
+    expect((await call('POST', '/settings/retention/purge')).json()).toEqual({ removed: 0 });
+
+    db.prepare("UPDATE exams SET state = 'ended' WHERE id = ?").run(examId);
+    // A restarted server applies the setting on its own at start.
+    await app.close();
+    app = open();
+    expect(app.retention?.purge()).toBe(2);
+    expect(events.screenshotOf(fresh.id)).toBeUndefined();
+  });
+
+  it('refuses out-of-range days', async () => {
+    const res = await call('PATCH', '/settings', { retention: { screenshotDays: -1 } });
+    expect(res.statusCode).toBe(400);
+  });
+});
+
+describe('data folder release check (M44)', () => {
+  it('is free when idle, busy while hosting or grading', async () => {
+    expect(app.maintenance.dataBusyReason()).toBeNull();
+    const exam = (await call('POST', '/exams', { title: 'Lab', durationMin: 60 })).json();
+    db.prepare("UPDATE exams SET state = 'hosting' WHERE id = ?").run(exam.id);
+    expect(app.maintenance.dataBusyReason()).toMatch(/Stop hosting/);
+    db.prepare("UPDATE exams SET state = 'ended' WHERE id = ?").run(exam.id);
+    expect(app.maintenance.dataBusyReason()).toBeNull();
+
+    db.prepare(
+      `INSERT INTO questions (id, exam_id, position, type, body, marks, sample_language)
+         VALUES ('q', ?, 0, 'written', 'Why?', 2, 'text')`,
+    ).run(exam.id);
+    db.prepare(
+      `INSERT INTO grading_jobs (id, exam_id, question_id, kind, position, provider, model,
+         prompt_version, created_at) VALUES ('j1', ?, 'q', 'initial', 0, 'fake', 'm', 'v1', 1)`,
+    ).run(exam.id);
+    expect(app.maintenance.dataBusyReason()).toMatch(/grading/);
   });
 });

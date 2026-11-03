@@ -51,4 +51,8 @@ export const IPC = {
   aiKeyStatus: 'settings:ai-key-status',
   aiKeySet: 'settings:ai-key-set',
   aiKeyClear: 'settings:ai-key-clear',
+  dataFolderInfo: 'settings:data-folder-info',
+  dataFolderOpen: 'settings:data-folder-open',
+  dataFolderChoose: 'settings:data-folder-choose',
+  dataFolderMove: 'settings:data-folder-move',
 } as const;

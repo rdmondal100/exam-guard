@@ -12,9 +12,9 @@ export function envGradingKey(): string | null {
 }
 
 /** The profile's AI key store, encrypted with `safeStorage`. */
-export function createAiKeyStore(userData: string): AiKeyStore {
+export function createAiKeyStore(dataDir: () => string): AiKeyStore {
   return new AiKeyStore({
-    userData,
+    dataDir,
     box: createSecretBox(safeStorage),
     encryptionAvailable: () => safeStorage.isEncryptionAvailable(),
     envKey: envGradingKey,

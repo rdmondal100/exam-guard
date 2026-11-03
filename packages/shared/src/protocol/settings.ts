@@ -38,6 +38,7 @@ export const DEFAULT_RUN_LIMITS: RunLimits = {
 export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 export const DEFAULT_GRADING_CONCURRENCY = 4;
 export const DEFAULT_EXAM_DURATION_MIN = 90;
+export const MAX_RETENTION_DAYS = 3650;
 
 /** Model names as Gemini spells them (`gemini-2.5-flash`, `models/gemini-2.5-pro`). */
 const ModelSchema = z
@@ -61,6 +62,14 @@ export const TeacherSettingsSchema = z.object({
   runLimits: RunLimitsSchema,
   /** The student listener's port (TCP); used at the next hosting start. */
   server: z.object({ studentPort: z.number().int().min(1024).max(65_535) }),
+  /**
+   * Screenshot retention (M44): pictures of exams that are not live, older than this many days,
+   * are deleted at each server start and when the setting is saved. `null` keeps them until the
+   * exam is deleted.
+   */
+  retention: z.object({
+    screenshotDays: z.number().int().min(0).max(MAX_RETENTION_DAYS).nullable(),
+  }),
 });
 export type TeacherSettings = z.infer<typeof TeacherSettingsSchema>;
 
@@ -70,6 +79,7 @@ export const DEFAULT_SETTINGS: TeacherSettings = {
   defaults: { durationMin: DEFAULT_EXAM_DURATION_MIN, monitoring: DEFAULT_MONITORING },
   runLimits: DEFAULT_RUN_LIMITS,
   server: { studentPort: STUDENT_API_PORT },
+  retention: { screenshotDays: null },
 };
 
 /** `PATCH /settings`: any sections, each one whole. */
@@ -83,3 +93,7 @@ export type BackupResult = z.infer<typeof BackupResultSchema>;
 /** `GET /settings/cert` and `POST /settings/regenerate-cert` (M43). */
 export const CertInfoSchema = z.object({ fingerprint: z.string(), fpCode: z.string() });
 export type CertInfo = z.infer<typeof CertInfoSchema>;
+
+/** `POST /settings/retention/purge` (M44): how many screenshots were deleted. */
+export const RetentionPurgeResultSchema = z.object({ removed: z.number().int().nonnegative() });
+export type RetentionPurgeResult = z.infer<typeof RetentionPurgeResultSchema>;

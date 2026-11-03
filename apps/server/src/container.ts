@@ -33,6 +33,7 @@ import { ResultsRepo } from './db/repositories/results.repo.js';
 import { SettingsRepo } from './db/repositories/settings.repo.js';
 import { MaintenanceService } from './services/settings/maintenance-service.js';
 import { SettingsService } from './services/settings/settings-service.js';
+import { ScreenshotRetention } from './services/screenshots/screenshot-retention.js';
 import { ScreenshotStore } from './services/screenshots/screenshot-store.js';
 import { SubmissionService } from './services/submissions/submission-service.js';
 import { SessionHub } from './sockets/sessionHub.js';
@@ -117,6 +118,8 @@ export interface Container {
   /** The teacher's settings, backup and certificate (M43). */
   settings: SettingsService;
   maintenance: MaintenanceService;
+  /** Screenshot retention (M44); present with a data folder. */
+  retention?: ScreenshotRetention;
   live?: Live;
 }
 
@@ -147,11 +150,21 @@ export function createContainer({
   // The hub exists only with hosting; progress is pushed once it is built (below).
   let pushProgress: GradingServiceDeps['onProgress'] = undefined;
   const settings = new SettingsService(new SettingsRepo(db));
+  const jobs = new GradingJobRepo(db);
+  const resultsDir = dataDir ?? hosting?.dataDir;
+  const retention =
+    resultsDir &&
+    new ScreenshotRetention({
+      events,
+      store: screenshots ?? new ScreenshotStore(resultsDir),
+      days: () => settings.get().retention.screenshotDays,
+      ...(now ? { now } : {}),
+    });
   const { getKey, ...pipelineOptions } = gradingOptions ?? {};
   const grading = new GradingService({
     exams,
     questions,
-    jobs: new GradingJobRepo(db),
+    jobs,
     grades,
     evaluations,
     queue: new ReevaluateQueueRepo(db),
@@ -170,7 +183,6 @@ export function createContainer({
     evaluations,
     ...(now ? { now } : {}),
   });
-  const resultsDir = dataDir ?? hosting?.dataDir;
   const results = new ResultsService({
     db,
     exams,
@@ -202,9 +214,11 @@ export function createContainer({
     review,
     results,
     settings,
+    ...(retention ? { retention } : {}),
     maintenance: new MaintenanceService({
       db,
       exams,
+      jobs,
       ...(resultsDir ? { dataDir: resultsDir } : {}),
       ...(now ? { now } : {}),
     }),

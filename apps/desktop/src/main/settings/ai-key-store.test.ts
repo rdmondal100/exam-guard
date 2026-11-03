@@ -21,7 +21,7 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 const store = (storage = fakeStorage(), envKey: string | null = null) =>
   new AiKeyStore({
-    userData: dir,
+    dataDir: () => dir,
     box: createSecretBox(storage),
     encryptionAvailable: () => storage.isEncryptionAvailable(),
     envKey: () => envKey,

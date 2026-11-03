@@ -2,6 +2,8 @@ import type {
   AgentChangeResult,
   AgentServiceStatus,
   AiKeyStatus,
+  DataFolderInfo,
+  DataFolderMoveResult,
   AnswerSaveRequest,
   TeacherMessageToStudent,
   PasteBlockedReport,
@@ -133,4 +135,12 @@ export interface ExamGuardApi {
   /** Saves the key encrypted in main. Rejects when Windows cannot encrypt it. */
   setAiKey(apiKey: string): Promise<AiKeyStatus>;
   clearAiKey(): Promise<AiKeyStatus>;
+  /** Teacher mode (M44): where the data folder is. */
+  dataFolderInfo(): Promise<DataFolderInfo>;
+  /** Opens the data folder in Explorer. */
+  openDataFolder(): Promise<void>;
+  /** A folder picker; `null` when cancelled. */
+  chooseDataFolder(): Promise<string | null>;
+  /** Moves the data (`null`: back to the profile folder). The server restarts, so sign in again. */
+  moveDataFolder(path: string | null): Promise<DataFolderMoveResult>;
 }

@@ -14,7 +14,7 @@ SQLite on the teacher PC only, accessed by the server process (better-sqlite3, `
 ### settings
 | col | type | notes |
 |---|---|---|
-| key | TEXT PK | one row per section (M43, `TeacherSettingsSchema` in `packages/shared`): `ai` `{provider, model}`, `grading` `{concurrency}`, `defaults` `{durationMin, monitoring}`, `runner.limits` `{timeMs, memoryMb, outputBytes, processes}`, `server` `{studentPort}`; a missing or invalid row reads as that section's default. Later: `retention.screenshotDays` (M44) |
+| key | TEXT PK | one row per section (M43, `TeacherSettingsSchema` in `packages/shared`): `ai` `{provider, model}`, `grading` `{concurrency}`, `defaults` `{durationMin, monitoring}`, `runner.limits` `{timeMs, memoryMb, outputBytes, processes}`, `server` `{studentPort}`, `retention` `{screenshotDays}` (M44, `null` = keep); a missing or invalid row reads as that section's default |
 | value | TEXT | JSON |
 
 The AI API key is **not** here. It's stored by Electron main with `safeStorage` in `secrets.bin` (see layout).
@@ -241,7 +241,7 @@ INDEX(question_id, status); INDEX(queued_job_id)
 Deleting an exam cascades to everything under it and deletes its screenshot folder and its `exam-files/<examId>/` folder (`exams 1─* exam_files`). Class lists that are assigned to an exam can't be deleted.
 
 ## Data folder layout (teacher PC)
-Default `%APPDATA%\ExamGuard\` (Electron userData, per profile in dev). Movable in Settings.
+Default `%APPDATA%\ExamGuard\` (Electron userData, per profile in dev). Movable in Settings (M44): `<userData>\data-location.json` `{dataDir}` then points at the new folder; only the entries below move (Electron's own files and `mode.json` stay in userData).
 ```
 db/examguard.sqlite (+ -wal, -shm)
 secrets.bin                      safeStorage-encrypted: AI API key
@@ -253,7 +253,7 @@ backups/<yyyyMMdd-HHmmss>/       examguard.sqlite (online backup) + copy of scre
 logs/main.log, server.log        rotated, 5 × 5 MB
 ```
 - Backups use the better-sqlite3 `backup()` API (safe while running). Built (M42): before finalize (`services/results/backup.ts`); planned: at exam end and manually from Settings (M43).
-- Retention: `retention.screenshotDays` (default: keep until the exam is deleted) purges screenshot files and nulls `screenshot_path`.
+- Retention (built M44): `retention.screenshotDays` (default `null`: keep until the exam is deleted) deletes the screenshot files of exams that are not hosting or running and nulls `screenshot_path`, at each server start and when saved.
 
 ## Student PC local storage
 ```

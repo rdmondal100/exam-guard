@@ -377,6 +377,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** move service (copy, verify, switch, delete old), retention job at startup.
 - **Accept:** a move during non-hosting works and is refused while hosting. Purge nulls the paths.
 - **Manual test:** move to another drive and restart. Set retention to 0 days on a test exam.
+- **Built (2026-11-03):** shared `retention` settings section + `RetentionPurgeResult`, data folder IPC schemas, `release-data`/`data-released` process messages; server `ScreenshotRetention` (start + `POST /settings/retention/purge`, live exams skipped), `MaintenanceService.dataBusyReason` (hosting/running exam or unfinished grading job), `server.ts` closes the DB on release; main `DataFolder` (pointer `data-location.json`), `DataFolderMover` (space check, release, stop, copy, SHA-256 verify, switch, wait for `running`, delete old; rollback on failure), `ServerHost.releaseData/stopAndWait/whenRunning`, the AI key store and exports follow the folder; Settings "Screenshot retention" and "Data folder" sections. Not built: wiping run folders at exam end, log rotation, pruning old backups.
 
 ### M45 Installer: build + install type
 - **Goal:** electron-builder NSIS installer with a Teacher/Student page and a silent `/TYPE=student|teacher`, bundling MinGW (C/C++ only) + MSYS2 pacman, npm, Python + pip, node-pty, eg-runner and eg-agent. One installer always contains everything.

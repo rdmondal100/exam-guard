@@ -26,6 +26,16 @@ export const ServerReplyMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('hosting'), active: z.boolean() }),
   /** Grading is about to start (M38): main answers with `grading-key`. */
   z.object({ type: z.literal('grading-key-request'), requestId: z.number().int() }),
+  /**
+   * The answer to `release-data` (M44). `ok`: the server closed its listeners and the database
+   * and waits to be stopped. Otherwise `message` says what is still using the data.
+   */
+  z.object({
+    type: z.literal('data-released'),
+    requestId: z.number().int(),
+    ok: z.boolean(),
+    message: z.string().optional(),
+  }),
 ]);
 export type ServerReplyMessage = z.infer<typeof ServerReplyMessageSchema>;
 
@@ -39,6 +49,17 @@ export const GradingKeyMessageSchema = z.object({
   apiKey: z.string().min(1).nullable(),
 });
 export type GradingKeyMessage = z.infer<typeof GradingKeyMessageSchema>;
+
+/**
+ * Main → server before the data folder moves (M44): refuse while an exam is hosting or running or
+ * grading is busy, else close everything and let main stop the process. One check and the close
+ * happen in one turn of the event loop, so hosting cannot start in between.
+ */
+export const ReleaseDataMessageSchema = z.object({
+  type: z.literal('release-data'),
+  requestId: z.number().int(),
+});
+export type ReleaseDataMessage = z.infer<typeof ReleaseDataMessageSchema>;
 
 export const ServerStateSchema = z.enum(['stopped', 'starting', 'running', 'restarting']);
 export type ServerState = z.infer<typeof ServerStateSchema>;

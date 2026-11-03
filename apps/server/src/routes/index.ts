@@ -52,7 +52,16 @@ export function teacherRoutes(c: Container, requireLogin: RequestHandler): Route
   router.use(auditRoutes({ exams, actions: c.actions }, requireLogin));
   router.use(gradingRoutes({ grading: c.grading, review: c.review }, requireLogin));
   router.use(resultsRoutes({ results: c.results }, requireLogin));
-  router.use(settingsRoutes({ settings: c.settings, maintenance: c.maintenance }, requireLogin));
+  router.use(
+    settingsRoutes(
+      {
+        settings: c.settings,
+        maintenance: c.maintenance,
+        ...(c.retention ? { retention: c.retention } : {}),
+      },
+      requireLogin,
+    ),
+  );
   if (c.live) {
     router.use(hostingRoutes({ hosting: c.live.hosting, exams, students }, requireLogin));
     router.use(thumbRoutes({ thumbs: c.live.thumbs }, requireLogin));

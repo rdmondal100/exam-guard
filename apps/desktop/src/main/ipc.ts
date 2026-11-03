@@ -30,7 +30,6 @@ import type { TamperWatch } from './monitor/tamper-watch.js';
 import { launchInfo } from './agent/launch-info.js';
 import { runCommand } from './agent/run-command.js';
 import { registerExamFilesIpc } from './exam-files/exam-files-ipc.js';
-import { registerExportsIpc } from './exports-ipc.js';
 import { registerFilesIpc } from './files/files-ipc.js';
 import { registerAnswersIpc } from './answers/answers-ipc.js';
 import { registerClipboardIpc } from './clipboard/clipboard-ipc.js';
@@ -84,7 +83,6 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
   if (state.mode === 'student') agentLink.start();
   app.once('will-quit', () => agentLink.stop());
   registerAgentIpc({ userData: state.userData, link: agentLink, requireStudent });
-  registerExportsIpc({ userData: state.userData, isTeacher: () => state.mode === 'teacher' });
   ipcMain.handle(IPC.getInfo, () => toInfo(state));
   ipcMain.handle(IPC.getServerConnection, () => server.getConnection());
   ipcMain.handle(IPC.getServerStatus, () => server.getStatus());
