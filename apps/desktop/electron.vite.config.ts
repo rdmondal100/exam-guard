@@ -10,11 +10,28 @@ export default defineConfig({
   preload: {
     // A sandboxed preload can only require electron, so shared and zod are bundled in.
     plugins: [externalizeDepsPlugin({ exclude: ['@examguard/shared', 'zod'] })],
-    build: { rollupOptions: { output: { format: 'cjs', entryFileNames: '[name].cjs' } } },
+    build: {
+      rollupOptions: {
+        // The app's preload, and the hidden live view capture page's own (M34).
+        input: {
+          index: resolve(__dirname, 'src/preload/index.ts'),
+          live: resolve(__dirname, 'src/preload/live.ts'),
+        },
+        output: { format: 'cjs', entryFileNames: '[name].cjs' },
+      },
+    },
   },
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
     resolve: { alias: { '@': resolve(__dirname, 'src/renderer') } },
     plugins: [react(), tailwindcss()],
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, 'src/renderer/index.html'),
+          live: resolve(__dirname, 'src/renderer/live.html'),
+        },
+      },
+    },
   },
 });

@@ -14,6 +14,10 @@ import { registerExportsIpc } from './exports-ipc.js';
 import { registerAiKeyIpc } from './settings/ai-key-ipc.js';
 import { createMainWindow, installCsp } from './window.js';
 
+// The live view uses host candidates only (M34): Chromium would hide the LAN address behind an
+// mDNS name, which many lab networks never resolve. Must be set before `ready`.
+app.commandLine.appendSwitch('disable-features', 'WebRtcHideLocalIpsWithMdns');
+
 // The profile must be applied before anything reads userData.
 const profile = parseProfile(process.argv);
 const userData = userDataPathFor(app.getPath('userData'), profile);

@@ -14,6 +14,10 @@ import {
   type AgentStatus,
   type AppEventType,
   type EventReport,
+  type LiveRequest,
+  type LiveState,
+  type LiveStop,
+  type RtcSignal,
   type SessionState,
   type SessionStatus,
   type Submit,
@@ -50,6 +54,11 @@ export interface SessionClientDeps {
    * socket closed; a new socket is asked again). M33.
    */
   onThumbs?: (command: ThumbStart | null) => void;
+  /**
+   * WebRTC live view (M34): a request, a stop or a signal from the teacher; `null` when the socket
+   * closed (the server ends every session of that socket).
+   */
+  onLive?: (message: LiveRequest | LiveStop | RtcSignal | null) => void;
   /** A teacher message or warning (M35), each id once; it is acked as soon as it is handed over. */
   onTeacherMessage?: (message: TeacherMessageToStudent) => void;
   pingMs?: number;
@@ -242,6 +251,12 @@ export class SessionClient {
     ws.send(encodeThumbFrame({ ts: capturedAt }, jpeg), { binary: true });
   }
 
+  /** Sends a live view signal or state now, or drops it while the link is down (the session is over then). */
+  sendLive(message: RtcSignal | LiveState): void {
+    const ws = this.welcomed;
+    if (ws) this.sendFrame(ws, message);
+  }
+
   /** Sends a piece of the terminal transcript; re-sent after reconnects until acked. */
   sendTranscript(key: string, text: string): void {
     const chunk: TranscriptChunk = { t: 'transcript', key, clientTs: Date.now(), text };
@@ -328,7 +343,10 @@ export class SessionClient {
     this.generation += 1;
     this.target = null;
     this.clearTimers();
-    if (this.welcomed) this.deps.onThumbs?.(null);
+    if (this.welcomed) {
+      this.deps.onThumbs?.(null);
+      this.deps.onLive?.(null);
+    }
     this.welcomed = null;
     this.socket?.removeAllListeners();
     this.socket?.terminate();
@@ -460,6 +478,12 @@ export class SessionClient {
       this.deps.onThumbs?.(message);
     } else if (message.t === 'thumb.stop') {
       this.deps.onThumbs?.(null);
+    } else if (
+      message.t === 'live.request' ||
+      message.t === 'live.stop' ||
+      message.t === 'rtc.signal'
+    ) {
+      this.deps.onLive?.(message);
     } else if (message.t === 'pong') {
       const received = Date.now();
       const rtt = received - message.clientSent;
@@ -491,7 +515,10 @@ export class SessionClient {
     if (generation !== this.generation) return;
     this.clearTimers();
     this.socket = null;
-    if (this.welcomed) this.deps.onThumbs?.(null);
+    if (this.welcomed) {
+      this.deps.onThumbs?.(null);
+      this.deps.onLive?.(null);
+    }
     this.welcomed = null;
     const final = FINAL[code];
     if (final) return this.emit('failed', final);

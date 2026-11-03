@@ -20,6 +20,7 @@ import type { TeacherMessages } from '../services/hosting/teacher-messages.js';
 import type { SubmissionService } from '../services/submissions/submission-service.js';
 import type { SessionHub, StudentConn } from './sessionHub.js';
 import type { ThumbRelay } from './thumbRelay.js';
+import type { LiveRelay } from './liveRelay.js';
 
 export interface StudentSocketDeps {
   hub: SessionHub;
@@ -35,6 +36,8 @@ export interface StudentSocketDeps {
   evidence: Pick<EvidenceIntake, 'chunk' | 'report' | 'forget'>;
   /** Grid thumbnails (binary kind 1) and who is asked to stream them (M29, M33). */
   thumbs?: Pick<ThumbRelay, 'frame' | 'onWelcome'>;
+  /** WebRTC live view signaling (M30, M34). */
+  liveViews?: Pick<LiveRelay, 'fromStudent' | 'studentState' | 'onStudentGone'>;
   /** Teacher messages: re-sent after each welcome until the app acks them (M35). */
   messages?: Pick<TeacherMessages, 'onWelcome' | 'ack'>;
   /** The student's app lost its agent link (`agent_lost`, M24): lock them. */
@@ -174,6 +177,14 @@ export function onStudentSocket(socket: WebSocket, deps: StudentSocketDeps): voi
           : { t: 'submit.refused', id: message.id, reason: outcome.reason },
       );
     }
+    if (message.t === 'rtc.signal') {
+      if (!studentId) return refuse(WS_CLOSE.badHello, 'hello_first', 'Send hello first');
+      return deps.liveViews?.fromStudent(studentId, message.sessionId, message.data);
+    }
+    if (message.t === 'live.state') {
+      if (!studentId) return refuse(WS_CLOSE.badHello, 'hello_first', 'Send hello first');
+      return deps.liveViews?.studentState(studentId, message.sessionId, message.status);
+    }
     if (studentId) return refuse(WS_CLOSE.badHello, 'bad_frame', 'Already said hello');
 
     if (!isProtocolCompatible(message.protocol)) {
@@ -193,6 +204,8 @@ export function onStudentSocket(socket: WebSocket, deps: StudentSocketDeps): voi
     examId = hostedId;
     clearTimeout(helloTimer);
     deps.hub.attach(student.id, conn, WS_CLOSE.replaced);
+    // A new socket has no peer connection: live views of an earlier one are over.
+    deps.liveViews?.onStudentGone(student.id);
     send({ t: 'welcome', serverTime: now(), state: deps.sessionState(student.id) });
     deps.thumbs?.onWelcome(student.id);
     deps.messages?.onWelcome(student.id);

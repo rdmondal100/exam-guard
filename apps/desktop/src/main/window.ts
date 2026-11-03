@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { BrowserWindow, app, session, shell } from 'electron';
 import { TEACHER_API_HOST, TEACHER_API_PORT } from '@examguard/shared';
+import { isLiveContents } from './live/live-window.js';
 
 /** The Vite dev server; ignored in a packaged build, so the variable cannot point it elsewhere. */
 const RENDERER_URL = app.isPackaged ? undefined : process.env['ELECTRON_RENDERER_URL'];
@@ -51,10 +52,20 @@ const ALLOWED_PERMISSIONS = new Set(['clipboard-sanitized-write', 'fullscreen'])
  */
 function allowOnlyNeededPermissions(): void {
   const ses = session.defaultSession;
-  ses.setPermissionRequestHandler((_contents, permission, callback) => {
+  ses.setPermissionRequestHandler((contents, permission, callback, details) => {
+    // Screen capture (video only) for the hidden live view page and nothing else (M34).
+    if (permission === 'media') {
+      const types = 'mediaTypes' in details ? (details.mediaTypes ?? []) : [];
+      return callback(isLiveContents(contents.id) && !types.includes('audio'));
+    }
     callback(ALLOWED_PERMISSIONS.has(permission));
   });
-  ses.setPermissionCheckHandler((_contents, permission) => ALLOWED_PERMISSIONS.has(permission));
+  ses.setPermissionCheckHandler((contents, permission, _origin, details) => {
+    if (permission === 'media') {
+      return isLiveContents(contents?.id) && details.mediaType !== 'audio';
+    }
+    return ALLOWED_PERMISSIONS.has(permission);
+  });
 }
 
 export function createMainWindow(title: string): BrowserWindow {
@@ -65,6 +76,8 @@ export function createMainWindow(title: string): BrowserWindow {
     minHeight: 560,
     show: false,
     title,
+    // A packaged app shows the exe's icon; in dev the same file comes from the build folder.
+    ...(app.isPackaged ? {} : { icon: join(app.getAppPath(), 'build/icon.ico') }),
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.cjs'),
       contextIsolation: true,

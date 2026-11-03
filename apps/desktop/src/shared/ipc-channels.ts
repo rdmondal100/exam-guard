@@ -55,4 +55,8 @@ export const IPC = {
   dataFolderOpen: 'settings:data-folder-open',
   dataFolderChoose: 'settings:data-folder-choose',
   dataFolderMove: 'settings:data-folder-move',
+  // The hidden live view capture page (M34), its own preload.
+  liveStart: 'live:start',
+  liveSignal: 'live:signal',
+  livePage: 'live:page',
 } as const;

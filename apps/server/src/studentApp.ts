@@ -43,6 +43,7 @@ export interface StudentAppDeps {
     | 'evidence'
     | 'onAgentLost'
     | 'thumbs'
+    | 'liveViews'
     | 'messages'
     | 'now'
     | 'helloTimeoutMs'

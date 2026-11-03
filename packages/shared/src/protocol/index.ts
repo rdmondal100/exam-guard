@@ -17,6 +17,7 @@ export * from './agent-pipe.js';
 export * from './events.js';
 export * from './screenshot-frame.js';
 export * from './thumbs.js';
+export * from './live.js';
 export * from './audit.js';
 export * from './grading.js';
 export * from './settings.js';

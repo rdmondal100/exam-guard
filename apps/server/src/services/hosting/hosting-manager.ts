@@ -35,6 +35,7 @@ import { lanAddresses } from '../../utils/tls/lanAddresses.js';
 import { advertiseOverMdns, type Advertise } from './mdns-advertiser.js';
 import type { SessionHub } from '../../sockets/sessionHub.js';
 import type { ThumbRelay } from '../../sockets/thumbRelay.js';
+import type { LiveRelay } from '../../sockets/liveRelay.js';
 import type { ConnectionEvents } from './connection-events.js';
 import { generatePin } from '../../utils/pin.js';
 import { HostingError } from './hosting-error.js';
@@ -75,6 +76,8 @@ export interface HostingManagerDeps {
   connections?: ConnectionEvents;
   /** Grid thumbnail fan-out (M29, M33). Its cache is dropped when hosting stops. */
   thumbs?: ThumbRelay;
+  /** WebRTC live view signaling (M30, M34). Its sessions end when hosting stops. */
+  liveViews?: LiveRelay;
   dataDir: string;
   /** The teacher's run limits and student port (M43), read at each hosting start. */
   settings?: () => Pick<TeacherSettings, 'runLimits' | 'server'>;
@@ -315,6 +318,7 @@ export class HostingManager {
     // The sockets closed because we stopped, not because a student lost the network.
     this.deps.connections?.reset();
     this.deps.thumbs?.reset();
+    this.deps.liveViews?.reset();
     this.messages.reset();
     this.deps.onActive?.(false);
   }
@@ -369,6 +373,7 @@ export class HostingManager {
         }),
         examId: () => (this.active?.examId === examId ? examId : null),
         ...(this.deps.thumbs ? { thumbs: this.deps.thumbs } : {}),
+        ...(this.deps.liveViews ? { liveViews: this.deps.liveViews } : {}),
         messages: this.messages,
         now: this.now,
         ...this.deps.socketTimings,

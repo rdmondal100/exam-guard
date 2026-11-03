@@ -6,6 +6,7 @@ import {
   type RosterState,
 } from '../lib/rosterState';
 import { ThumbStore } from '../lib/thumbStore';
+import { LiveChannel } from '../lib/liveChannel';
 import { watchKey } from '../lib/thumbGrid';
 
 export interface RosterView extends RosterState {
@@ -19,6 +20,8 @@ export interface RosterView extends RosterState {
   watchThumbs(ids: readonly string[]): void;
   /** The students whose fast thumbnail is open (M34 fallback, at most 2); `[]` ends it. */
   focusThumbs(ids: readonly string[]): void;
+  /** WebRTC live view sessions on this socket (M34). */
+  liveChannel: LiveChannel;
 }
 
 const RETRY_MS = 1000;
@@ -41,6 +44,7 @@ export function useRoster(examId: string, enabled = true): RosterView {
   const [live, setLive] = useState(false);
   const [connects, setConnects] = useState(0);
   const [thumbs] = useState(() => new ThumbStore());
+  const [liveChannel] = useState(() => new LiveChannel());
   const socketRef = useRef<WebSocket | null>(null);
   /** The page the grid wants, kept so a new socket asks for it again. */
   const watching = useRef<readonly string[]>([]);
@@ -81,14 +85,22 @@ export function useRoster(examId: string, enabled = true): RosterView {
         ws.send(JSON.stringify({ t: 'subscribe', examId }));
         if (watching.current.length > 0) sendIds(ws, 'thumbs.subscribe', watching.current);
         if (focusing.current.length > 0) sendIds(ws, 'thumbs.focus', focusing.current);
+        liveChannel.setSender((message) => {
+          if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
+        });
       };
       ws.onmessage = (event) => {
         if (event.data instanceof ArrayBuffer) return void thumbs.addFrame(event.data);
         const message = typeof event.data === 'string' ? parseTeacherFrame(event.data) : null;
-        if (message) setRoster((current) => applyTeacherMessage(current, message));
+        if (!message) return;
+        if (message.t === 'live.session' || message.t === 'rtc.signal') {
+          return liveChannel.handle(message);
+        }
+        setRoster((current) => applyTeacherMessage(current, message));
       };
       ws.onclose = () => {
         setLive(false);
+        liveChannel.setSender(null);
         if (!cancelled) retry = setTimeout(() => void open(), RETRY_MS);
       };
     };
@@ -103,9 +115,10 @@ export function useRoster(examId: string, enabled = true): RosterView {
         socket.onclose = null;
         socket.close();
       }
+      liveChannel.setSender(null);
       thumbs.clear();
     };
-  }, [examId, enabled, thumbs]);
+  }, [examId, enabled, thumbs, liveChannel]);
 
-  return { ...roster, live, connects, thumbs, watchThumbs, focusThumbs };
+  return { ...roster, live, connects, thumbs, watchThumbs, focusThumbs, liveChannel };
 }

@@ -32,6 +32,15 @@ import {
   ThumbsFocusSchema,
   ThumbsSubscribeSchema,
 } from './thumbs.js';
+import {
+  LiveCloseSchema,
+  LiveOpenSchema,
+  LiveRequestSchema,
+  LiveSessionSchema,
+  LiveStateSchema,
+  LiveStopSchema,
+  RtcSignalSchema,
+} from './live.js';
 
 /** Idle limit on a student socket and the client's ping period (docs/protocol.md §3). */
 export const STUDENT_IDLE_MS = 15_000;
@@ -148,6 +157,8 @@ export const StudentMessageSchema = z.discriminatedUnion('t', [
   SubmitSchema,
   AgentStatusMessageSchema,
   InternetStatusMessageSchema,
+  RtcSignalSchema,
+  LiveStateSchema,
 ]);
 export type StudentMessage = z.infer<typeof StudentMessageSchema>;
 
@@ -247,6 +258,9 @@ export const ServerToStudentSchema = z.discriminatedUnion('t', [
   ThumbStartSchema,
   ThumbStopSchema,
   TeacherMessageToStudentSchema,
+  LiveRequestSchema,
+  LiveStopSchema,
+  RtcSignalSchema,
 ]);
 export type ServerToStudent = z.infer<typeof ServerToStudentSchema>;
 
@@ -259,6 +273,9 @@ export const TeacherMessageSchema = z.discriminatedUnion('t', [
   SubscribeSchema,
   ThumbsSubscribeSchema,
   ThumbsFocusSchema,
+  LiveOpenSchema,
+  LiveCloseSchema,
+  RtcSignalSchema,
 ]);
 export type TeacherMessage = z.infer<typeof TeacherMessageSchema>;
 
@@ -326,6 +343,8 @@ export const ServerToTeacherSchema = z.discriminatedUnion('t', [
   ServerNoticeSchema,
   AlertSchema,
   GradingProgressSchema,
+  LiveSessionSchema,
+  RtcSignalSchema,
 ]);
 export type ServerToTeacher = z.infer<typeof ServerToTeacherSchema>;
 

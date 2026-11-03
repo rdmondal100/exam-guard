@@ -38,6 +38,7 @@ import { ScreenshotStore } from './services/screenshots/screenshot-store.js';
 import { SubmissionService } from './services/submissions/submission-service.js';
 import { SessionHub } from './sockets/sessionHub.js';
 import { ThumbRelay } from './sockets/thumbRelay.js';
+import { LiveRelay } from './sockets/liveRelay.js';
 
 export interface ContainerOptions {
   db: Db;
@@ -88,6 +89,8 @@ export interface Live {
   connections: ConnectionEvents;
   /** Grid thumbnails: who streams, the latest frame per student, the counters (M29, M33). */
   thumbs: ThumbRelay;
+  /** WebRTC live view signaling (M30, M34). */
+  liveViews: LiveRelay;
 }
 
 /** Every repository and service of the teacher server, built once from the database. */
@@ -236,15 +239,20 @@ export function createContainer({
   });
   // Built before the hub it reads from; it only calls the hub later, on socket traffic.
   let thumbs: ThumbRelay | null = null;
+  let liveViews: LiveRelay | null = null;
   const hub = new SessionHub({
     students,
     now,
     onConnection: (id, connected) => {
       connections.onConnection(id, connected);
-      if (!connected) thumbs?.onDisconnect(id);
+      if (!connected) {
+        thumbs?.onDisconnect(id);
+        liveViews?.onStudentGone(id);
+      }
     },
   });
   thumbs = new ThumbRelay({ students: hub, ...(now ? { now } : {}) });
+  liveViews = new LiveRelay({ students: hub });
   // Live alert feed and the roster's risk score (M31).
   recorder.onStored((stored) => hub.eventStored(stored));
   const answerWriter = new AnswerWriter(answers, {
@@ -281,10 +289,11 @@ export function createContainer({
     examFiles,
     hub,
     thumbs,
+    liveViews,
     now,
     settings: () => settings.get(),
     ...managerOptions,
   });
-  container.live = { hosting: manager, hub, connections, thumbs };
+  container.live = { hosting: manager, hub, connections, thumbs, liveViews };
   return container;
 }

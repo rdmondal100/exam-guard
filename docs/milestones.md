@@ -268,6 +268,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** student `live/` capture + peer, server `rtc.signal` relay, teacher test viewer.
 - **Accept:** laptop screen visible on the teacher PC at ≥5 fps, <1 s latency, host candidates only, works with the teacher on Wi-Fi.
 - **Manual test:** open a live view of the laptop and move a window.
+- **Built (2026-11-03, with M34):** kept as production code. Checked on the dev PC with a scratch Electron harness around the built capture page and preload (real `desktopCapturer` source, sandboxed hidden window, permission only for that page): 10 open/close rounds, each 1280×720 VP8 at 8 fps within ~60 ms of the offer, host candidates with the real LAN address (mDNS hiding off), no page left over. Not run: laptop → teacher PC over the LAN/Wi-Fi (fps, latency; manual).
 
 ## Phase 5 — Live dashboard
 *Done when: the teacher watches students live, sees alerts, and acts on them.*
@@ -300,6 +301,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Fallback if deferred:** "fast thumbnail" mode in M33 (960 px every 1 s for the selected student).
 - **Manual test:** open a live view of the laptop, close it, reopen it.
 - **Built (2026-11-03, fallback only, with M36/M37):** the "fast thumbnail" mode. Shared `thumbs.focus` (at most 2 ids), `FAST_THUMB_*`; `ThumbRelay.focus` (a focus wins over a grid page: `thumb.start {1000 ms, 960 px}`, back to the grid values or `thumb.stop` after), teacher `useRoster.focusThumbs`, `FastThumbView` ("Live screen" in the student detail while running; streams only while the window is shown, closes after 60 s hidden). WebRTC (`live.*`, `rtc.signal`) is not built and waits for the M30 laptop spike; decide at that point whether to build it or keep the fallback.
+- **Built (2026-11-03, WebRTC, with M30):** shared `live.ts` (`rtc.signal` with size limits, `live.request/stop/state/open/close/session`, page IPC schemas); server `LiveRelay` (at most 2 per teacher socket, relays only between the two ends of a known session, ends sessions on close, teacher socket close, student disconnect or re-welcome, hosting stop); student main `LiveViews` + `live-window.ts` (one hidden sandboxed child window per session with its own preload `live.cjs` and page `live.html`, `getUserMedia` chromeMediaSource desktop 1280 px / 8 fps, `media` permission only for those pages, destroyed on stop/failure/monitoring end/socket close, at most 2), `SessionClient.onLive/sendLive`, `disable-features=WebRtcHideLocalIpsWithMdns`; teacher `LiveChannel` on the roster socket and `LiveView` (receive-only peer, falls back to `FastThumbView` on failure or no video in 10 s, "Try live video again"). Laptop run not done (manual).
 
 ### M35 Per-student actions
 - **Goal:** message/warning, lock/unlock, extend time, end exam (save + submit), reset session.

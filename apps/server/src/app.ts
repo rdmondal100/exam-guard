@@ -58,6 +58,7 @@ export function buildTeacherApp({ token, ...options }: TeacherAppOptions): Teach
       onTeacherSocket(socket, request, {
         hub: live.hub,
         thumbs: live.thumbs,
+        liveViews: live.liveViews,
         allowed: (req) =>
           c.state.isLoggedIn() &&
           tokenMatches(token, new URL(req.url ?? '', 'http://x').searchParams.get('token')),

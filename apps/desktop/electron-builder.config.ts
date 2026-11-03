@@ -22,6 +22,8 @@ export const PACKED_RESOURCES = {
 } as const;
 
 export function builderConfig(p: BuilderPaths): Configuration {
+  // Drawn by scripts/make-icon.mjs: the exe, the window, the shortcuts and the installer.
+  const icon = join(p.desktop, 'build/icon.ico');
   return {
     appId: 'ai.examguard.desktop',
     productName: 'ExamGuard',
@@ -74,6 +76,7 @@ export function builderConfig(p: BuilderPaths): Configuration {
     win: {
       target: [{ target: 'nsis', arch: ['x64'] }],
       executableName: 'ExamGuard',
+      icon,
       requestedExecutionLevel: 'asInvoker',
     },
     nsis: {
@@ -82,6 +85,9 @@ export function builderConfig(p: BuilderPaths): Configuration {
       allowElevation: true,
       allowToChangeInstallationDirectory: true,
       include: join(p.desktop, 'build/installer.nsh'),
+      installerIcon: icon,
+      uninstallerIcon: icon,
+      installerHeaderIcon: icon,
       createDesktopShortcut: true,
       createStartMenuShortcut: true,
       shortcutName: 'ExamGuard',

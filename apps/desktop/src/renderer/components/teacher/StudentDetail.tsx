@@ -8,7 +8,7 @@ import { clockTime } from '@/lib/terminalLog';
 import { useEvents } from '@/hooks/useEvents';
 import type { RosterView } from '@/hooks/useRoster';
 import { EventLine } from './EventLine';
-import { FastThumbView } from './FastThumbView';
+import { LiveView } from './LiveView';
 import { ScreenshotDialog } from './ScreenshotDialog';
 import { StudentActionsPanel } from './StudentActionsPanel';
 
@@ -25,7 +25,7 @@ interface Props {
 
 /**
  * One student's status and event timeline with the screenshots inline (M32), kept current by the
- * live alerts, and while the exam runs a live screen (fast thumbnail, M34). A side panel over the
+ * live alerts, and while the exam runs a live screen (WebRTC video, the fast thumbnail as fallback; M34). A side panel over the
  * dashboard.
  */
 export function StudentDetail({
@@ -89,7 +89,7 @@ export function StudentDetail({
         ))}
       </dl>
       {liveScreen && examState === 'running' && (
-        <FastThumbView student={s} roster={roster} onClose={closeLiveScreen} />
+        <LiveView student={s} roster={roster} onClose={closeLiveScreen} />
       )}
       <StudentActionsPanel examId={examId} examState={examState} api={api} student={s} />
       <h3 className="font-semibold">Timeline</h3>

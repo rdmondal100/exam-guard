@@ -3,9 +3,9 @@
 Read this first every session, and keep it under about 8 KB. Decisions are in `docs/decisions.md` (grep it, never read it whole), the session log in `docs/session-log.md` (append only), old reviews in `docs/archive/`.
 
 ## Current status
-- **Stage 1 code is done except WebRTC (M30 spike + M34 proper, laptop).** Latest 2026-11-03: M47–M49 (load test passed, recovery tests, hardening + `docs/lab-it-readme.md`). The user asks for several milestones per session and no manual tests. Suites pass.
-- **Manual checks never run** (the user ran M02–M21b and M24 and reports them good): M22/M25/M26/M27 on the laptop; M31–M36 dashboard with the sim + laptop (Phase 5 demo); M37 real Gemini (`pnpm record-fixture`); M38–M42 in the app (`$env:EG_FAKE_GRADER='1'; pnpm dev:teacher`: grade, review, re-evaluate, finalize, CSV in Excel; then one real run); M43 Settings (persist, key text not in the data folder); M44 (move and back, retention 0 days, move refused while hosting); M45–M46 + M49 demo (install `release/ExamGuard-Setup-0.1.0.exe` on a reset laptop as Student and the dev PC as Teacher, silent `/S /TYPE=student`, standard-user login → agent running, firewall rule diff, full join, uninstall; repackage first, Electron is now 44.10.1); M47 with the laptop as a real student (ID 9001); the M48 checklist below.
-- **Next step:** no Stage 1 milestone is left without the laptop: M28 (Phase 4 integration), M30 + M34 (WebRTC) and the manual runs above. Then Stage 2. If the M21a/M21b laptop run is repeated, write what it shows into `docs/decisions.md` (M21a) and architecture §3.
+- **Stage 1 code is done.** Latest 2026-11-03: M30 + M34 WebRTC live view (fast thumbnail kept as fallback), app icon, final installer `release/ExamGuard-Setup-0.1.0.exe` (210 MB, 1177 MB installed, unsigned). The user asks for several milestones per session and no manual tests. Suites pass.
+- **Manual checks never run** (the user ran M02–M21b and M24 and reports them good): M22/M25/M26/M27 on the laptop; M31–M36 dashboard with the sim + laptop (Phase 5 demo); M37 real Gemini (`pnpm record-fixture`); M38–M42 in the app (`$env:EG_FAKE_GRADER='1'; pnpm dev:teacher`: grade, review, re-evaluate, finalize, CSV in Excel; then one real run); M43 Settings (persist, key text not in the data folder); M44 (move and back, retention 0 days, move refused while hosting); M45–M46 + M49 demo (install `release/ExamGuard-Setup-0.1.0.exe` (built 2026-11-03, Electron 44.10.1, with icon) on a reset laptop as Student and the dev PC as Teacher, silent `/S /TYPE=student`, standard-user login → agent running, firewall rule diff, full join, uninstall); M30/M34 live view laptop → teacher PC (≥5 fps, <1 s, teacher on Wi-Fi, open/close 10×); M47 with the laptop as a real student (ID 9001); the M48 checklist below.
+- **Next step:** only laptop work is left in Stage 1: M28 (Phase 4 integration) and the manual runs above. Then Stage 2 (break it into milestones first). If the M21a/M21b laptop run is repeated, write what it shows into `docs/decisions.md` (M21a) and architecture §3.
 - **Agent notes:** rebuild and reinstall the service (`pnpm dev:student:agent`) to get each new agent feature. Without the service: `EG_FAKE_AGENT_FAIL=lose` tries the lock, `EG_FAKE_AGENT_MONITORS=2` the roster screen chip.
 
 ## Load test (M47, 2026-11-03)
@@ -16,7 +16,7 @@ Dev PC (i5-13600K), server in its own Node process, sim + teacher socket in anot
 2. Student ID + PIN, editor, local run, submit — code done; laptop runs up to M21b passed.
 3. No work lost on crash, network drop, power loss — code done; M17/M18/M48 tests; checklist below not run.
 4. Every launch, switch and suspicious action logged with evidence, live — code done; laptop runs of M22–M27 pending.
-5. Grid of screens, live view, warn/lock/extend/end — done except the WebRTC live view (M30/M34, laptop).
+5. Grid of screens, live view, warn/lock/extend/end — code done (WebRTC live view checked on the dev PC with a harness; laptop run pending).
 6. AI grading, review, edit, re-evaluate, finalize, export — code done; no real Gemini run yet.
 
 ## Completed milestones
@@ -30,6 +30,7 @@ Dev PC (i5-13600K), server in its own Node process, sim + teacher socket in anot
 - M47 Load test — 2026-11-03 — sim v3 full scenario, `load-host` server process, report; passed (above).
 - M48 Crash-recovery tests — 2026-11-03 — `RestartableExam` + `recovery.socket.test.ts`; checklist below.
 - M49 Hardening + lab-IT README — 2026-11-03 — permission allow-list, Electron 44.10.1, DOMPurify override, audit, `docs/lab-it-readme.md`; fresh-PC demo pending.
+- M30 + M34 WebRTC live view — 2026-11-03 — `LiveRelay`, hidden capture window per session, `LiveView` with fast-thumbnail fallback; harness on the dev PC: 1280×720 at 8 fps, host candidates, no leaks over 10 rounds. App icon (`scripts/make-icon.mjs`), installer rebuilt.
 
 ## Known issues / open questions
 ### Before a real exam (lab IT, not code)
@@ -42,7 +43,7 @@ Moved to `docs/limitations.md` (read it when you touch that area).
 - **Classifier:** Alt-Tab/Start-menu `explorer.exe` flicker is not filtered; thresholds and risk points are constants (not in Settings).
 - **Events UI:** `run_executed` and terminal events are not in the monitoring view; no terminal column in the roster.
 - **After M43:** no password recovery; a regenerated cert is only covered by `tls-pin` unit tests.
-- **Installer:** a real install has not run (DevTools off and `InstallType` in a packaged build, gcc/pacman/pip under `C:\Program Files`, `AppPath` link, uninstall components page). No app icon.
+- **Installer:** a real install has not run (DevTools off and `InstallType` in a packaged build, gcc/pacman/pip under `C:\Program Files`, `AppPath` link, uninstall components page).
 - **Cleanup (from M44):** no move progress bar; run folders and student workspace not wiped at exam end; no retention for answer versions; no `server.log` rotation; no automatic backup at exam end; backups and exports never pruned.
 - **Grading:** record real fixtures; no teacher view of answer versions.
 - **Small follow-ups:** end of `docs/limitations.md`.
