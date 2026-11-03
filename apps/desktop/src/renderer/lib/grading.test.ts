@@ -6,6 +6,7 @@ import {
   draftFrom,
   draftProblems,
   draftTotal,
+  finalizeBlockers,
   gradingAction,
   isLowConfidence,
   jobProgress,
@@ -109,5 +110,14 @@ describe('grade draft (M40)', () => {
       feedback: 'Fine',
     });
     expect(marksText(null, 8)).toBe('— / 8');
+  });
+});
+
+describe('finalize (M42)', () => {
+  it('counts the answers that still need a grade across questions', () => {
+    const s = status('in_review', counts({ pending: 1, needsManual: 2 }));
+    s.questions.push(counts({ questionId: 'q2', needsManual: 1 }));
+    expect(finalizeBlockers(s)).toEqual({ pending: 1, needsManual: 3 });
+    expect(finalizeBlockers(status('in_review'))).toEqual({ pending: 0, needsManual: 0 });
   });
 });

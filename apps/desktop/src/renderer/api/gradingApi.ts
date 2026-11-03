@@ -1,10 +1,15 @@
 import {
   AnswerDetailSchema,
+  ExportResultSchema,
+  FinalizeResultSchema,
   GradingStatusSchema,
   ReviewTableSchema,
   type AnswerDetail,
   type AnswerEditBody,
+  type ExportResult,
+  type FinalizeResult,
   type GradingStatus,
+  type ReevaluateBody,
   type ReviewTable,
   type ServerConnection,
 } from '@examguard/shared';
@@ -22,6 +27,12 @@ export interface GradingApi {
   accept(examStudentId: string, questionId: string): Promise<AnswerDetail>;
   /** Rejects `invalid_marks` (details.problems) when the marks do not fit the guide. */
   edit(examStudentId: string, questionId: string, body: AnswerEditBody): Promise<AnswerDetail>;
+  /** M41: one question again with an instruction. Rejects `nothing_to_grade` when only edited answers are chosen. */
+  reevaluate(examId: string, body: ReevaluateBody): Promise<GradingStatus>;
+  /** M42: locks the marks. Rejects `not_ready` (details.pending / needsManual). */
+  finalize(examId: string): Promise<FinalizeResult>;
+  /** M42: saves the results CSV in the teacher's `exports/` folder. */
+  exportCsv(examId: string): Promise<ExportResult>;
 }
 
 export function createGradingApi(
@@ -50,5 +61,9 @@ export function createGradingApi(
       call(connection, fetchFn, `${answer(sid, qid)}/accept`, AnswerDetailSchema, {}),
     edit: (sid, qid, body) =>
       call(connection, fetchFn, `${answer(sid, qid)}/edit`, AnswerDetailSchema, body),
+    reevaluate: (id, body) =>
+      call(connection, fetchFn, `${exam(id)}/grading/reevaluate`, GradingStatusSchema, body),
+    finalize: (id) => call(connection, fetchFn, `${exam(id)}/finalize`, FinalizeResultSchema, {}),
+    exportCsv: (id) => call(connection, fetchFn, `${exam(id)}/export`, ExportResultSchema, {}),
   };
 }

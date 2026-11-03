@@ -93,7 +93,7 @@ export class AnswerGradeRepo {
     }));
   }
 
-  /** Points the grade at an evaluation. `total` in half-units. */
+  /** Points the grade at an evaluation and takes it off a re-evaluation queue. `total` in half-units. */
   set(
     examStudentId: string,
     questionId: string,
@@ -108,7 +108,7 @@ export class AnswerGradeRepo {
     this.db
       .prepare(
         `UPDATE answer_grades SET status = ?, current_evaluation_id = ?, total = ?, confidence = ?,
-           updated_at = ? WHERE exam_student_id = ? AND question_id = ?`,
+           queued_job_id = NULL, updated_at = ? WHERE exam_student_id = ? AND question_id = ?`,
       )
       .run(
         grade.status,

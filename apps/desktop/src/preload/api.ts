@@ -125,4 +125,6 @@ export interface ExamGuardApi {
   installAgent(): Promise<AgentChangeResult>;
   /** Dev builds only: removes the agent service again (one UAC prompt). */
   uninstallAgent(): Promise<AgentChangeResult>;
+  /** Teacher mode (M42): shows `exports/<fileName>` in Explorer; false when the file is gone. */
+  revealExport(fileName: string): Promise<boolean>;
 }

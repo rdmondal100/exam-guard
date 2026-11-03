@@ -21,6 +21,30 @@ describe('createGradingApi', () => {
     expect(init?.body).toBe('{}');
   });
 
+  it('re-evaluates with the instruction, finalizes and exports with POST', async () => {
+    const fetchFn = reply(200, STATUS);
+    const api = createGradingApi(CONNECTION, fetchFn);
+    await api.reevaluate('e1', {
+      questionId: 'q1',
+      examStudentIds: 'all',
+      instruction: 'Also accept recursion',
+    });
+    const [url, init] = vi.mocked(fetchFn).mock.calls[0] ?? [];
+    expect(url).toBe('http://127.0.0.1:47821/api/v1/exams/e1/grading/reevaluate');
+    expect(JSON.parse(String(init?.body))).toMatchObject({ instruction: 'Also accept recursion' });
+
+    const finalized = { examId: 'e1', examState: 'finalized', finalizedAt: 5, backup: 'b' };
+    expect((await createGradingApi(CONNECTION, reply(200, finalized)).finalize('e1')).backup).toBe(
+      'b',
+    );
+    const saved = { fileName: 'Mid.csv', path: 'C:\\x\\exports\\Mid.csv', rows: 3 };
+    const exportFetch = reply(200, saved);
+    expect((await createGradingApi(CONNECTION, exportFetch).exportCsv('e1')).rows).toBe(3);
+    expect(vi.mocked(exportFetch).mock.calls[0]?.[0]).toBe(
+      'http://127.0.0.1:47821/api/v1/exams/e1/export',
+    );
+  });
+
   it('sends an edit to the answer and passes the invalid_marks problems on', async () => {
     const fetchFn = reply(400, {
       error: { code: 'invalid_marks', message: 'No', details: { problems: ['too high'] } },

@@ -93,7 +93,12 @@ export function GradingPanel({ examId, grading, questions, onStateChange }: Prop
                   {q.needsManual > 0 && ` · ${q.needsManual} need manual grading`}
                   {q.lowConfidence > 0 && ` · ${q.lowConfidence} low confidence`}
                 </span>
-                {job && <span className="text-muted">({JOB_STATE_LABEL[job.state]})</span>}
+                {job && (
+                  <span className="text-muted">
+                    ({job.kind === 'reevaluate' && 'Re-evaluation: '}
+                    {JOB_STATE_LABEL[job.state]})
+                  </span>
+                )}
               </div>
               {job && (job.state === 'running' || job.state === 'queued') && (
                 <div

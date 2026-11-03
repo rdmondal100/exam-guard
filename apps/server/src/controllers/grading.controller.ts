@@ -1,5 +1,9 @@
 import type { Request, Response } from 'express';
-import { AnswerEditBodySchema, GradingStartBodySchema } from '@examguard/shared';
+import {
+  AnswerEditBodySchema,
+  GradingStartBodySchema,
+  ReevaluateBodySchema,
+} from '@examguard/shared';
 import type { GradingService } from '../services/grading/grading-service.js';
 import type { ReviewService } from '../services/grading/review-service.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -28,6 +32,12 @@ export function createGradingController({ grading, review }: GradingControllerDe
       const body = GradingStartBodySchema.safeParse(req.body ?? {});
       if (!body.success) throw new ApiError(400, 'invalid_body', 'Invalid grading request');
       res.json(await grading.start(req.params.id, body.data.questionIds));
+    },
+
+    async reevaluate(req: IdRequest, res: Response): Promise<void> {
+      const body = ReevaluateBodySchema.safeParse(req.body);
+      if (!body.success) throw new ApiError(400, 'invalid_body', 'Invalid re-evaluation request');
+      res.json(await grading.reevaluate(req.params.id, body.data));
     },
 
     cancel(req: IdRequest, res: Response): void {

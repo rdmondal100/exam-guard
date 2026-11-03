@@ -352,11 +352,13 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** reevaluate endpoint + job kind, scope selector (include edited?), prompt instruction slot.
 - **Accept:** by default Verified/Modified answers are skipped. New results are appended to history.
 - **Manual test:** "also accept recursive solutions" on all → only unedited answers change.
+- **Built (2026-11-03, with M42):** migration 0014 (`answer_grades.queued_job_id`), `grading/reevaluate.ts`, `reevaluateQueue.repo.ts`, `POST /exams/:id/grading/reevaluate`; queued answers keep their grade until the new one lands (cancel and failure change nothing, restart resumes). UI: "Re-evaluate Qn…" in the review table, "Re-evaluate this answer…" in the answer view, with the include-edited box. Tested with the fake (all / one / include edited / cancel / restart).
 
 ### M42 Finalize + CSV export — **Phase 6 demo**
 - **Goal:** finalize locks marks, and CSV export produces the required columns.
 - **Touches:** finalize endpoint (requires no `pending`/`needs_manual`, takes a backup), CSV builder (UTF-8 BOM for Excel), exports folder.
 - **Accept / demo:** a finished exam is graded → reviewed → finalized → exported. The CSV opens correctly in Excel with marks per question, total, event counts by severity and outside time. Edits after finalizing are refused.
+- **Built (2026-11-03, with M41):** `services/results/` (finalize with backup, `results-csv.ts`, export to `exports/`), `results.repo.ts`, `POST /exams/:id/finalize`, `GET /exams/:id/export.csv`, `POST /exams/:id/export`, IPC `exports:reveal`, Results panel (finalize, export, show in folder). Absent students get a line without marks; formula-looking cells are defused. Route test covers graded → reviewed → finalized → exported and the lock. Not opened in a real Excel yet; the full `pnpm test` passed.
 
 ---
 

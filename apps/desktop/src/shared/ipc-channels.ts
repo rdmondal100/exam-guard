@@ -47,4 +47,5 @@ export const IPC = {
   agentStatus: 'agent:status',
   agentInstall: 'agent:install',
   agentUninstall: 'agent:uninstall',
+  revealExport: 'exports:reveal',
 } as const;

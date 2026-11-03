@@ -1,9 +1,10 @@
-import type { GradingStatus, Question } from '@examguard/shared';
+import type { GradingStatus, Question, ReevaluateBody } from '@examguard/shared';
 import type { AnswerGradeRepo } from '../../db/repositories/answerGrade.repo.js';
 import type { EvaluationRepo } from '../../db/repositories/evaluation.repo.js';
 import type { ExamRepo } from '../../db/repositories/exam.repo.js';
 import type { GradingJobRepo, JobRecord } from '../../db/repositories/gradingJob.repo.js';
 import type { QuestionRepo } from '../../db/repositories/question.repo.js';
+import type { ReevaluateQueueRepo } from '../../db/repositories/reevaluateQueue.repo.js';
 import { newId } from '../../utils/ids.js';
 import { canTransition } from '../exams/exam-state.js';
 import { GradingAuthError, gradeAnswer } from './grade-answer.js';
@@ -11,6 +12,7 @@ import { runPool } from './pool.js';
 import { PROMPT_VERSION } from './prompt.js';
 import type { GradingProvider } from './provider.js';
 import { GradingError, type ProviderSource } from './provider-source.js';
+import { queueReevaluation } from './reevaluate.js';
 import { abortableSleep } from './sleep.js';
 
 export const DEFAULT_CONCURRENCY = 4;
@@ -21,6 +23,8 @@ export interface GradingServiceDeps {
   jobs: GradingJobRepo;
   grades: AnswerGradeRepo;
   evaluations: EvaluationRepo;
+  /** Answers queued for a re-evaluation (M41). */
+  queue: ReevaluateQueueRepo;
   source: ProviderSource;
   now?: () => number;
   concurrency?: number;
@@ -106,7 +110,18 @@ export class GradingService {
     return this.requireStatus(examId);
   }
 
-  /** Stops the exam's grading. Answers not graded yet stay `pending`. */
+  /** Grades one question again with the teacher's instruction (M41, `reevaluate.ts`). */
+  async reevaluate(examId: string, body: ReevaluateBody): Promise<GradingStatus> {
+    const provider = await this.deps.source.create();
+    queueReevaluation(this.deps, examId, body, provider, this.now());
+    this.launch(examId, provider);
+    return this.requireStatus(examId);
+  }
+
+  /**
+   * Stops the exam's grading. Answers not graded yet stay `pending`; answers queued for a
+   * re-evaluation keep their grade.
+   */
   cancel(examId: string): GradingStatus {
     const status = this.status(examId);
     if (!status) throw new GradingError(404, 'not_found', 'Exam not found');
@@ -197,7 +212,10 @@ export class GradingService {
     const { jobs, grades, evaluations } = this.deps;
     jobs.setState(job.id, 'running', this.now());
     this.progress(job.examId, true);
-    const answers = grades.pendingAnswers(question.id, job.scope);
+    const answers =
+      job.kind === 'reevaluate'
+        ? this.deps.queue.answers(job.id)
+        : grades.pendingAnswers(question.id, job.scope);
     const deps = {
       provider,
       evaluations,
@@ -236,6 +254,7 @@ export class GradingService {
 
   /** Grading → In review once nothing is queued or running. */
   private finishIfIdle(examId: string): void {
+    this.deps.queue.release(examId);
     const exam = this.deps.exams.get(examId);
     if (exam?.state === 'grading' && this.deps.jobs.unfinished(examId).length === 0) {
       this.deps.exams.setState(examId, 'in_review', this.now());

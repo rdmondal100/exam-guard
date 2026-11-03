@@ -40,7 +40,9 @@ export interface GradingExam {
 
 /** Opens a teacher app on `dir` (a second call on the same folder is a "restarted server"). */
 export function openApp(dir: string, db: Db, grading: ContainerOptions['grading']) {
-  return withInject(buildTeacherApp({ token: TOKEN, db, ...(grading ? { grading } : {}) }));
+  return withInject(
+    buildTeacherApp({ token: TOKEN, db, dataDir: dir, ...(grading ? { grading } : {}) }),
+  );
 }
 
 /**

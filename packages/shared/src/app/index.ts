@@ -8,3 +8,4 @@ export * from './submit.js';
 export * from './session-exit.js';
 export * from './clipboard.js';
 export * from './insertion.js';
+export * from './exports.js';
