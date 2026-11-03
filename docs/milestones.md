@@ -398,17 +398,20 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** sim scenarios + metrics report (CPU, RAM, event lag, save lag, bandwidth), perf fixes.
 - **Accept:** 200 students for 30 min on the dev PC (teacher) with no lost saves or events, p95 save ack < 1 s, alert lag < 2 s. The results table is recorded in progress.md.
 - **Manual test:** `pnpm sim -- --students 200 --scenario full --minutes 30`, plus the laptop as a real student.
+- **Built (2026-11-03):** sim v3 `--scenario full` (`run-full.ts`): autosave 10 s, agent-style events every ~2 min (`focus_lost` with a 150 KB screenshot, `still_outside`, `focus_returned`, re-sent until acked), a drop about every 5 min, submits in the last minute, Markdown report with pass/fail. Without `--host` it forks `apps/server/dist/scripts/load-host.js` (own Node process: exam for N students + spare IDs 9001–9005 for real students, CPU/RSS/event-loop samples, DB counts over IPC, `LoadHost*` schemas in shared) and a teacher socket (30 thumbnails, page flip every 30 s, alert lag). **Result (dev PC, 200 × 30 min):** all checks pass; numbers in progress.md. No perf fix was needed. Laptop as a real student not run (manual).
 
 ### M48 Crash-recovery tests
 - **Goal:** a scripted and checklist-based verification of every recovery path.
 - **Touches:** integration tests (server restart mid-exam, deadline during downtime, duplicate replays), manual checklist in `docs/progress.md`.
 - **Accept:** server kill, teacher app kill, student app kill, laptop power-off, cable pull, and agent helper kill all end with no lost work or evidence and correct timers.
 - **Manual test:** follow the checklist with the laptop + sim.
+- **Built (2026-11-03):** `testing/restartableExam.ts` (stops and rebuilds the server on the same data folder as `server.ts` does) and `sockets/recovery.socket.test.ts`: session, PIN, certificate and deadline survive a restart; replayed saves and events (with screenshot) are acked and stored once, outside time counted once; a re-join from the same PC gets its saves; a deadline that passes during downtime ends the exam at the restart with the saves made in time. Manual checklist in progress.md (not run).
 
 ### M49 Hardening + lab-IT README — **Phase 7 demo / Stage 1 done**
 - **Goal:** security pass and the lab-IT README.
 - **Touches:** review rate/size limits, CSP, DevTools off, IPC surface, dependency audit, `docs/lab-it-readme.md` (install, silent flags, SmartScreen/AV, service, firewall, mDNS/subnet, uninstall).
 - **Accept / demo:** one installer works on a freshly reset Windows PC (laptop) as Student and on the teacher PC, and the M47 run passes on the final build. Every requirements §3 objective is ticked in progress.md.
+- **Built (2026-11-03):** security pass: renderer permissions allow-listed (`clipboard-sanitized-write`, `fullscreen`), dev renderer URL ignored when packaged, limits/CSP/DevTools/IPC reviewed (decisions M49), Electron 44.10.1 (eMudhra cert advisory) and DOMPurify ≥ 3.4.17 override (Monaco); `pnpm audit` leaves only build-time `minimatch`. `docs/lab-it-readme.md` written. Demo (fresh-PC installs) not run.
 
 ---
 

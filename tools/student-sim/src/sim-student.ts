@@ -2,6 +2,8 @@ import { randomBytes } from 'node:crypto';
 import WebSocket from 'ws';
 import { PROTOCOL_VERSION, STUDENT_PING_MS, WS_CLOSE, type Receipt } from '@examguard/shared';
 import { agent, postJson, type Target } from './http.js';
+import type { SimMetrics } from './metrics.js';
+import { SimEvents, type EventStats } from './sim-events.js';
 import { receiptProblem } from './sim-receipt.js';
 import { SimSaves, type SaveStats } from './sim-saves.js';
 import { SimThumbs, type ThumbStats } from './sim-thumbs.js';
@@ -20,6 +22,14 @@ export interface SimStudentOptions {
   submitAfterMs?: number;
   /** Drop the socket about this often (0 or missing = never); the student reconnects. */
   disconnectEveryMs?: number;
+  /** Submit within this long after `submitAfterMs` (default: ±20 % of `submitAfterMs`). */
+  submitSpreadMs?: number;
+  /** Leave the exam window about this often while it runs (0 or missing = never, M47). */
+  eventsEveryMs?: number;
+  /** Latencies and traffic of the whole run (M47). */
+  metrics?: SimMetrics;
+  /** Send time of every event of the run by id, for the teacher view's alert lag. */
+  eventTimes?: Map<string, number>;
 }
 
 export interface SubmitStats {
@@ -62,9 +72,25 @@ export class SimStudent {
   private refused = 0;
   /** Grid thumbnails while the teacher has this student on the visible page (M29). */
   private readonly thumbs: SimThumbs;
+  /** Focus events with screenshots while the exam runs (M47). */
+  private readonly events: SimEvents | null;
+  /** The exam's questions arrived: it runs for this student. */
+  private running = false;
 
   constructor(private readonly options: SimStudentOptions) {
-    this.saves = options.autosaveMs ? new SimSaves(options.autosaveMs, options.code) : null;
+    const { metrics } = options;
+    this.saves = options.autosaveMs
+      ? new SimSaves(options.autosaveMs, options.code, metrics)
+      : null;
+    this.events =
+      options.eventsEveryMs && metrics
+        ? new SimEvents(
+            options.eventsEveryMs,
+            options.code,
+            metrics,
+            options.eventTimes ?? new Map(),
+          )
+        : null;
     let seed = 0;
     for (const ch of options.code) seed = (seed * 31 + ch.charCodeAt(0)) & 0x7f;
     this.thumbs = new SimThumbs(seed);
@@ -76,6 +102,10 @@ export class SimStudent {
 
   saveStats(): SaveStats {
     return this.saves?.stats() ?? { sent: 0, acked: 0, pending: 0 };
+  }
+
+  eventStats(): EventStats {
+    return this.events?.totals() ?? { made: 0, acked: 0, pending: 0, withScreenshot: 0 };
   }
 
   submitStats(): SubmitStats {
@@ -122,6 +152,7 @@ export class SimStudent {
     if (this.dropTimer) clearTimeout(this.dropTimer);
     this.submitTimer = this.dropTimer = null;
     this.saves?.detach();
+    this.events?.detach();
     this.thumbs.stop();
     this.ws?.removeAllListeners();
     this.ws?.terminate();
@@ -147,7 +178,9 @@ export class SimStudent {
       ),
     );
     ws.on('message', (data) => {
-      const message = JSON.parse(data.toString()) as {
+      const text = data.toString();
+      if (this.options.metrics) this.options.metrics.down += text.length;
+      const message = JSON.parse(text) as {
         t?: string;
         clientSeq?: number;
         intervalMs?: number;
@@ -158,6 +191,7 @@ export class SimStudent {
       if (message.t === 'answer.ack' && message.clientSeq !== undefined) {
         return this.saves?.ack(message.clientSeq);
       }
+      if (message.t === 'event.ack' && message.id) return void this.events?.ack(message.id);
       if (message.t === 'submit.result' && message.receipt) return this.gotReceipt(message.receipt);
       // Teacher messages are acked so the server stops re-sending them (M35).
       if (message.t === 'message' && message.id) {
@@ -177,6 +211,10 @@ export class SimStudent {
           this.saves.attach(ws);
           this.scheduleSubmit();
         }
+        if (this.markRunning(message.state?.questions)) {
+          this.events?.attach(ws);
+          if (!this.saves) this.scheduleSubmit();
+        }
         return;
       }
       if (message.t !== 'welcome') return;
@@ -192,6 +230,8 @@ export class SimStudent {
         this.scheduleSubmit();
       }
       this.saves?.attach(ws);
+      if (this.markRunning(message.state?.questions) && !this.saves) this.scheduleSubmit();
+      if (this.running) this.events?.attach(ws);
       // After the unacked saves on the same socket, as the real app does.
       if (this.submitting) this.sendSubmit(ws);
       this.scheduleDrop(ws);
@@ -200,6 +240,7 @@ export class SimStudent {
       if (this.pingTimer) clearInterval(this.pingTimer);
       this.pingTimer = null;
       this.saves?.detach();
+      this.events?.detach();
       this.thumbs.stop();
       if (this.dropTimer) clearTimeout(this.dropTimer);
       this.dropTimer = null;
@@ -211,17 +252,25 @@ export class SimStudent {
     ws.on('error', () => ws.terminate());
   }
 
+  /** True when this call is the one that saw the questions first. */
+  private markRunning(questions: unknown): boolean {
+    if (this.running || !Array.isArray(questions) || questions.length === 0) return false;
+    this.running = true;
+    return true;
+  }
+
   private scheduleSubmit(): void {
     const after = this.options.submitAfterMs ?? 0;
     if (after <= 0 || this.submitTimer || this.receipt) return;
-    this.submitTimer = setTimeout(
-      () => {
-        this.submitting = true;
-        this.saves?.freeze();
-        if (this.ws) this.sendSubmit(this.ws);
-      },
-      after * (0.8 + Math.random() * 0.4),
-    );
+    const spread = this.options.submitSpreadMs;
+    const delay =
+      spread === undefined ? after * (0.8 + Math.random() * 0.4) : after + Math.random() * spread;
+    this.submitTimer = setTimeout(() => {
+      this.submitting = true;
+      this.saves?.freeze();
+      this.events?.freeze();
+      if (this.ws) this.sendSubmit(this.ws);
+    }, delay);
   }
 
   private sendSubmit(ws: WebSocket): void {
@@ -246,6 +295,7 @@ export class SimStudent {
     if (this.receipt) return;
     this.receipt = receipt;
     this.saves?.freeze();
+    this.events?.freeze();
     // What the student wrote is only known for sure when it submitted itself: after that no
     // save is made, and the unacked ones are re-sent before the submit.
     const expected = this.submitting ? (this.saves?.expectedAnswers() ?? null) : null;

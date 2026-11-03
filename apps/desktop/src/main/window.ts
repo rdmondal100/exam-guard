@@ -2,7 +2,8 @@ import { join } from 'node:path';
 import { BrowserWindow, app, session, shell } from 'electron';
 import { TEACHER_API_HOST, TEACHER_API_PORT } from '@examguard/shared';
 
-const RENDERER_URL = process.env['ELECTRON_RENDERER_URL'];
+/** The Vite dev server; ignored in a packaged build, so the variable cannot point it elsewhere. */
+const RENDERER_URL = app.isPackaged ? undefined : process.env['ELECTRON_RENDERER_URL'];
 const TEACHER_API = `http://${TEACHER_API_HOST}:${TEACHER_API_PORT} ws://${TEACHER_API_HOST}:${TEACHER_API_PORT}`;
 
 /** Dev needs the Vite server, its websocket and inline styles for HMR. */
@@ -35,20 +36,25 @@ export function installCsp(): void {
       responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [policy] },
     });
   });
-  denyClipboardRead();
+  allowOnlyNeededPermissions();
 }
 
+/** What the page may ask for: Monaco's Copy (`navigator.clipboard.writeText`) and fullscreen. */
+const ALLOWED_PERMISSIONS = new Set(['clipboard-sanitized-write', 'fullscreen']);
+
 /**
- * The page may not read the clipboard by itself (`navigator.clipboard.readText`), which Electron
- * allows by default. Monaco's menu Paste falls back to it and would skip the paste guard (M25);
- * Ctrl+V and the menu's `execCommand('paste')` still work through the `paste` event the guard sees.
+ * Every other permission is refused (M49; Electron grants them all by default): camera,
+ * microphone, notifications, geolocation, opening external links and so on. Above all the page
+ * may not read the clipboard by itself (`navigator.clipboard.readText`): Monaco's menu Paste falls
+ * back to it and would skip the paste guard (M25); Ctrl+V and the menu's `execCommand('paste')`
+ * still work through the `paste` event the guard sees.
  */
-function denyClipboardRead(): void {
+function allowOnlyNeededPermissions(): void {
   const ses = session.defaultSession;
   ses.setPermissionRequestHandler((_contents, permission, callback) => {
-    callback(permission !== 'clipboard-read');
+    callback(ALLOWED_PERMISSIONS.has(permission));
   });
-  ses.setPermissionCheckHandler((_contents, permission) => permission !== 'clipboard-read');
+  ses.setPermissionCheckHandler((_contents, permission) => ALLOWED_PERMISSIONS.has(permission));
 }
 
 export function createMainWindow(title: string): BrowserWindow {

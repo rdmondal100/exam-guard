@@ -2,6 +2,8 @@
 import { readFileSync } from 'node:fs';
 import { USAGE, parseArgs, type SimOptions } from './args.js';
 import { numberedCodes, parseStudentCodes } from './csv.js';
+import { SimMetrics } from './metrics.js';
+import { runFull } from './run-full.js';
 import { runSim } from './run-sim.js';
 
 function main(): void {
@@ -26,8 +28,19 @@ function main(): void {
     process.exitCode = 2;
     return;
   }
+  if (options.scenario === 'full') {
+    runFull(options, codes).then(
+      (code) => process.exit(code),
+      (e: unknown) => {
+        console.error(e instanceof Error ? e.message : String(e));
+        process.exit(1);
+      },
+    );
+    return;
+  }
   console.log(`Starting ${codes.length} students against ${options.host}:${options.port}`);
-  const run = runSim(options, codes);
+  const metrics = new SimMetrics();
+  const run = runSim(options, codes, undefined, { eventsEveryMs: options.eventsEveryMs, metrics });
   const report = () => {
     const c = run.counts();
     const s = run.saves();

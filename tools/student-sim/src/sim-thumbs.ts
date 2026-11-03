@@ -5,17 +5,26 @@ import { SAMPLE_THUMB_BASE64 } from './sample-thumb.js';
 /** About what a real 320 px screen thumbnail weighs (docs/architecture.md §5). */
 export const SIM_THUMB_BYTES = 15 * 1024;
 
+/** Largest payload of one JPEG comment segment (its length field counts itself). */
+const MAX_SEGMENT_PAD = 65_533;
+
 /**
- * A displayable JPEG of `size` bytes: the sample picture with a comment segment (`FF FE`) right
- * after the start marker, filled with `seed` so each student's frames differ a little.
+ * A displayable JPEG of about `size` bytes: the sample picture with comment segments (`FF FE`)
+ * right after the start marker, filled with `seed` so each student's frames differ a little.
  */
 export function syntheticJpeg(size = SIM_THUMB_BYTES, seed = 0): Uint8Array {
   const sample = Buffer.from(SAMPLE_THUMB_BASE64, 'base64');
-  const pad = Math.max(0, Math.min(65_533, size - sample.length - 4));
-  const out = new Uint8Array(sample.length + (pad > 0 ? pad + 4 : 0));
+  const pads: number[] = [];
+  let left = size - sample.length;
+  while (left > 4) {
+    const pad = Math.min(MAX_SEGMENT_PAD, left - 4);
+    pads.push(pad);
+    left -= pad + 4;
+  }
+  const out = new Uint8Array(sample.length + pads.reduce((sum, pad) => sum + pad + 4, 0));
   out.set(sample.subarray(0, 2), 0);
   let at = 2;
-  if (pad > 0) {
+  for (const pad of pads) {
     const length = pad + 2;
     out.set([0xff, 0xfe, (length >> 8) & 0xff, length & 0xff], at);
     out.fill(seed & 0x7f, at + 4, at + 4 + pad);

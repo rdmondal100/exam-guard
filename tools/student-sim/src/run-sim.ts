@@ -1,4 +1,6 @@
 import type { SimOptions } from './args.js';
+import type { SimMetrics } from './metrics.js';
+import type { EventStats } from './sim-events.js';
 import type { SaveStats } from './sim-saves.js';
 import { SimStudent, type SimState } from './sim-student.js';
 
@@ -22,6 +24,16 @@ export interface SimRun {
   submits(): SubmitTotals;
   /** Grid thumbnails summed over all students (M29). */
   thumbs(): ThumbTotals;
+  /** Agent-style events summed over all students (M47). */
+  events(): EventStats;
+}
+
+/** What the full scenario adds (M47). */
+export interface SimExtras {
+  submitSpreadMs?: number;
+  eventsEveryMs?: number;
+  metrics?: SimMetrics;
+  eventTimes?: Map<string, number>;
 }
 
 export interface ThumbTotals {
@@ -49,6 +61,7 @@ export function runSim(
     Partial<Pick<SimOptions, 'autosaveMs' | 'submitAfterMs' | 'disconnectEveryMs'>>,
   codes: string[],
   pingMs?: number,
+  extras: SimExtras = {},
 ): SimRun {
   const states = new Map<string, SimState>();
   const failed = new Map<string, string>();
@@ -76,6 +89,7 @@ export function runSim(
         ...(options.autosaveMs ? { autosaveMs: options.autosaveMs } : {}),
         ...(options.submitAfterMs ? { submitAfterMs: options.submitAfterMs } : {}),
         ...(options.disconnectEveryMs ? { disconnectEveryMs: options.disconnectEveryMs } : {}),
+        ...extras,
       }),
   );
   let stopped = false;
@@ -121,6 +135,17 @@ export function runSim(
         total.sent += one.sent;
         total.acked += one.acked;
         total.pending += one.pending;
+      }
+      return total;
+    },
+    events: () => {
+      const total: EventStats = { made: 0, acked: 0, pending: 0, withScreenshot: 0 };
+      for (const s of students) {
+        const one = s.eventStats();
+        total.made += one.made;
+        total.acked += one.acked;
+        total.pending += one.pending;
+        total.withScreenshot += one.withScreenshot;
       }
       return total;
     },

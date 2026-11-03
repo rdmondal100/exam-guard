@@ -6,3 +6,5 @@ onlyBuiltDependencies:
   - electron
   - esbuild
   - better-sqlite3
+overrides:
+  dompurify: '>=3.4.17'

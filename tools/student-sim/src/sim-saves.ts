@@ -1,5 +1,6 @@
 import type WebSocket from 'ws';
 import type { FinalAnswerInput } from '@examguard/shared';
+import type { SimMetrics } from './metrics.js';
 
 export interface SaveStats {
   sent: number;
@@ -51,10 +52,13 @@ export class SimSaves {
   private acked = 0;
   private timer: NodeJS.Timeout | null = null;
   private frozen = false;
+  /** When each unacked save was first sent (save lag, M47). */
+  private readonly firstSent = new Map<number, number>();
 
   constructor(
     private readonly everyMs: number,
     private readonly code: string,
+    private readonly metrics?: SimMetrics,
   ) {}
 
   /**
@@ -106,7 +110,11 @@ export class SimSaves {
   }
 
   ack(clientSeq: number): void {
-    if (this.unacked.delete(clientSeq)) this.acked += 1;
+    if (!this.unacked.delete(clientSeq)) return;
+    this.acked += 1;
+    const sentAt = this.firstSent.get(clientSeq);
+    this.firstSent.delete(clientSeq);
+    if (sentAt !== undefined) this.metrics?.saveLag.add(Date.now() - sentAt);
   }
 
   stats(): SaveStats {
@@ -165,7 +173,10 @@ export class SimSaves {
 
   private send(ws: WebSocket, save: Save): void {
     if (ws.readyState !== ws.OPEN) return;
-    ws.send(JSON.stringify(save));
+    const json = JSON.stringify(save);
+    ws.send(json);
     this.sent += 1;
+    if (!this.firstSent.has(save.clientSeq)) this.firstSent.set(save.clientSeq, Date.now());
+    if (this.metrics) this.metrics.up += json.length;
   }
 }

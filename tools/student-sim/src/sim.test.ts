@@ -20,7 +20,28 @@ describe('parseArgs', () => {
       autosaveMs: 0,
       submitAfterMs: 0,
       disconnectEveryMs: 0,
+      eventsEveryMs: 0,
+      scenario: 'basic',
+      minutes: 30,
+      selfHost: false,
     });
+  });
+
+  it('gives the full scenario its load-test defaults and hosts itself without --host', () => {
+    expect(parseArgs(['--scenario', 'full', '--students', '200'])).toMatchObject({
+      selfHost: true,
+      students: 200,
+      minutes: 30,
+      autosaveMs: 10_000,
+      eventsEveryMs: 120_000,
+      disconnectEveryMs: 300_000,
+    });
+    expect(
+      parseArgs([...base, '--scenario', 'full', '--minutes', '5', '--events-every-ms', '0']),
+    ).toMatchObject({ selfHost: false, host: '10.0.0.5', minutes: 5, eventsEveryMs: 0 });
+    expect(() => parseArgs(['--scenario', 'full', '--pin', '123456'])).toThrow('--pin needs');
+    expect(() => parseArgs(['--scenario', 'full', '--minutes', '1'])).toThrow('--minutes');
+    expect(() => parseArgs([...base, '--scenario', 'huge'])).toThrow('--scenario');
   });
 
   it('reads port, count, csv and ramp, and ignores a bare --', () => {
