@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import type { TerminalPaths } from './terminal-env.js';
+import type { TerminalPaths } from './terminalEnv.js';
 
 /**
  * MSYS2 programs take POSIX paths: gpg treats `C:/x` as relative, so pacman gets `/c/x`.

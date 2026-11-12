@@ -13,7 +13,7 @@ function safe(id: string): string {
 const FOLDER = 'screenshots';
 
 /**
- * The screenshots the agents took: `<data>/screenshots/<examId>/<examStudentId>/<eventId>.jpg`.
+ * The screenshots the student apps took: `<data>/screenshots/<examId>/<examStudentId>/<eventId>.jpg`.
  * `events.screenshot_path` holds the path relative to the data folder.
  */
 export class ScreenshotStore {

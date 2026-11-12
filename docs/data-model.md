@@ -58,7 +58,7 @@ UNIQUE(class_list_id, student_code)
 | terminal_until | INTEGER | server time the terminal turns off by itself; NULL = no end |
 | files_enabled | INTEGER DEFAULT 1 | student Files panel switch (M15e, migration 0007); on by default; copied by duplicate |
 | hosting_started_at, started_at, ended_at, finalized_at | INTEGER | nullable |
-| run_limits_json | TEXT, nullable | M43 (migration 0015): the Settings run limits copied at hosting start; NULL = the defaults |
+| run_limits_json | TEXT, nullable | M43 (migration 0015): the Settings run limits copied at hosting start (`{timeMs, outputBytes}`; older rows also hold `memoryMb`/`processes`, ignored); NULL = the defaults |
 | created_at, updated_at | INTEGER | |
 INDEX(state)
 
@@ -100,7 +100,7 @@ UNIQUE(question_id, name)
 | token_hash | TEXT | SHA-256 of the session token. NULL = no active session |
 | device_id | TEXT | bound on first join. Cleared by teacher reset |
 | pinned_fp | TEXT | cert fingerprint the student trusted |
-| lock_reason | TEXT, nullable | `agent` (M24) or `teacher` (M35) while `locked` (migration 0012) |
+| lock_reason | TEXT, nullable | `teacher` (M35) while `locked` (migration 0012; the old `agent` value is turned into `teacher` by 0016) |
 | extension_sec | INTEGER DEFAULT 0 | |
 | joined_at, started_at, submitted_at, last_seen_at | INTEGER | |
 | submission_hash | TEXT | the receipt hash (M18): SHA-256 of the canonical JSON of `[{questionId, language, sha256}]` sorted by `questionId` (see `final_answers`); set with `submitted_at` when the answers become final, also for `ended_by_teacher` |
@@ -153,14 +153,14 @@ PRIMARY KEY(exam_student_id, question_id)
 | id | INTEGER PK AUTOINCREMENT | |
 | exam_id | TEXT FK | |
 | exam_student_id | TEXT FK, nullable | null = exam-level |
-| type | TEXT | e.g. `focus_lost, focus_returned, title_changed, still_outside, app_launched, processes_at_start, monitor_changed, secure_desktop, taskmgr_opened, paste_blocked, large_insertion, run_executed, agent_lost, app_relaunched, duplicate_login, network_lost, network_restored, terminal_opened, terminal_closed, terminal_command, package_installed, internet_blocked, internet_allowed, internet_block_failed` (the terminal types since M15b, the internet types with M21b) |
+| type | TEXT | e.g. `focus_lost, focus_returned, title_changed, still_outside, app_launched, processes_at_start, monitor_changed, secure_desktop, taskmgr_opened, paste_blocked, large_insertion, run_executed, duplicate_login, network_lost, network_restored, terminal_opened, terminal_closed, terminal_command, package_installed` (the terminal types since M15b). Older exams may also hold `agent_lost`, `app_relaunched` and `internet_*` from the removed agent |
 | severity | TEXT | `low, medium, high, critical` (set by the server classifier) |
 | server_ts | INTEGER | |
 | client_ts | INTEGER | when it happened on the student PC |
-| details_json | TEXT | app name, exe, window title, duration_ms, ... |
+| details_json | TEXT | exe, path, pid, window title, `domain` + `url` (or `privateWindow`) for a browser, durationMs, ... (`EvidenceDetails`) |
 | screenshot_path | TEXT | relative to the data folder, nullable |
-| source | TEXT | `agent, app, server` |
-| dedupe_key | TEXT | `<deviceId>:<agent/app seq>`, makes buffered replays idempotent |
+| source | TEXT | `monitor, app, server` (migration 0016 rebuilt the table: the old `agent` rows are `monitor`) |
+| dedupe_key | TEXT | `monitor:<examStudentId>:<runId>:<n>` or `app:<id>`, makes replays idempotent |
 UNIQUE(dedupe_key); INDEX(exam_id, server_ts); INDEX(exam_student_id, server_ts); INDEX(exam_id, severity, server_ts)
 
 ### teacher_actions (audit log)
@@ -241,7 +241,7 @@ INDEX(question_id, status); INDEX(queued_job_id)
 Deleting an exam cascades to everything under it and deletes its screenshot folder and its `exam-files/<examId>/` folder (`exams 1─* exam_files`). Class lists that are assigned to an exam can't be deleted.
 
 ## Data folder layout (teacher PC)
-Default `%APPDATA%\ExamGuard\` (Electron userData, per profile in dev). Movable in Settings (M44): `<userData>\data-location.json` `{dataDir}` then points at the new folder; only the entries below move (Electron's own files and `mode.json` stay in userData).
+Default `%APPDATA%\ExamGuard\` (Electron userData, per profile in dev). Movable in Settings (M44): `<userData>\dataLocation.json` `{dataDir}` then points at the new folder; only the entries below move (Electron's own files and `mode.json` stay in userData).
 ```
 db/examguard.sqlite (+ -wal, -shm)
 secrets.bin                      safeStorage-encrypted: AI API key
@@ -258,13 +258,11 @@ logs/main.log, server.log        rotated, 5 × 5 MB
 ## Student PC local storage
 ```
 %APPDATA%\ExamGuard\                   (Electron userData, student user)
-  queue/<examStudentId>.jsonl          pending `answer.save` / `event` / `transcript` frames the server has not acked (M17). One safeStorage-encrypted line per frame, plus a plain `-<key>` line when it is acked; the file is deleted when empty and compacted when acked lines pile up. Named after the student row because main does not know the exam id; a re-join finds the same file
+  queue/<examStudentId>.jsonl          pending `answer.save` / `event` (monitor evidence too, without its picture) / `transcript` frames the server has not acked (M17). One safeStorage-encrypted line per frame, plus a plain `-<key>` line when it is acked; the file is deleted when empty and compacted when acked lines pile up. Named after the student row because main does not know the exam id; a re-join finds the same file
   session/session.enc                  encrypted (safeStorage): token, server address and port, pinned fingerprint, examStudentId, name, exam title (M17). Written when the student accepts the notice; removed on `unauthorized`, when the exam ends and on Leave. The editors' content is not stored here: it comes from the server (`GET /answers/latest`) plus the queue
 %LOCALAPPDATA%\ExamGuard\run\<examStudentId>\
   <questionId>\<lang>\                 code-run folder (wiped per run and at exam end)
   workspace\                           project folder: cwd of the terminal and of Run, the Files panel's root; node_modules, site-packages, .msys\ (pacman root); kept between runs
   .examguard\                          bin\ shims, pacman.conf, gnupg\ keyring copy (ExamGuard's, not the student's)
   .examguard\exam-files\               the teacher's files while they wait for the exam to start: <fileId>, revealed.json (ids already copied into workspace\)
-%ProgramData%\ExamGuard\buffer\        agent evidence buffer (M24): key.bin + <examStudentId>\<evidenceSeq>.bin (AES-256-GCM), folder ACL SYSTEM + Administrators only; a file goes on evidence.ack. `--console` uses %LOCALAPPDATA%\ExamGuard\agent-buffer\
-%ProgramData%\ExamGuard\logs\         agent service.log + helper.log (rotated at the size limit, one .old copy). The uninstaller removes all of %ProgramData%\ExamGuard
 ```

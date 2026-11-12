@@ -5,7 +5,7 @@ import {
   STUDENT_IDLE_MS,
   StudentMessageSchema,
   WS_CLOSE,
-  isAgentEventType,
+  isEvidenceKind,
   isProtocolCompatible,
   type ServerToStudent,
   type SessionState,
@@ -32,7 +32,7 @@ export interface StudentSocketDeps {
   answers: AnswerIntakeDeps;
   /** Makes a student's answers final (M18). */
   submissions: Pick<SubmissionService, 'submit'>;
-  /** What the agent saw: screenshot chunks (binary frames) and the events that name them (M22). */
+  /** What the app's monitor saw: screenshot chunks (binary frames) and the events that name them (M22). */
   evidence: Pick<EvidenceIntake, 'chunk' | 'report' | 'forget'>;
   /** Grid thumbnails (binary kind 1) and who is asked to stream them (M29, M33). */
   thumbs?: Pick<ThumbRelay, 'frame' | 'onWelcome'>;
@@ -40,8 +40,6 @@ export interface StudentSocketDeps {
   liveViews?: Pick<LiveRelay, 'fromStudent' | 'studentState' | 'onStudentGone'>;
   /** Teacher messages: re-sent after each welcome until the app acks them (M35). */
   messages?: Pick<TeacherMessages, 'onWelcome' | 'ack'>;
-  /** The student's app lost its agent link (`agent_lost`, M24): lock them. */
-  onAgentLost?: (studentId: string) => void;
   /** The state the client should show; also activates a late joiner. */
   sessionState: (studentId: string) => SessionState;
   /** The hosted exam id, or `null` when nothing is hosted. */
@@ -115,37 +113,30 @@ export function onStudentSocket(socket: WebSocket, deps: StudentSocketDeps): voi
     if (message.t === 'event') {
       if (!studentId || !examId)
         return refuse(WS_CLOSE.badHello, 'hello_first', 'Send hello first');
-      if (isAgentEventType(message.type)) {
+      if (isEvidenceKind(message.type)) {
         deps.evidence.report(examId, studentId, message);
         return send({ t: 'event.ack', id: message.id });
       }
-      // The key is namespaced so an app id can never collide with agent evidence keys.
-      const stored =
-        deps.recorder.record({
-          examId,
-          examStudentId: studentId,
-          type: message.type,
-          source: 'app',
-          details: message.details,
-          serverTs: now(),
-          clientTs: message.clientTs,
-          dedupeKey: `app:${message.dedupeKey}`,
-        }) !== null;
-      // Stored first, so the lock always has its event; a resend locks nothing again.
-      if (stored && message.type === 'agent_lost') deps.onAgentLost?.(studentId);
+      // The key is namespaced so an app id can never collide with monitor evidence keys.
+      deps.recorder.record({
+        examId,
+        examStudentId: studentId,
+        type: message.type,
+        source: 'app',
+        details: message.details,
+        serverTs: now(),
+        clientTs: message.clientTs,
+        dedupeKey: `app:${message.dedupeKey}`,
+      });
       return send({ t: 'event.ack', id: message.id });
     }
     if (message.t === 'ack') {
       if (!studentId) return refuse(WS_CLOSE.badHello, 'hello_first', 'Send hello first');
       return deps.messages?.ack(studentId, message.id);
     }
-    if (message.t === 'agent.status') {
+    if (message.t === 'monitor.status') {
       if (!studentId) return refuse(WS_CLOSE.badHello, 'hello_first', 'Send hello first');
-      return deps.hub.setAgent(studentId, message);
-    }
-    if (message.t === 'internet.status') {
-      if (!studentId) return refuse(WS_CLOSE.badHello, 'hello_first', 'Send hello first');
-      return deps.hub.setInternet(studentId, message.blocked);
+      return deps.hub.setMonitor(studentId, message);
     }
     if (message.t === 'transcript') {
       if (!studentId) return refuse(WS_CLOSE.badHello, 'hello_first', 'Send hello first');

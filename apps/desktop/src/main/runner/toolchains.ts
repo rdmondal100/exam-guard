@@ -3,8 +3,6 @@ import { join, resolve } from 'node:path';
 import type { ToolPaths } from './languages.js';
 
 export interface Toolchain extends ToolPaths {
-  /** `eg-runner.exe`, or `null` if it was not found. */
-  runner: string | null;
   /** MSYS2 root (for `pacman` in the exam terminal), or `null` if it was not found. */
   msysRoot: string | null;
   /** npm's `bin/npm-cli.js`, run on Electron as Node, or `null` if it was not found. */
@@ -23,9 +21,9 @@ export interface ToolchainEnv {
 }
 
 /**
- * Finds eg-runner and the toolchains. Dev: the Cargo `target` folder and `resources/toolchains`
- * from `pnpm fetch-toolchains`, with `EG_RUNNER_PATH` and `EG_MINGW_DIR` as overrides. Packaged:
- * next to the app resources (`electron-builder.config.ts`); the overrides are ignored there.
+ * Finds the toolchains. Dev: `resources/toolchains` from `pnpm fetch-toolchains`, with
+ * `EG_MINGW_DIR` as an override. Packaged: next to the app resources (`electron-builder.config.ts`);
+ * the override is ignored there.
  */
 export function resolveToolchain(t: ToolchainEnv): Toolchain {
   const exists = t.exists ?? existsSync;
@@ -43,21 +41,14 @@ export function resolveToolchain(t: ToolchainEnv): Toolchain {
     };
   };
 
-  if (t.isPackaged) {
-    const toolchains = join(t.resourcesPath, 'toolchains');
-    return {
-      runner: first([join(t.resourcesPath, 'eg-runner.exe')]),
-      ...tools(toolchains, join(toolchains, 'mingw64')),
-    };
-  }
-  const repo = resolve(t.appPath, '..', '..');
-  const toolchains = join(t.appPath, 'resources', 'toolchains');
-  return {
-    runner: first([
-      t.env.EG_RUNNER_PATH,
-      join(repo, 'target', 'release', 'eg-runner.exe'),
-      join(repo, 'target', 'debug', 'eg-runner.exe'),
-    ]),
-    ...tools(toolchains, t.env.EG_MINGW_DIR || join(toolchains, 'mingw64')),
-  };
+  const toolchains = toolchainsDir(t);
+  if (t.isPackaged) return tools(toolchains, join(toolchains, 'mingw64'));
+  return tools(toolchains, t.env.EG_MINGW_DIR || join(toolchains, 'mingw64'));
+}
+
+/** Where the bundled toolchains live: the monitor counts their programs as the student's own. */
+export function toolchainsDir(t: Pick<ToolchainEnv, 'isPackaged' | 'appPath' | 'resourcesPath'>) {
+  return t.isPackaged
+    ? join(t.resourcesPath, 'toolchains')
+    : resolve(t.appPath, 'resources', 'toolchains');
 }

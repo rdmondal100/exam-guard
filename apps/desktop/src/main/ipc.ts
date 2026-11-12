@@ -7,42 +7,35 @@ import {
   type AppInfo,
   type AppMode,
   type InstallType,
+  type MonitorStatus,
   type SessionState,
 } from '@examguard/shared';
-import { IPC } from '../shared/ipc-channels.js';
-import { readDeviceId } from './device-id.js';
-import { Discovery } from './discovery.js';
-import type { ExamLock } from './exam-lock.js';
-import { examWorking } from './exam-working.js';
-import { JoinClient } from './join-client.js';
-import { probeHost } from './probe-host.js';
-import { SessionClient } from './session-client.js';
-import { SessionExitWatch } from './session-exit-watch.js';
-import { resolveMode, saveStoredMode } from './mode-store.js';
-import { registerAgentIpc } from './agent/agent-ipc.js';
-import { toAgentBlock } from './agent/agent-link.js';
-import { createAgentLink } from './agent/create-agent-link.js';
-import { InternetController } from './internet/internet-controller.js';
-import { announceExamWindow } from './monitor/exam-window.js';
-import { MonitorController, wantsMonitoring } from './monitor/monitor-controller.js';
-import { createTamperLock } from './monitor/tamper-lock.js';
-import type { TamperWatch } from './monitor/tamper-watch.js';
-import { launchInfo } from './agent/launch-info.js';
-import { runCommand } from './agent/run-command.js';
-import { registerExamFilesIpc } from './exam-files/exam-files-ipc.js';
-import { registerFilesIpc } from './files/files-ipc.js';
-import { registerAnswersIpc } from './answers/answers-ipc.js';
-import { registerClipboardIpc } from './clipboard/clipboard-ipc.js';
-import type { ClipboardClear } from './clipboard/clipboard-clear.js';
-import { registerResumeIpc, type ResumeHooks } from './resume/resume-ipc.js';
-import { createSecretBox } from './resume/secret-box.js';
-import { registerRunnerIpc } from './runner/runner-ipc.js';
-import type { ServerHost } from './server-host.js';
-import { registerTerminalIpc } from './terminal/terminal-ipc.js';
-import { captureScreenJpeg } from './thumbs/screen-capture.js';
-import { ThumbCapture } from './thumbs/thumb-capture.js';
-import { LiveViews } from './live/live-views.js';
-import { openLiveWindow, primaryScreenSourceId } from './live/live-window.js';
+import { IPC } from '../shared/ipcChannels.js';
+import { readDeviceId } from './join/deviceId.js';
+import { Discovery } from './join/discovery.js';
+import type { ExamLock } from './window/examLock.js';
+import { examWorking } from './session/examWorking.js';
+import { JoinClient } from './join/joinClient.js';
+import { probeHost } from './join/probeHost.js';
+import { SessionClient } from './session/sessionClient.js';
+import { SessionExitWatch } from './session/sessionExitWatch.js';
+import { resolveMode, saveStoredMode } from './mode/modeStore.js';
+import { createMonitoring, OwnProcesses, wantsMonitoring } from './tracking/index.js';
+import type { ExamMonitor } from './tracking/examMonitor.js';
+import { registerExamFilesIpc } from './examFiles/examFilesIpc.js';
+import { registerFilesIpc } from './files/filesIpc.js';
+import { registerAnswersIpc } from './answers/answersIpc.js';
+import { registerClipboardIpc } from './clipboard/clipboardIpc.js';
+import type { ClipboardClear } from './clipboard/clipboardClear.js';
+import { registerResumeIpc, type ResumeHooks } from './resume/resumeIpc.js';
+import { createSecretBox } from './resume/secretBox.js';
+import { registerRunnerIpc } from './runner/runnerIpc.js';
+import type { ServerHost } from './server/serverHost.js';
+import { registerTerminalIpc } from './terminal/terminalIpc.js';
+import { captureScreenJpeg } from './screenshots/capture.js';
+import { ThumbCapture } from './thumbs/thumbCapture.js';
+import { LiveViews } from './live/liveViews.js';
+import { openLiveWindow, primaryScreenSourceId } from './live/liveWindow.js';
 
 export interface AppState {
   profile: string;
@@ -61,7 +54,7 @@ function toInfo(state: AppState): AppInfo {
 }
 
 export interface IpcHandle {
-  /** Tells the agent which window is the exam (the student's agent link; harmless in Teacher mode). */
+  /** The exam window: the parent of the hidden live view pages (M34). */
   announceWindow(window: BrowserWindow): void;
 }
 
@@ -73,19 +66,6 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
   const requireStudent = () => {
     if (state.mode !== 'student') throw new Error('Discovery is for Student mode');
   };
-  const agentLink = createAgentLink(
-    {
-      isPackaged: app.isPackaged,
-      resourcesPath: process.resourcesPath,
-      env: process.env,
-      appVersion: app.getVersion(),
-      launch: launchInfo(process.argv, process.cwd(), process.env),
-    },
-    runCommand,
-  );
-  if (state.mode === 'student') agentLink.start();
-  app.once('will-quit', () => agentLink.stop());
-  registerAgentIpc({ userData: state.userData, link: agentLink, requireStudent });
   ipcMain.handle(IPC.getInfo, () => toInfo(state));
   ipcMain.handle(IPC.getServerConnection, () => server.getConnection());
   ipcMain.handle(IPC.getServerStatus, () => server.getStatus());
@@ -101,9 +81,11 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     return probeHost(ProbeRequestSchema.parse(payload));
   });
 
+  // The monitor's self-check runs before each join (filled in once the session exists).
+  const monitoring: { check?: () => Promise<MonitorStatus> } = {};
   const joinClient = new JoinClient(
     () => readDeviceId({ override: process.env.EG_DEVICE_ID, isPackaged: app.isPackaged }),
-    () => agentLink.check(),
+    () => (monitoring.check ? monitoring.check() : Promise.reject(new Error('Not ready'))),
   );
   ipcMain.handle(IPC.joinExam, (_event, payload: unknown) => {
     requireStudent();
@@ -123,9 +105,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     requireStudent,
   });
   let onTerminalExam: (exam: SessionState) => void = () => {};
-  let internet: InternetController | null = null;
-  let monitor: MonitorController | null = null;
-  let tamper: TamperWatch | null = null;
+  let monitor: ExamMonitor | null = null;
   let clipboardClear: ClipboardClear | null = null;
   let thumbs: ThumbCapture | null = null;
   let liveViews: LiveViews | null = null;
@@ -150,9 +130,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
       exitWatch.setExam(exam);
       onTerminalExam(exam);
       onExamFiles(exam);
-      internet?.onExam(exam);
       monitor?.onExam(exam);
-      tamper?.setWorking(state.mode === 'student' && wantsMonitoring(exam));
       thumbs?.setMonitoring(state.mode === 'student' && wantsMonitoring(exam));
       liveViews?.setMonitoring(state.mode === 'student' && wantsMonitoring(exam));
       clipboardClear?.onExam(exam);
@@ -160,9 +138,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
       for (const win of BrowserWindow.getAllWindows()) win.webContents.send(IPC.sessionExam, exam);
     },
     onStop: () => {
-      internet?.reset();
       monitor?.reset();
-      tamper?.setWorking(false);
       clipboardClear?.reset();
       thumbs?.stop();
       thumbs?.setMonitoring(false);
@@ -192,20 +168,21 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     sourceId: primaryScreenSourceId,
     send: (message) => session.sendLive(message),
   });
-  // The teacher's internet switch: applied through the agent, confirmed back to the server.
-  internet = new InternetController(agentLink, session);
-  // Focus changes and screenshots the agent sees while the exam runs go to the server as events.
-  monitor = new MonitorController(agentLink, {
-    examStudentId: () => joinClient.examStudentId(),
-    sendEvidence: (evidence, onAcked) => session.sendEvidence(evidence, onAcked),
+  // Window switches, sites, launches and screens while the exam runs go to the server as events
+  // with screenshots (requirements §8.5). The app only watches; it never changes the PC.
+  const own = new OwnProcesses();
+  const created = createMonitoring({
+    session: {
+      examStudentId: () => joinClient.examStudentId(),
+      sendEvidence: (evidence) => session.sendEvidence(evidence),
+      setMonitorStatus: (status) => session.setMonitorStatus(status),
+    },
+    own,
   });
-  // An agent link that stays down while the exam runs locks the student (M24).
-  const watch = createTamperLock(agentLink, session);
-  tamper = watch;
-  app.once('will-quit', () => watch.dispose());
-  // The server learns how the agent link looks after each welcome and whenever it changes.
-  session.setAgentStatus(toAgentBlock(agentLink.status()));
-  agentLink.onChange((link) => session.setAgentStatus(toAgentBlock(link)));
+  monitor = created.monitor;
+  monitoring.check = created.check;
+  // After a restart mid-exam there is no join, so the server hears the check from here.
+  if (state.mode === 'student') void created.check();
   registerAnswersIpc({ session, requireStudent });
   // The clipboard is emptied at the start; blocked outside pastes are logged (M25).
   clipboardClear = registerClipboardIpc({ session, requireStudent });
@@ -220,6 +197,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     session,
     examStudentId: () => joinClient.examStudentId(),
     requireStudent,
+    own,
   });
   registerFilesIpc({
     session,
@@ -230,6 +208,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     session,
     examStudentId: () => joinClient.examStudentId(),
     requireStudent,
+    own,
   });
 
   ipcMain.handle(IPC.startSession, () => {
@@ -247,7 +226,7 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     await saveStoredMode(state.userData, request.mode);
     state.mode = resolveMode(state.installType, request.mode);
     if (state.mode === 'teacher') server.start();
-    if (state.mode === 'student') agentLink.start();
+    if (state.mode === 'student') void created.check();
     return toInfo(state);
   });
 
@@ -257,7 +236,6 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
       window.once('closed', () => {
         if (examWindow === window) examWindow = null;
       });
-      announceExamWindow(agentLink, window, process.pid);
     },
   };
 }

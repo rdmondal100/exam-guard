@@ -91,8 +91,8 @@ describe('EvidenceIntake', () => {
     expect(row).toMatchObject({
       type: 'focus_lost',
       severity: 'low',
-      source: 'agent',
-      dedupe_key: 'agent:s1:1',
+      source: 'monitor',
+      dedupe_key: 'monitor:s1:1',
     });
     expect(row?.screenshot_path).toBe(join('screenshots', 'e1', 's1', `${row?.id}.jpg`));
     expect(Array.from(readFileSync(join(dir, row?.screenshot_path ?? '')))).toEqual(
@@ -121,8 +121,8 @@ describe('EvidenceIntake', () => {
       report('s1:21', { type: 'app_launched', details: { exe: 'Discord.exe', pid: 5 } }),
     );
     expect(rows().map((r) => [r.type, r.severity, r.source, r.screenshot_path])).toEqual([
-      ['processes_at_start', 'low', 'agent', null],
-      ['app_launched', 'high', 'agent', null],
+      ['processes_at_start', 'low', 'monitor', null],
+      ['app_launched', 'high', 'monitor', null],
     ]);
     const stored = db.prepare('SELECT details_json FROM events ORDER BY id').all() as {
       details_json: string;

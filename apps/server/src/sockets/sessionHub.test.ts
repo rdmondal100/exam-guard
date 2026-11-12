@@ -12,8 +12,7 @@ const entry = (id: string, connected: boolean): RosterEntry => ({
   riskScore: 0,
   outsideMs: 0,
   lastSeen: null,
-  agentOk: true,
-  internetBlocked: false,
+  monitorOk: true,
   monitors: 1,
 });
 
@@ -69,36 +68,36 @@ describe('SessionHub', () => {
     expect(hub.isConnected('a')).toBe(false);
   });
 
-  it('shows what the student app says about its agent in the roster', () => {
+  it('shows what the student app says about its monitor in the roster', () => {
     const { repo } = fakeRepo();
     const hub = new SessionHub({ students: repo, batchMs: 250 });
     const sent: ServerToTeacher[] = [];
     hub.subscribe({ examId: 'e1', send: (m) => sent.push(m) });
     sent.length = 0;
     const ok = (s: ServerToTeacher[]) =>
-      s.flatMap((m) => (m.t === 'roster' ? m.students : [])).map((e) => e.agentOk);
+      s.flatMap((m) => (m.t === 'roster' ? m.students : [])).map((e) => e.monitorOk);
 
     hub.attach('a', conn(), 4409);
     vi.advanceTimersByTime(250);
     expect(ok(sent)).toEqual([true]);
 
     sent.length = 0;
-    hub.setAgent('a', { ok: true, helper: false, captureOk: true, monitors: 1 });
+    hub.setMonitor('a', { ok: true, captureOk: false, monitors: 1 });
     vi.advanceTimersByTime(250);
     expect(ok(sent)).toEqual([false]);
 
     // The same report again changes nothing, so nothing is pushed.
     sent.length = 0;
-    hub.setAgent('a', { ok: true, helper: false, captureOk: false, monitors: 1 });
+    hub.setMonitor('a', { ok: false, captureOk: false, monitors: 1 });
     vi.advanceTimersByTime(250);
     expect(sent).toHaveLength(0);
 
-    hub.setAgent('a', { ok: true, helper: true, captureOk: true, monitors: 1 });
+    hub.setMonitor('a', { ok: true, captureOk: true, monitors: 1 });
     vi.advanceTimersByTime(250);
     expect(ok(sent)).toEqual([true]);
   });
 
-  it('shows how many screens the agent reports and pushes a change (M26)', () => {
+  it('shows how many screens the app reports and pushes a change (M26)', () => {
     const { repo } = fakeRepo();
     const hub = new SessionHub({ students: repo, batchMs: 250 });
     const sent: ServerToTeacher[] = [];
@@ -109,18 +108,18 @@ describe('SessionHub', () => {
     vi.advanceTimersByTime(250);
     sent.length = 0;
 
-    const good = { ok: true, helper: true, captureOk: true };
-    hub.setAgent('a', { ...good, monitors: 1 });
+    const good = { ok: true, captureOk: true };
+    hub.setMonitor('a', { ...good, monitors: 1 });
     vi.advanceTimersByTime(250);
     expect(screens()).toEqual([1]);
 
     sent.length = 0;
-    hub.setAgent('a', { ...good, monitors: 2 });
+    hub.setMonitor('a', { ...good, monitors: 2 });
     vi.advanceTimersByTime(250);
     expect(screens()).toEqual([2]);
 
     sent.length = 0;
-    hub.setAgent('a', { ...good, monitors: 2 });
+    hub.setMonitor('a', { ...good, monitors: 2 });
     vi.advanceTimersByTime(250);
     expect(sent).toHaveLength(0);
   });

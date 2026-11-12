@@ -6,9 +6,10 @@ out/
 release/
 *.tsbuildinfo
 coverage/
-target/
 # Fetched by `pnpm fetch-toolchains` (MinGW, about 1 GB unpacked)
 apps/desktop/resources/toolchains/
+# Built from resources/SiteReader.cs by apps/desktop/scripts/build-site-reader.mjs
+apps/desktop/resources/SiteReader.exe
 
 # Env and secrets (API keys live in teacher Settings, never in the repo)
 .env

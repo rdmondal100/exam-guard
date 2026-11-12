@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import {
-  agentProblem,
+  monitorProblem,
   isProtocolCompatible,
   type JoinRequest,
   type JoinResponse,
@@ -89,9 +89,9 @@ export class JoinService {
       this.limiter.recordFailure(ip);
       throw new JoinError(403, 'not_on_list', 'That student ID is not on the class list');
     }
-    // The app reports its agent's system check; a student whose monitoring is not healthy cannot join.
-    const agentIssue = agentProblem(request.agent);
-    if (agentIssue) throw new JoinError(403, 'agent_required', agentIssue);
+    // The app reports its monitor check; a student whose monitoring does not work cannot join.
+    const monitorIssue = monitorProblem(request.monitor);
+    if (monitorIssue) throw new JoinError(403, 'monitor_required', monitorIssue);
 
     const now = this.now();
     const existing = students.find(exam.id, onList.id);

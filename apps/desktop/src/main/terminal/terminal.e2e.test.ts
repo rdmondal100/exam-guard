@@ -7,11 +7,10 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import type { TerminalExit } from '@examguard/shared';
 import { resolveToolchain } from '../runner/toolchains.js';
 import { spawnPty } from './pty.js';
-import { TerminalHost } from './terminal-host.js';
-import { prepareTerminal } from './terminal-launch.js';
+import { TerminalHost } from './terminalHost.js';
+import { prepareTerminal } from './terminalLaunch.js';
 
-// Real node-pty (ConPTY), eg-runner (`cargo build -p eg-runner`) and PowerShell. Skipped when
-// eg-runner is missing. Node stands in for Electron-as-Node behind the node shim.
+// Real node-pty (ConPTY) and PowerShell. Node stands in for Electron-as-Node behind the node shim.
 const tools = resolveToolchain({
   isPackaged: false,
   appPath: resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'),
@@ -82,7 +81,7 @@ const run = async (command: string, marker: string) => {
 
 afterEach(() => host?.close());
 
-describe.skipIf(!tools.runner)('exam terminal with node-pty and eg-runner', () => {
+describe.skipIf(process.platform !== 'win32')('exam terminal with node-pty and PowerShell', () => {
   it('runs commands in the workspace', async () => {
     start();
     await run('(Get-Location).Path', 'cwd');

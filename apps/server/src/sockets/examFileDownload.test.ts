@@ -13,7 +13,7 @@ import { buildTeacherApp } from '../app.js';
 
 const TOKEN = 't'.repeat(40);
 const HEADERS = { 'x-teacher-token': TOKEN };
-const PROTOCOL = { major: 1, minor: 0 };
+const PROTOCOL = { major: 2, minor: 0 };
 const CSV = 'a,b\n1,2\n';
 const PNG = Buffer.from([137, 80, 78, 71, 0, 255, 0, 1]);
 
@@ -131,7 +131,7 @@ beforeEach(async () => {
     pin: '004217',
     deviceId: 'device-1-aaaa',
     protocol: PROTOCOL,
-    agent: { ok: true, helper: true, captureOk: true, monitors: 1 },
+    monitor: { ok: true, captureOk: true, monitors: 1 },
   });
   token = (JSON.parse(joined.body.toString()) as { token: string }).token;
   await studentRequest('POST', '/join/confirm', token, { noticeAccepted: true });

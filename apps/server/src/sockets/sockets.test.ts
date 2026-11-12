@@ -14,15 +14,14 @@ import { buildTeacherApp } from '../app.js';
 
 const TOKEN = 't'.repeat(40);
 const HEADERS = { 'x-teacher-token': TOKEN };
-const PROTOCOL = { major: 1, minor: 0 };
+const PROTOCOL = { major: 2, minor: 0 };
 
 interface Entry {
   studentCode: string;
   name: string;
   state: string;
   connected: boolean;
-  agentOk?: boolean;
-  internetBlocked?: boolean;
+  monitorOk?: boolean;
   riskScore?: number;
 }
 interface Msg {
@@ -128,7 +127,7 @@ async function joinStudent(code: string): Promise<string> {
     pin: '004217',
     deviceId: `device-${code}-aaaa`,
     protocol: PROTOCOL,
-    agent: { ok: true, helper: true, captureOk: true, monitors: 1 },
+    monitor: { ok: true, captureOk: true, monitors: 1 },
   });
   const token = joined.token ?? '';
   await post('/join/confirm', { noticeAccepted: true }, token);
@@ -221,7 +220,7 @@ describe('student socket', () => {
   it('refuses another protocol major', async () => {
     const token = await joinStudent('1');
     const c = await studentWs();
-    c.ws.send(hello(token, { major: 2, minor: 0 }));
+    c.ws.send(hello(token, { major: 1, minor: 0 }));
     expect(await c.closed).toBe(4426);
   });
 
@@ -314,9 +313,9 @@ describe('app events', () => {
   });
 });
 
-describe('agent evidence', () => {
+describe('monitor evidence', () => {
   const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 9, 8, 7, 6, 5]);
-  const agentEvent = (id: string, over: object = {}) =>
+  const monitorEvent = (id: string, over: object = {}) =>
     JSON.stringify({
       t: 'event',
       id,
@@ -336,10 +335,10 @@ describe('agent evidence', () => {
     c.ws.send(hello(token));
     await c.waitFor(() => has(c, 'welcome'));
     for (const frame of encodeScreenshotFrames('dev:1', JPEG)) c.ws.send(frame);
-    c.ws.send(agentEvent('dev:1', { screenshotRef: 'dev:1' }));
+    c.ws.send(monitorEvent('dev:1', { screenshotRef: 'dev:1' }));
     await c.waitFor(() => acked(c, 1));
 
-    const listed = (await get(`/exams/${examId}/events?source=agent`)).json() as {
+    const listed = (await get(`/exams/${examId}/events?source=monitor`)).json() as {
       events: {
         id: number;
         type: string;
@@ -367,7 +366,7 @@ describe('agent evidence', () => {
     const c = await studentWs();
     c.ws.send(hello(token));
     await c.waitFor(() => has(c, 'welcome'));
-    c.ws.send(agentEvent('dev:2', { type: 'focus_returned', details: { durationMs: 7000 } }));
+    c.ws.send(monitorEvent('dev:2', { type: 'focus_returned', details: { durationMs: 7000 } }));
     await teacher.waitFor(() =>
       (teacher.messages.at(-1)?.students ?? []).some(
         (s) => s.studentCode === '1' && (s as { outsideMs?: number }).outsideMs === 7000,
@@ -381,7 +380,7 @@ describe('agent evidence', () => {
     const c = await studentWs();
     c.ws.send(hello(token));
     await c.waitFor(() => has(c, 'welcome'));
-    c.ws.send(agentEvent('dev:9'));
+    c.ws.send(monitorEvent('dev:9'));
     await teacher.waitFor(() => has(teacher, 'alert'));
     const alert = last(teacher, 'alert') as unknown as {
       event: { type: string; severity: string; studentCode: string };
@@ -407,6 +406,22 @@ describe('agent evidence', () => {
     expect(entry(teacher, '1')?.riskScore).toBe(before);
   });
 
+  it('rates a site on the high-severity list high even in an unlisted browser', async () => {
+    const token = await joinStudent('1');
+    const c = await studentWs();
+    c.ws.send(hello(token));
+    await c.waitFor(() => has(c, 'welcome'));
+    const details = { exe: 'arc.exe', domain: 'google.com', url: 'https://gemini.google.com/app' };
+    c.ws.send(monitorEvent('dev:4', { details }));
+    c.ws.send(monitorEvent('dev:5', { details: { exe: 'arc.exe', domain: 'wikipedia.org' } }));
+    await c.waitFor(() => acked(c, 2));
+    const listed = (await get(`/exams/${examId}/events?source=monitor`)).json() as {
+      events: { severity: string; details: { domain?: string } }[];
+    };
+    const byDomain = Object.fromEntries(listed.events.map((e) => [e.details.domain, e.severity]));
+    expect(byDomain).toEqual({ 'google.com': 'high', 'wikipedia.org': 'low' });
+  });
+
   it('closes a socket that sends a picture before saying hello', async () => {
     const c = await studentWs();
     for (const frame of encodeScreenshotFrames('dev:3', JPEG)) c.ws.send(frame);
@@ -430,32 +445,31 @@ describe('agent evidence', () => {
   });
 });
 
-describe('agent status', () => {
+describe('monitor status', () => {
   const status = (over: object = {}) =>
     JSON.stringify({
-      t: 'agent.status',
+      t: 'monitor.status',
       ok: true,
-      helper: true,
       captureOk: true,
       monitors: 1,
       ...over,
     });
 
-  it('turns the roster flag off when the app reports a broken agent, and on again', async () => {
+  it('turns the roster flag off when the app reports a broken monitor, and on again', async () => {
     const token = await joinStudent('1');
     const teacher = await teacherWs();
     const c = await studentWs();
     c.ws.send(hello(token));
     await teacher.waitFor(() => entry(teacher, '1')?.connected === true);
-    expect(entry(teacher, '1')?.agentOk).toBe(true);
+    expect(entry(teacher, '1')?.monitorOk).toBe(true);
 
-    c.ws.send(status({ helper: false }));
-    await teacher.waitFor(() => entry(teacher, '1')?.agentOk === false);
+    c.ws.send(status({ captureOk: false }));
+    await teacher.waitFor(() => entry(teacher, '1')?.monitorOk === false);
     c.ws.send(status());
-    await teacher.waitFor(() => entry(teacher, '1')?.agentOk === true);
+    await teacher.waitFor(() => entry(teacher, '1')?.monitorOk === true);
   });
 
-  it('refuses an agent.status before hello and a malformed one', async () => {
+  it('refuses a monitor.status before hello and a malformed one', async () => {
     const early = await studentWs();
     early.ws.send(status());
     expect(await early.closed).toBe(4400);
@@ -463,7 +477,7 @@ describe('agent status', () => {
     const c = await studentWs();
     c.ws.send(hello(token));
     await c.waitFor(() => has(c, 'welcome'));
-    c.ws.send(JSON.stringify({ t: 'agent.status', ok: true }));
+    c.ws.send(JSON.stringify({ t: 'monitor.status', ok: true }));
     expect(await c.closed).toBe(4400);
   });
 });
@@ -637,109 +651,26 @@ describe('starting the exam', () => {
   });
 });
 
-describe('internet switch', () => {
-  const action = (payload: object, id = examId) =>
-    app.inject({
+describe('removed internet switch', () => {
+  it('refuses the internet action and the old status message', async () => {
+    const res = await app.inject({
       method: 'POST',
-      url: `/api/v1/exams/${id}/actions`,
+      url: `/api/v1/exams/${examId}/actions`,
       headers: HEADERS,
-      payload,
+      payload: { type: 'internet', enabled: false },
     });
-  const internetOf = (m: Msg | undefined) =>
-    (m?.state as unknown as { internet?: string } | undefined)?.internet;
-
-  it('pushes the switch, gives late joiners the state and logs the action', async () => {
+    expect(res.statusCode).toBe(400);
     const token = await joinStudent('1');
     const c = await studentWs();
     c.ws.send(hello(token));
     await c.waitFor(() => has(c, 'welcome'));
-    expect(internetOf(last(c, 'welcome'))).toBe('allowed');
-
-    const off = await action({ type: 'internet', enabled: false });
-    expect(off.statusCode).toBe(200);
-    expect(off.json()).toEqual({ ok: true, internet: 'blocked' });
-    await c.waitFor(() => internetOf(last(c, 'state')) === 'blocked');
-
-    const late = await joinStudent('2');
-    const l = await studentWs();
-    l.ws.send(hello(late));
-    await l.waitFor(() => has(l, 'welcome'));
-    expect(internetOf(last(l, 'welcome'))).toBe('blocked');
-
-    const info = await app.inject({
-      method: 'GET',
-      url: `/api/v1/exams/${examId}/hosting`,
-      headers: HEADERS,
-    });
-    expect(info.json()).toMatchObject({ internet: 'blocked' });
-
-    await action({ type: 'internet', enabled: true });
-    await c.waitFor(() => internetOf(last(c, 'state')) === 'allowed');
-    expect(
-      db
-        .prepare(
-          `SELECT action, payload_json FROM teacher_actions WHERE action NOT IN ('host', 'start', 'stop_hosting', 'end_all')`,
-        )
-        .all(),
-    ).toEqual([
-      { action: 'internet', payload_json: '{"enabled":false}' },
-      { action: 'internet', payload_json: '{"enabled":true}' },
-    ]);
-  });
-
-  it('rejects bad bodies, unknown exams and ended exams', async () => {
-    expect((await action({ type: 'internet' })).statusCode).toBe(400);
-    expect((await action({ type: 'internet', enabled: 'no' })).statusCode).toBe(400);
-    expect((await action({ type: 'internet', enabled: false }, 'nope')).statusCode).toBe(404);
-    await app.inject({ method: 'POST', url: `/api/v1/exams/${examId}/start`, headers: HEADERS });
-    await app.inject({ method: 'POST', url: `/api/v1/exams/${examId}/end`, headers: HEADERS });
-    const ended = await action({ type: 'internet', enabled: false });
-    expect(ended.statusCode).toBe(409);
-    expect(ended.json().error.code).toBe('invalid_state');
-  });
-
-  it('shows on the roster which PCs confirmed the block', async () => {
-    const token = await joinStudent('1');
-    const teacher = await teacherWs();
-    const c = await studentWs();
-    c.ws.send(hello(token));
-    await teacher.waitFor(() => entry(teacher, '1')?.connected === true);
-    expect(entry(teacher, '1')?.internetBlocked).toBe(false);
-
+    expect('internet' in (last(c, 'welcome')?.state ?? {})).toBe(false);
     c.ws.send(JSON.stringify({ t: 'internet.status', blocked: true, error: null }));
-    await teacher.waitFor(() => entry(teacher, '1')?.internetBlocked === true);
-    c.ws.send(JSON.stringify({ t: 'internet.status', blocked: false, error: 'not admin' }));
-    await teacher.waitFor(() => entry(teacher, '1')?.internetBlocked === false);
-  });
-
-  it('refuses internet.status before hello', async () => {
-    const early = await studentWs();
-    early.ws.send(JSON.stringify({ t: 'internet.status', blocked: true, error: null }));
-    expect(await early.closed).toBe(4400);
-  });
-
-  it('stores the internet events the app reports', async () => {
-    const token = await joinStudent('1');
-    const c = await studentWs();
-    c.ws.send(hello(token));
-    await c.waitFor(() => has(c, 'welcome'));
-    for (const [id, type] of [
-      ['i1', 'internet_blocked'],
-      ['i2', 'internet_block_failed'],
-      ['i3', 'internet_allowed'],
-    ]) {
-      c.ws.send(JSON.stringify({ t: 'event', id, dedupeKey: id, clientTs: 1, type, details: {} }));
-    }
-    await c.waitFor(() => c.messages.filter((m) => m.t === 'event.ack').length === 3);
-    expect(db.prepare('SELECT type FROM events ORDER BY id').all()).toEqual([
-      { type: 'internet_blocked' },
-      { type: 'internet_block_failed' },
-      { type: 'internet_allowed' },
-    ]);
+    expect(await c.closed).toBe(4400);
   });
 });
 
-describe('tamper lock (M24)', () => {
+describe('teacher lock (M35)', () => {
   const action = (sid: string, payload: object) =>
     app.inject({
       method: 'POST',
@@ -747,12 +678,10 @@ describe('tamper lock (M24)', () => {
       headers: HEADERS,
       payload,
     });
-  const agentLost = (id: string) =>
-    JSON.stringify({ t: 'event', id, dedupeKey: id, clientTs: 1, type: 'agent_lost', details: {} });
   const studentId = () =>
     (db.prepare('SELECT id FROM exam_students ORDER BY id LIMIT 1').get() as { id: string }).id;
 
-  it('locks a working student on agent_lost and lets the teacher unlock them', async () => {
+  it('locks a working student and unlocks them, telling the app why', async () => {
     const token = await joinStudent('1');
     const teacher = await teacherWs();
     const c = await studentWs();
@@ -761,46 +690,30 @@ describe('tamper lock (M24)', () => {
     await app.inject({ method: 'POST', url: `/api/v1/exams/${examId}/start`, headers: HEADERS });
     await c.waitFor(() => last(c, 'state')?.state?.studentState === 'active');
 
-    c.ws.send(agentLost('lost-1'));
-    c.ws.send(agentLost('lost-1'));
+    const locked = await action(studentId(), { type: 'lock' });
+    expect(locked.statusCode).toBe(200);
     await c.waitFor(() => last(c, 'state')?.state?.locked === true);
-    expect(last(c, 'state')?.state?.studentState).toBe('locked');
+    expect(last(c, 'state')?.state).toMatchObject({ lockReason: 'teacher' });
     await teacher.waitFor(() => entry(teacher, '1')?.state === 'locked');
-    await c.waitFor(() => c.messages.filter((m) => m.t === 'event.ack').length === 2);
-    expect(db.prepare('SELECT type, severity, source FROM events').all()).toEqual([
-      { type: 'agent_lost', severity: 'critical', source: 'app' },
-    ]);
-    expect(last(teacher, 'hosting')).toMatchObject({ active: 1 });
 
-    expect(last(c, 'state')?.state).toMatchObject({ lockReason: 'agent' });
     const unlocked = await action(studentId(), { type: 'unlock' });
-    expect(unlocked.statusCode).toBe(200);
     expect(unlocked.json()).toMatchObject({ ok: true, studentState: 'active', delivered: true });
     await c.waitFor(() => last(c, 'state')?.state?.locked === false);
     await teacher.waitFor(() => entry(teacher, '1')?.state === 'active');
-    expect(
-      db
-        .prepare(
-          `SELECT action, exam_student_id FROM teacher_actions WHERE action NOT IN ('host', 'start', 'stop_hosting', 'end_all')`,
-        )
-        .all(),
-    ).toEqual([{ action: 'unlock', exam_student_id: studentId() }]);
 
     const again = await action(studentId(), { type: 'unlock' });
     expect(again.statusCode).toBe(409);
     expect(again.json().error.code).toBe('invalid_state');
   });
 
-  it('stores agent_lost before the start without locking anyone', async () => {
+  it('refuses the removed agent_lost event', async () => {
     const token = await joinStudent('1');
     const c = await studentWs();
     c.ws.send(hello(token));
     await c.waitFor(() => has(c, 'welcome'));
-    c.ws.send(agentLost('lost-early'));
-    await c.waitFor(() => has(c, 'event.ack'));
-    const row = db.prepare('SELECT state FROM exam_students WHERE id = ?').get(studentId());
-    expect(row).toEqual({ state: 'lobby' });
-    expect(has(c, 'state')).toBe(false);
+    const lost = { t: 'event', id: 'x', dedupeKey: 'x', clientTs: 1, type: 'agent_lost' };
+    c.ws.send(JSON.stringify({ ...lost, details: {} }));
+    expect(await c.closed).toBe(4400);
   });
 
   it('refuses to unlock an unknown student', async () => {

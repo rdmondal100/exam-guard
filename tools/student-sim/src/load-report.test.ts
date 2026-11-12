@@ -36,7 +36,7 @@ function metrics(saveMs: number, alertMs: number): SimMetrics {
 
 const counts = {
   events: 3,
-  agentEvents: 3,
+  monitorEvents: 3,
   withScreenshot: 2,
   answerVersions: 10,
   finalAnswers: 2,
@@ -68,7 +68,7 @@ describe('buildReport', () => {
     ).toBe(false);
     expect(buildReport({ ...input, run: fakeRun(), metrics: metrics(1500, 1) }).passed).toBe(false);
     expect(buildReport({ ...input, run: fakeRun(), metrics: metrics(1, 2500) }).passed).toBe(false);
-    const lost = { ...counts, agentEvents: 2 };
+    const lost = { ...counts, monitorEvents: 2 };
     expect(
       buildReport({ ...input, counts: lost, run: fakeRun(), metrics: metrics(1, 1) }).passed,
     ).toBe(false);

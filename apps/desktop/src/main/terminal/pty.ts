@@ -1,10 +1,11 @@
 import { spawn } from 'node-pty';
-import type { PtyProcess, PtySpawn } from './terminal-host.js';
+import type { PtyProcess, PtySpawn } from './terminalHost.js';
 
 /** What a pty needs to start: the terminal's launch and an interactive run both fit it. */
 export interface PtySpec {
   file: string;
-  args: string[];
+  /** Arguments, or one command line already quoted (Windows only). */
+  args: string[] | string;
   cwd: string;
   env: Record<string, string>;
 }
@@ -26,6 +27,7 @@ export const spawnPtyProcess: PtyOpen = (launch, size) => {
     useConptyDll: true,
   });
   return {
+    pid: pty.pid,
     onData: (listener) => void pty.onData(listener),
     onExit: (listener) => void pty.onExit((e) => listener(e.exitCode)),
     write: (data) => pty.write(data),

@@ -1,5 +1,5 @@
-// Draws the ExamGuard icon (a shield with a check mark) and writes apps/desktop/build/icon.ico
-// (256 px PNG + 48/32/16 px bitmaps, the formats Windows and NSIS read) and build/icon.png.
+// Draws the ExamGuard icon (a shield with a check mark) and writes apps/desktop/resources/icon.ico
+// (256 px PNG + 48/32/16 px bitmaps, the formats Windows and NSIS read) and resources/icon.png.
 // No dependencies: pixels are computed here with 4×4 supersampling. Run: node scripts/make-icon.mjs
 /* global Buffer, console */
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
-const out = join(repo, 'apps/desktop/build');
+const out = join(repo, 'apps/desktop/resources');
 
 // Shapes in a 0..1 square.
 const TOP = 0.08;

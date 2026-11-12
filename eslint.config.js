@@ -10,7 +10,6 @@ export default tseslint.config(
       '**/out/**',
       '**/coverage/**',
       'release/**',
-      'agent/**',
       // Fetched third-party toolchains (pnpm fetch-toolchains): npm's own sources live here.
       'apps/desktop/resources/toolchains/**',
     ],

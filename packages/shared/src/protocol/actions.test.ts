@@ -17,34 +17,15 @@ describe('ExamActionSchema', () => {
     { type: 'terminal', enabled: true, minutes: 0 },
     { type: 'terminal', enabled: true, minutes: 1.5 },
     { type: 'terminal', enabled: true, minutes: 601 },
-    { type: 'internet' },
-    { type: 'internet', enabled: 'no' },
+    // The internet switch was removed with the agent: students' internet is never changed.
+    { type: 'internet', enabled: false },
   ])('rejects %j', (action) => {
     expect(ExamActionSchema.safeParse(action).success).toBe(false);
   });
-});
 
-describe('internet messages', () => {
-  it('accepts the internet action on and off', () => {
-    expect(ExamActionSchema.safeParse({ type: 'internet', enabled: true }).success).toBe(true);
-    expect(ExamActionSchema.safeParse({ type: 'internet', enabled: false }).success).toBe(true);
-  });
-
-  it('accepts the status a student sends and refuses a malformed one', () => {
-    const ok = { t: 'internet.status', blocked: true, error: null };
-    expect(StudentMessageSchema.safeParse(ok).success).toBe(true);
-    expect(StudentMessageSchema.safeParse({ ...ok, error: 'denied' }).success).toBe(true);
-    expect(StudentMessageSchema.safeParse({ t: 'internet.status', blocked: true }).success).toBe(
-      false,
-    );
-    expect(StudentMessageSchema.safeParse({ ...ok, blocked: 'yes' }).success).toBe(false);
-  });
-
-  it('accepts the internet events the app reports', () => {
-    for (const type of ['internet_blocked', 'internet_allowed', 'internet_block_failed']) {
-      const event = { t: 'event', id: 'e', dedupeKey: 'e', clientTs: 1, type, details: {} };
-      expect(StudentMessageSchema.safeParse(event).success).toBe(true);
-    }
+  it('refuses the old internet status message', () => {
+    const old = { t: 'internet.status', blocked: true, error: null };
+    expect(StudentMessageSchema.safeParse(old).success).toBe(false);
   });
 });
 
@@ -106,7 +87,7 @@ describe('student actions (M35)', () => {
     expect(StudentMessageSchema.safeParse({ t: 'ack', id: 'm' }).success).toBe(true);
   });
 
-  it('agent_lost is an app event', () => {
+  it('agent_lost is no longer an app event', () => {
     const event = {
       t: 'event',
       id: 'e',
@@ -115,7 +96,7 @@ describe('student actions (M35)', () => {
       type: 'agent_lost',
       details: {},
     };
-    expect(StudentMessageSchema.safeParse(event).success).toBe(true);
+    expect(StudentMessageSchema.safeParse(event).success).toBe(false);
   });
 });
 

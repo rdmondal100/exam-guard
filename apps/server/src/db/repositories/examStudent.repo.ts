@@ -133,7 +133,7 @@ export class ExamStudentRepo {
     return ids;
   }
 
-  /** `active` → `locked`, by the agent link loss (M24) or the teacher (M35). Returns whether the row changed. */
+  /** `active` → `locked` by the teacher (M35). Returns whether the row changed. */
   lock(id: string, reason: LockReason): boolean {
     return (
       this.db
@@ -307,8 +307,7 @@ const toEntry = (row: RosterRow): RosterEntry => ({
   riskScore: row.risk_score,
   outsideMs: row.outside_ms_total,
   lastSeen: row.last_seen_at,
-  // The hub replaces this with what the student's app last reported (`agent.status`, M21).
-  agentOk: true,
-  internetBlocked: false,
+  // The hub replaces this with what the student's app last reported (`monitor.status`).
+  monitorOk: true,
   monitors: 1,
 });

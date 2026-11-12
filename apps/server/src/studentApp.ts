@@ -41,7 +41,6 @@ export interface StudentAppDeps {
     | 'sessionState'
     | 'submissions'
     | 'evidence'
-    | 'onAgentLost'
     | 'thumbs'
     | 'liveViews'
     | 'messages'

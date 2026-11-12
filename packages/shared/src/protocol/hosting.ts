@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ProtocolVersionSchema } from './protocol-version.js';
-import { InternetStateSchema, TerminalStateSchema } from './actions.js';
+import { TerminalStateSchema } from './actions.js';
 
 /** Student listener port (docs/architecture.md §2). */
 export const STUDENT_API_PORT = 47820;
@@ -14,7 +14,6 @@ export const HostingInfoSchema = z.object({
   terminal: TerminalStateSchema,
   /** An "on for N minutes" window that starts counting at Start. */
   terminalPendingMinutes: z.number().int().nullable(),
-  internet: InternetStateSchema,
   /** The exam's shared end (server time, extra time for all included); `null` before Start (M36). */
   deadline: z.number().nullable(),
   /** Extra time everyone got, minutes (M36). */

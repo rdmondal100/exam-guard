@@ -22,17 +22,6 @@ export const TerminalActionSchema = z.object({
 });
 export type TerminalAction = z.infer<typeof TerminalActionSchema>;
 
-/** Whether students' PCs may reach the internet (server-authoritative). The teacher PC stays reachable. */
-export const InternetStateSchema = z.enum(['allowed', 'blocked']);
-export type InternetState = z.infer<typeof InternetStateSchema>;
-
-export const InternetActionSchema = z.object({
-  type: z.literal('internet'),
-  /** `true` lets students reach the internet, `false` blocks it. */
-  enabled: z.boolean(),
-});
-export type InternetAction = z.infer<typeof InternetActionSchema>;
-
 /** Longest teacher message or warning, in characters. */
 export const MAX_TEACHER_MESSAGE = 500;
 /** Most minutes one extension adds. */
@@ -59,7 +48,6 @@ export type BroadcastAction = z.infer<typeof BroadcastActionSchema>;
 /** `POST /exams/:id/actions`: the exam-wide switches and the global actions (M36). */
 export const ExamActionSchema = z.discriminatedUnion('type', [
   TerminalActionSchema,
-  InternetActionSchema,
   ExtendAllActionSchema,
   BroadcastActionSchema,
 ]);
@@ -85,8 +73,8 @@ export const BroadcastResultSchema = z.object({
 });
 export type BroadcastResult = z.infer<typeof BroadcastResultSchema>;
 
-/** Why a student is locked: their agent link was lost (M24) or the teacher locked them (M35). */
-export const LockReasonSchema = z.enum(['agent', 'teacher']);
+/** Why a student is locked: only the teacher locks a student (M35). */
+export const LockReasonSchema = z.enum(['teacher']);
 export type LockReason = z.infer<typeof LockReasonSchema>;
 
 /**
@@ -127,13 +115,6 @@ export const TerminalActionResultSchema = z.object({
   pendingMinutes: z.number().int().nullable(),
 });
 export type TerminalActionResult = z.infer<typeof TerminalActionResultSchema>;
-
-/** Reply to an `internet` action. */
-export const InternetActionResultSchema = z.object({
-  ok: z.literal(true),
-  internet: InternetStateSchema,
-});
-export type InternetActionResult = z.infer<typeof InternetActionResultSchema>;
 
 export const TerminalLogEventSchema = z.object({
   id: z.number().int(),

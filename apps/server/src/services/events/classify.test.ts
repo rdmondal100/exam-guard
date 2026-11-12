@@ -21,6 +21,26 @@ describe('classifyEvent: leaving the exam', () => {
     expect(rate('focus_lost', { exe: 5 }, { highSeverityApps: ['5'] })).toBe('low');
   });
 
+  it('rates a listed site high in any browser, with its subdomains, and a private window high', () => {
+    const noBrowsers = { highSeverityApps: ['chatgpt.com', 'gemini.google.com'] };
+    const site = (url: string, domain: string) => ({ exe: 'chrome.exe', url, domain });
+    expect(rate('focus_lost', site('https://chatgpt.com/c/1', 'chatgpt.com'), noBrowsers)).toBe(
+      'high',
+    );
+    expect(
+      rate('focus_lost', site('https://gemini.google.com/app', 'google.com'), noBrowsers),
+    ).toBe('high');
+    // The registrable domain alone is not enough when only a subdomain is listed.
+    expect(rate('focus_lost', site('https://www.google.com/', 'google.com'), noBrowsers)).toBe(
+      'low',
+    );
+    expect(rate('title_changed', { exe: 'arc.exe', domain: 'chatgpt.com' }, noBrowsers)).toBe(
+      'high',
+    );
+    expect(rate('focus_lost', { exe: 'chrome.exe', url: 'not a url' }, noBrowsers)).toBe('low');
+    expect(rate('focus_lost', { exe: 'msedge.exe', privateWindow: true }, noBrowsers)).toBe('high');
+  });
+
   it('rates the return by how long the student was away', () => {
     expect(rate('focus_returned', { durationMs: SHORT_SWITCH_MS - 1 })).toBe('low');
     expect(rate('focus_returned', { durationMs: SHORT_SWITCH_MS })).toBe('medium');
@@ -66,17 +86,11 @@ describe('classifyEvent: other evidence', () => {
   });
 
   it('rates the fixed types from requirements §8.6', () => {
-    for (const type of [
-      'taskmgr_opened',
-      'secure_desktop',
-      'app_relaunched',
-      'paste_blocked',
-      'network_lost',
-    ]) {
+    for (const type of ['taskmgr_opened', 'secure_desktop', 'paste_blocked', 'network_lost']) {
       expect(rate(type), type).toBe('medium');
     }
     expect(rate('large_insertion', { chars: 300 })).toBe('high');
-    expect(rate('agent_lost')).toBe('critical');
+    expect(rate('agent_lost'), 'removed with the agent').toBe('low');
     expect(rate('duplicate_login')).toBe('critical');
     for (const type of [
       'run_executed',

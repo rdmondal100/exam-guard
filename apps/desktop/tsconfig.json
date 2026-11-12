@@ -9,7 +9,7 @@
     "declaration": false,
     "declarationMap": false,
     "types": ["node"],
-    "paths": { "@/*": ["./src/renderer/*"] }
+    "paths": { "@/*": ["./src/renderer/src/*"] }
   },
   "include": ["src", "electron.vite.config.ts", "electron-builder.config.ts", "vitest.config.ts"]
 }

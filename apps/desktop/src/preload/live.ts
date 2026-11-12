@@ -6,7 +6,7 @@
 // validates every message with `LivePageMessageSchema`, and what main sends was validated on its
 // way in (`ServerToStudentSchema`). The channel names equal `IPC.live*` (checked by a test).
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
-import type { ExamGuardLiveApi } from './live-api.js';
+import type { ExamGuardLiveApi } from './liveApi.js';
 
 const CHANNELS = { start: 'live:start', signal: 'live:signal', page: 'live:page' } as const;
 

@@ -5,8 +5,8 @@ export const RISK_POINTS: Record<Severity, number> = { low: 1, medium: 3, high: 
 
 /**
  * Events that say nothing about cheating and add no risk: the student's own work (runs, terminal,
- * packages), the teacher's internet switch, the network coming back and the start snapshot (a
- * high-severity program running at the start shows up through its own switches).
+ * packages), the network coming back and the start snapshot (a high-severity program running at
+ * the start shows up through its own switches).
  */
 const NEUTRAL_TYPES = new Set([
   'run_executed',
@@ -14,9 +14,6 @@ const NEUTRAL_TYPES = new Set([
   'terminal_closed',
   'terminal_command',
   'package_installed',
-  'internet_blocked',
-  'internet_allowed',
-  'internet_block_failed',
   'network_restored',
   'processes_at_start',
 ]);

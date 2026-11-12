@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDatabase } from './connectDb.js';
 import { databasePath, initDatabase } from './connectDb.js';
@@ -22,7 +23,7 @@ describe('initDatabase', () => {
     expect(existsSync(databasePath(dir))).toBe(true);
     expect(db.pragma('journal_mode', { simple: true })).toBe('wal');
     expect(db.pragma('foreign_keys', { simple: true })).toBe(1);
-    expect(db.pragma('user_version', { simple: true })).toBe(15);
+    expect(db.pragma('user_version', { simple: true })).toBe(16);
     const tables = db
       .prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
@@ -57,7 +58,7 @@ describe('initDatabase', () => {
     new SettingsRepo(first).set('a', 1);
     first.close();
     const second = initDatabase(dir);
-    expect(second.pragma('user_version', { simple: true })).toBe(15);
+    expect(second.pragma('user_version', { simple: true })).toBe(16);
     expect(new SettingsRepo(second).get('a')).toBe(1);
     second.close();
   });
@@ -81,6 +82,48 @@ describe('migrate', () => {
     expect(db.pragma('user_version', { simple: true })).toBe(1);
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all();
     expect(tables).toEqual([{ name: 'a' }]);
+    db.close();
+  });
+});
+
+describe('0016: the monitor moved into the student app', () => {
+  it('keeps old agent evidence as monitor evidence and drops the internet switch', () => {
+    const all = loadMigrations(fileURLToPath(new URL('./migrations', import.meta.url)));
+    const db = openDatabase(join(dir, 'old.sqlite'));
+    migrate(
+      db,
+      all.filter((m) => m.version <= 15),
+    );
+    db.prepare(
+      `INSERT INTO exams (id, title, duration_sec, monitoring_json, created_at, updated_at, internet_blocked)
+         VALUES ('e1', 'Mid', 3600, '{}', 1, 1, 1)`,
+    ).run();
+    const event = db.prepare(
+      `INSERT INTO events (exam_id, type, severity, server_ts, source, dedupe_key, screenshot_path)
+         VALUES ('e1', ?, 'high', 5, ?, ?, ?)`,
+    );
+    event.run('focus_lost', 'agent', 'agent:s1:1', 'screenshots/e1/s1/1.jpg');
+    event.run('run_executed', 'app', 'app:x', null);
+
+    expect(migrate(db, all)).toBe(16);
+    expect(
+      db.prepare('SELECT id, type, source, dedupe_key, screenshot_path FROM events').all(),
+    ).toEqual([
+      {
+        id: 1,
+        type: 'focus_lost',
+        source: 'monitor',
+        dedupe_key: 'agent:s1:1',
+        screenshot_path: 'screenshots/e1/s1/1.jpg',
+      },
+      { id: 2, type: 'run_executed', source: 'app', dedupe_key: 'app:x', screenshot_path: null },
+    ]);
+    const columns = db.prepare('PRAGMA table_info(exams)').all() as { name: string }[];
+    expect(columns.map((c) => c.name)).not.toContain('internet_blocked');
+    // New rows keep counting after the old ids, and 'agent' is no longer a valid source.
+    event.run('focus_lost', 'monitor', 'monitor:s1:2', null);
+    expect(db.prepare('SELECT MAX(id) AS id FROM events').get()).toEqual({ id: 3 });
+    expect(() => event.run('focus_lost', 'agent', 'agent:s1:3', null)).toThrow(/CHECK/);
     db.close();
   });
 });

@@ -13,7 +13,7 @@ import { buildTeacherApp } from '../app.js';
 
 const TOKEN = 't'.repeat(40);
 const HEADERS = { 'x-teacher-token': TOKEN };
-const PROTOCOL = { major: 1, minor: 0 };
+const PROTOCOL = { major: 2, minor: 0 };
 
 interface Msg {
   t: string;
@@ -143,7 +143,7 @@ async function joinStudent(code: string): Promise<string> {
     pin: '004217',
     deviceId: `device-${code}-aaaa`,
     protocol: PROTOCOL,
-    agent: { ok: true, helper: true, captureOk: true, monitors: 1 },
+    monitor: { ok: true, captureOk: true, monitors: 1 },
   });
   const token = joined.token ?? '';
   await post('/join/confirm', { noticeAccepted: true }, token);

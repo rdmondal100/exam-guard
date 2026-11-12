@@ -9,11 +9,11 @@ export class LoadStatsRepo {
     const events = this.db
       .prepare(
         `SELECT COUNT(*) AS events,
-           COALESCE(SUM(source = 'agent'), 0) AS agentEvents,
+           COALESCE(SUM(source = 'monitor'), 0) AS monitorEvents,
            COALESCE(SUM(screenshot_path IS NOT NULL), 0) AS withScreenshot
          FROM events WHERE exam_id = ?`,
       )
-      .get(examId) as { events: number; agentEvents: number; withScreenshot: number };
+      .get(examId) as { events: number; monitorEvents: number; withScreenshot: number };
     const versions = this.db
       .prepare(
         `SELECT COUNT(*) AS n FROM answer_versions v

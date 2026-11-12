@@ -29,7 +29,7 @@ export interface EventFilter {
   /** This severity and above (M31). */
   minSeverity?: Severity;
   source?: NewEvent['source'];
-  /** `monitoring`: the agent's evidence plus the app events the teacher must see (M25). */
+  /** `monitoring`: the monitor's evidence plus the app events the teacher must see (M25). */
   view?: EventView;
   /** Only events with an id above this one (the list's last seen id). */
   after?: number;
@@ -126,7 +126,7 @@ export class EventRepo {
     }
     if (filter.view === 'monitoring') {
       const types = MONITORING_EVENT_TYPES.map(() => '?').join(', ');
-      where.push(`(e.source = 'agent' OR e.type IN (${types}))`);
+      where.push(`(e.source = 'monitor' OR e.type IN (${types}))`);
       args.push(...MONITORING_EVENT_TYPES);
     }
     if (filter.after !== undefined) {

@@ -41,7 +41,6 @@ import { generatePin } from '../../utils/pin.js';
 import { HostingError } from './hosting-error.js';
 import { DeadlineWatcher } from './deadline-watcher.js';
 import { GlobalActions } from './global-actions.js';
-import { InternetSwitch } from './internet-switch.js';
 import { StudentActions } from './student-actions.js';
 import { StudentLock } from './student-lock.js';
 import { TeacherMessages } from './teacher-messages.js';
@@ -110,9 +109,7 @@ export class HostingManager {
   private readonly now: () => number;
   /** The teacher's exam terminal switch. */
   readonly terminal: TerminalSwitch;
-  /** The teacher's internet switch. */
-  readonly internet: InternetSwitch;
-  /** The tamper lock (M24) and the teacher's lock and unlock (M35). */
+  /** The teacher's lock and unlock (M35). */
   readonly locks: StudentLock;
   /** Teacher messages and warnings, re-sent until the student's app shows them (M35). */
   readonly messages: TeacherMessages;
@@ -129,12 +126,6 @@ export class HostingManager {
       actions: deps.actions,
       hub: deps.hub,
       examState: (id) => deps.exams.get(id)?.state,
-      now: this.now,
-    });
-    this.internet = new InternetSwitch({
-      exams: deps.exams,
-      actions: deps.actions,
-      hub: deps.hub,
       now: this.now,
     });
     this.locks = new StudentLock({
@@ -190,7 +181,6 @@ export class HostingManager {
     }
     const pin = (this.deps.makePin ?? generatePin)();
     const opened = await this.open(exam.id, pin);
-    this.internet.reset(exam.id);
     exams.startHosting(exam.id, pin, this.now(), this.deps.settings?.().runLimits ?? null);
     this.audit(exam.id, 'host', {});
     return this.describe(opened);
@@ -276,11 +266,10 @@ export class HostingManager {
       questions: running ? questions.list(student.examId).map(toStudentQuestion) : undefined,
       saved: this.deps.answers.savedFor(studentId),
       locked: state === 'locked',
-      lockReason: state === 'locked' ? (student.lockReason ?? 'agent') : null,
+      lockReason: state === 'locked' ? 'teacher' : null,
       monitoring: running,
       ...(running && exam ? { monitoringPolicy: monitorPolicyFor(exam.monitoring) } : {}),
       terminal: this.terminal.state(student.examId),
-      internet: this.internet.state(student.examId),
       filesEnabled: exam?.filesEnabled ?? true,
       runLimits: exams.runLimits(student.examId),
       examFiles: exam?.filesEnabled ? this.deps.examFiles.list(student.examId) : [],
@@ -361,7 +350,6 @@ export class HostingManager {
           onDropped: createDropLogger((line) => console.warn(line), this.now),
         },
         sessionState: (id) => this.sessionState(id),
-        onAgentLost: (id) => this.locks.agentLost(id),
         submissions: this.deps.submissions,
         evidence: new EvidenceIntake({
           recorder: this.deps.recorder,
@@ -418,7 +406,6 @@ export class HostingManager {
       fpCode: active.fpCode,
       terminal: this.terminal.state(active.examId),
       terminalPendingMinutes: this.terminal.pendingMinutes(active.examId),
-      internet: this.internet.state(active.examId),
       ...this.globalActions.timing(active.examId),
     };
   }

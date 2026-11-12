@@ -1,7 +1,7 @@
 // electron-builder settings for the one Windows installer (M45-M46). scripts/package-desktop.mjs
 // packs a `pnpm deploy` copy of this app, so every outside path is passed in as an absolute path.
 // Node runs this file with its built-in type stripping, so it uses type-only imports and no enums.
-// Install type, agent service, firewall and uninstall steps: build/installer.nsh.
+// Install type, firewall and uninstall steps: resources/installer.nsh.
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AfterPackContext, Configuration } from 'electron-builder';
@@ -14,16 +14,15 @@ export interface BuilderPaths {
   electronDist: string;
 }
 
-/** Files the app expects next to its resources (main/agent/agent-exe.ts, runner/toolchains.ts). */
+/** Files the app expects next to its resources (main/utils/paths.ts, main/runner/toolchains.ts). */
 export const PACKED_RESOURCES = {
-  agent: 'eg-agent.exe',
-  runner: 'eg-runner.exe',
+  siteReader: 'SiteReader.exe',
   toolchains: 'toolchains',
 } as const;
 
 export function builderConfig(p: BuilderPaths): Configuration {
   // Drawn by scripts/make-icon.mjs: the exe, the window, the shortcuts and the installer.
-  const icon = join(p.desktop, 'build/icon.ico');
+  const icon = join(p.desktop, 'resources/icon.ico');
   return {
     appId: 'ai.examguard.desktop',
     productName: 'ExamGuard',
@@ -32,11 +31,11 @@ export function builderConfig(p: BuilderPaths): Configuration {
     copyright: 'ExamGuard AI',
     electronVersion: p.electronVersion,
     electronDist: p.electronDist,
-    // better-sqlite3 and node-pty ship N-API prebuilds that load in Electron as they are.
+    // better-sqlite3, node-pty and get-windows ship N-API binaries that load in Electron as they are.
     npmRebuild: false,
     nodeGypRebuild: false,
     buildDependenciesFromSource: false,
-    directories: { output: p.output, buildResources: join(p.desktop, 'build') },
+    directories: { output: p.output, buildResources: join(p.desktop, 'resources') },
     files: [
       'out/**/*',
       'package.json',
@@ -44,15 +43,24 @@ export function builderConfig(p: BuilderPaths): Configuration {
       '!**/*.pdb',
       '!**/node_modules/{node-pty,better-sqlite3}/{src,deps,third_party,scripts,typings,binding.gyp}',
       '!**/node_modules/{node-pty,better-sqlite3}/{src,deps,third_party,scripts,typings}/**',
+      '!**/node_modules/get-windows/{Sources,binding.gyp}',
+      '!**/node_modules/get-windows/Sources/**',
+      '!**/node_modules/get-windows/lib/binding/*darwin*/**',
       '!**/node_modules/**/prebuilds/{darwin,linux,linuxmusl,android,win32-arm64,win32-ia32}*',
       '!**/node_modules/**/prebuilds/{darwin,linux,linuxmusl,android,win32-arm64,win32-ia32}*/**',
     ],
     asar: true,
-    // Native code: node-pty's conpty.dll and OpenConsole.exe are started from disk (architecture §4).
-    asarUnpack: ['**/node_modules/node-pty/**', '**/node_modules/better-sqlite3/**'],
+    // Native code: node-pty's conpty.dll and OpenConsole.exe are started from disk (architecture §4),
+    // and get-windows' binary is found by path (node-pre-gyp).
+    asarUnpack: [
+      '**/node_modules/node-pty/**',
+      '**/node_modules/better-sqlite3/**',
+      '**/node_modules/get-windows/**',
+    ],
     extraResources: [
-      { from: join(p.repo, 'target/release/eg-agent.exe'), to: PACKED_RESOURCES.agent },
-      { from: join(p.repo, 'target/release/eg-runner.exe'), to: PACKED_RESOURCES.runner },
+      // Reads the address bar of Chrome and Edge (main/tracking/site.ts); built by
+      // scripts/build-site-reader.mjs with the C# compiler that ships with Windows.
+      { from: join(p.desktop, 'resources/SiteReader.exe'), to: PACKED_RESOURCES.siteReader },
       {
         from: join(p.desktop, 'resources/toolchains'),
         to: PACKED_RESOURCES.toolchains,
@@ -61,7 +69,7 @@ export function builderConfig(p: BuilderPaths): Configuration {
       },
     ],
     electronFuses: {
-      // eg-runner runs student JavaScript with ELECTRON_RUN_AS_NODE (decisions.md, 2026-10-17).
+      // Student JavaScript runs on the app's own Electron as Node (decisions.md, 2026-10-17).
       runAsNode: true,
       enableCookieEncryption: true,
       enableNodeOptionsEnvironmentVariable: false,
@@ -84,7 +92,7 @@ export function builderConfig(p: BuilderPaths): Configuration {
       perMachine: true,
       allowElevation: true,
       allowToChangeInstallationDirectory: true,
-      include: join(p.desktop, 'build/installer.nsh'),
+      include: join(p.desktop, 'resources/installer.nsh'),
       installerIcon: icon,
       uninstallerIcon: icon,
       installerHeaderIcon: icon,

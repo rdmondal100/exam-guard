@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import type { QuestionLanguage } from '@examguard/shared';
-import { GCC_SPECS, GCC_SPECS_FILE } from './gcc-specs.js';
-import { JS_STDIN, JS_STDIN_FILE } from './js-stdin.js';
+import { GCC_SPECS, GCC_SPECS_FILE } from './gccSpecs.js';
+import { JS_STDIN, JS_STDIN_FILE } from './jsStdin.js';
 
 /** Where the tools live for one run (see `toolchains.ts`). */
 export interface ToolPaths {
@@ -29,6 +29,8 @@ export interface LanguageConfig {
   /** `flags` are the student's own, already split: Node flags for JavaScript. */
   run: (tools: ToolPaths, dir: string, flags: string[]) => string[];
   env?: Record<string, string>;
+  /** The program is a GUI executable (Electron as Node): cmd.exe hosts it in the console. */
+  cmdHost?: boolean;
   /** Why this language cannot run on this computer, or `null` if it can. */
   unavailable?: (tools: ToolPaths) => string | null;
 }
@@ -78,6 +80,7 @@ export const LANGUAGES: Record<QuestionLanguage, LanguageConfig> = {
       join(dir, 'main.js'),
     ],
     env: { ELECTRON_RUN_AS_NODE: '1' },
+    cmdHost: true,
   },
   py: {
     id: 'py',

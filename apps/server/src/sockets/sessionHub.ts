@@ -1,6 +1,6 @@
 import {
-  agentProblem,
-  type AgentStatus,
+  monitorProblem,
+  type MonitorStatus,
   type RosterEntry,
   type ServerToStudent,
   type ServerToTeacher,
@@ -37,13 +37,11 @@ export class SessionHub {
   private readonly conns = new Map<string, StudentConn>();
   private readonly subs = new Set<TeacherSub>();
   private readonly dirty = new Set<string>();
-  /** Whether each student's monitoring agent was healthy at their last report. Not stored: a
-   * restarted server hears it again from each student's welcome. */
-  private readonly agentOk = new Map<string, boolean>();
-  /** How many screens each student's agent reported last (M26). */
+  /** Whether each student's monitor check passed at their last report. Not stored: a restarted
+   * server hears it again after each student's welcome. */
+  private readonly monitorOk = new Map<string, boolean>();
+  /** How many screens each student's app reported last (M26). */
   private readonly monitors = new Map<string, number>();
-  /** Whether each student's PC confirmed a blocked internet (`internet.status`, M21b). */
-  private readonly internetBlocked = new Map<string, boolean>();
   private timer: NodeJS.Timeout | null = null;
   private disposed = false;
   private readonly now: () => number;
@@ -74,27 +72,19 @@ export class SessionHub {
     this.changed(id);
   }
 
-  /** What the student's app says about its agent (`agent.status`); the roster shows it. */
-  setAgent(id: string, status: AgentStatus): void {
-    const ok = agentProblem(status) === null;
-    if (this.agentOk.get(id) === ok && this.monitors.get(id) === status.monitors) return;
-    this.agentOk.set(id, ok);
+  /** What the student's app says about its monitor (`monitor.status`); the roster shows it. */
+  setMonitor(id: string, status: MonitorStatus): void {
+    const ok = monitorProblem(status) === null;
+    if (this.monitorOk.get(id) === ok && this.monitors.get(id) === status.monitors) return;
+    this.monitorOk.set(id, ok);
     this.monitors.set(id, status.monitors);
     this.changed(id);
   }
 
-  /** What the student's app says about its internet block (`internet.status`). */
-  setInternet(id: string, blocked: boolean): void {
-    if ((this.internetBlocked.get(id) ?? false) === blocked) return;
-    this.internetBlocked.set(id, blocked);
-    this.changed(id);
-  }
-
-  private withAgent(entry: RosterEntry): RosterEntry {
+  private withMonitor(entry: RosterEntry): RosterEntry {
     return {
       ...entry,
-      agentOk: this.agentOk.get(entry.id) ?? true,
-      internetBlocked: this.internetBlocked.get(entry.id) ?? false,
+      monitorOk: this.monitorOk.get(entry.id) ?? true,
       monitors: this.monitors.get(entry.id) ?? 1,
     };
   }
@@ -134,7 +124,10 @@ export class SessionHub {
   subscribe(sub: TeacherSub): () => void {
     this.subs.add(sub);
     const { students } = this.deps;
-    sub.send({ t: 'roster', students: students.roster(sub.examId).map((e) => this.withAgent(e)) });
+    sub.send({
+      t: 'roster',
+      students: students.roster(sub.examId).map((e) => this.withMonitor(e)),
+    });
     sub.send({ t: 'hosting', ...students.counts(sub.examId) });
     return () => {
       this.subs.delete(sub);
@@ -185,7 +178,7 @@ export class SessionHub {
     for (const [examId, rows] of changed) {
       const targets = [...this.subs].filter((s) => s.examId === examId);
       if (targets.length === 0) continue;
-      const students = rows.flatMap((r) => (r ? [this.withAgent(r.entry)] : []));
+      const students = rows.flatMap((r) => (r ? [this.withMonitor(r.entry)] : []));
       const counts = this.deps.students.counts(examId);
       for (const sub of targets) {
         sub.send({ t: 'roster', students });

@@ -42,7 +42,7 @@ afterEach(async () => {
 describe('settings (M43)', () => {
   it('starts with the defaults and keeps a change across a restart', async () => {
     expect((await call('GET', '/settings')).json()).toEqual(DEFAULT_SETTINGS);
-    const runLimits: RunLimits = { timeMs: 30_000, memoryMb: 512, outputBytes: 8192, processes: 4 };
+    const runLimits: RunLimits = { timeMs: 30_000, outputBytes: 8192 };
     const res = await call('PATCH', '/settings', {
       runLimits,
       ai: { provider: 'gemini', model: 'gemini-2.5-pro' },
@@ -131,7 +131,7 @@ describe('run limits reach students at the next exam (M43)', () => {
   });
 
   it('the welcome carries the limits fixed when hosting started', async () => {
-    const limits: RunLimits = { timeMs: 20_000, memoryMb: 128, outputBytes: 16384, processes: 2 };
+    const limits: RunLimits = { timeMs: 20_000, outputBytes: 16384 };
     live = await startLiveExam(undefined, { runLimits: limits });
     const { peer, token } = await live.student('1');
     expect(peer.last('welcome')?.state).toMatchObject({ runLimits: limits });
@@ -141,7 +141,7 @@ describe('run limits reach students at the next exam (M43)', () => {
       method: 'PATCH',
       url: '/api/v1/settings',
       headers: { 'x-teacher-token': 't'.repeat(40) },
-      payload: { runLimits: { ...limits, memoryMb: 1024 } },
+      payload: { runLimits: { ...limits, timeMs: 40_000 } },
     });
     const again = await live.reconnect(token);
     expect(again.last('welcome')?.state).toMatchObject({ runLimits: limits });
@@ -166,7 +166,7 @@ describe('screenshot retention (M44)', () => {
         examStudentId: 's1',
         type: 'focus_lost',
         severity: 'medium',
-        source: 'agent',
+        source: 'monitor',
         details: {},
         serverTs,
       });

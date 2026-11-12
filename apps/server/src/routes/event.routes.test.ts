@@ -55,7 +55,7 @@ const add = (over: Partial<NewEvent> = {}): number => {
     examStudentId: 's1',
     type: 'focus_lost',
     severity: 'medium',
-    source: 'agent',
+    source: 'monitor',
     details: { exe: 'chrome.exe' },
     serverTs: 100,
     ...over,
@@ -90,18 +90,18 @@ describe('GET /exams/:id/events', () => {
     const c = add({ source: 'app', type: 'run_executed' });
     expect(await ids(`/exams/${examId}/events?studentId=s2`)).toEqual([b]);
     expect(await ids(`/exams/${examId}/events?severity=high`)).toEqual([b]);
-    expect(await ids(`/exams/${examId}/events?source=agent`)).toEqual([b, a]);
+    expect(await ids(`/exams/${examId}/events?source=monitor`)).toEqual([b, a]);
     expect(await ids(`/exams/${examId}/events?after=${a}`)).toEqual([c, b]);
     expect(await ids(`/exams/${examId}/events?limit=1`)).toEqual([c]);
   });
 
-  it('the monitoring view has the agent evidence and the app events the teacher must see (M25)', async () => {
+  it('the monitoring view has the monitor evidence and the app events the teacher must see (M25)', async () => {
     const focus = add();
     add({ source: 'app', type: 'run_executed' });
-    const lost = add({ source: 'app', type: 'agent_lost', severity: 'critical' });
+    const insertion = add({ source: 'app', type: 'large_insertion', severity: 'high' });
     const paste = add({ source: 'app', type: 'paste_blocked', details: { chars: 40 } });
     add({ source: 'app', type: 'terminal_command' });
-    expect(await ids(`/exams/${examId}/events?view=monitoring`)).toEqual([paste, lost, focus]);
+    expect(await ids(`/exams/${examId}/events?view=monitoring`)).toEqual([paste, insertion, focus]);
     expect((await get(`/exams/${examId}/events?view=everything`)).statusCode).toBe(400);
   });
 

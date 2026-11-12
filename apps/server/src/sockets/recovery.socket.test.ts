@@ -142,7 +142,7 @@ describe('server restart mid-exam', () => {
     await again.waitFor(() => again.messages.filter((m) => m.t === 'event.ack').length === 2);
 
     const agent = (sql: string) => count(sql, exam.examId);
-    expect(agent("SELECT COUNT(*) AS n FROM events WHERE exam_id = ? AND source = 'agent'")).toBe(
+    expect(agent("SELECT COUNT(*) AS n FROM events WHERE exam_id = ? AND source = 'monitor'")).toBe(
       2,
     );
     expect(

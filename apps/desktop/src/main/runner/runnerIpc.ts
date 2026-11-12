@@ -1,0 +1,101 @@
+import { app, BrowserWindow, ipcMain } from 'electron';
+import {
+  DEFAULT_RUN_LIMITS,
+  RunInputSchema,
+  RunRequestSchema,
+  RunSizeSchema,
+  type RunResult,
+} from '@examguard/shared';
+import { IPC } from '../../shared/ipcChannels.js';
+import type { SessionClient } from '../session/sessionClient.js';
+import { spawnPtyProcess } from '../terminal/pty.js';
+import { runRefusal } from './checkRun.js';
+import { CodeRunner } from './codeRunner.js';
+import { runRoot } from './runRoot.js';
+import { resolveToolchain } from './toolchains.js';
+import type { OwnProcesses } from '../tracking/ownProcesses.js';
+
+export interface RunnerIpcDeps {
+  session: SessionClient;
+  /** This student's exam row, which names the run folder. */
+  examStudentId: () => string | null;
+  requireStudent: () => void;
+  /** The program's windows count as inside the exam for the monitor. */
+  own: OwnProcesses;
+}
+
+/** Longest flags text in a `run_executed` event (the request schema already caps it). */
+const MAX_LOGGED_FLAGS = 500;
+
+/**
+ * `runner:run` / `runner:stop`, `runner:input|resize` for the program's console and the
+ * `runner:data` push. Every finished run is reported as a `run_executed` event.
+ */
+export function registerRunnerIpc({
+  session,
+  examStudentId,
+  requireStudent,
+  own,
+}: RunnerIpcDeps): void {
+  const runner = new CodeRunner({
+    // Resolved per run, so `pnpm fetch-toolchains` is picked up without a restart.
+    toolchain: () =>
+      resolveToolchain({
+        isPackaged: app.isPackaged,
+        appPath: app.getAppPath(),
+        resourcesPath: process.resourcesPath,
+        execPath: process.execPath,
+        env: process.env,
+      }),
+    workRoot: () => runRoot(process.env.LOCALAPPDATA ?? app.getPath('temp'), examStudentId()),
+    baseEnv: process.env,
+    // The exam's limits, fixed by the teacher's Settings when hosting started (M43).
+    limits: () => session.examState?.runLimits ?? DEFAULT_RUN_LIMITS,
+    openPty: spawnPtyProcess,
+    onProcess: (slot, pid) => own.set(slot, pid),
+    onData: (data) => {
+      for (const win of BrowserWindow.getAllWindows()) win.webContents.send(IPC.runData, data);
+    },
+    onRun: (request, result) =>
+      session.sendEvent('run_executed', {
+        questionId: request.questionId,
+        language: request.language,
+        flags: request.flags.slice(0, MAX_LOGGED_FLAGS),
+        status: result.status,
+        exitCode: result.exitCode,
+        timeMs: result.timeMs,
+      }),
+  });
+
+  ipcMain.handle(IPC.runCode, async (_event, payload: unknown): Promise<RunResult> => {
+    requireStudent();
+    const request = RunRequestSchema.parse(payload);
+    const refusal = runRefusal(session.examState, request);
+    if (refusal) {
+      return {
+        status: 'failed',
+        exitCode: null,
+        timeMs: null,
+        stdout: '',
+        stderr: '',
+        compileOutput: '',
+        diagnostics: [],
+        message: refusal,
+      };
+    }
+    return runner.run(request);
+  });
+  ipcMain.handle(IPC.stopRun, () => {
+    requireStudent();
+    runner.stop();
+  });
+  // Keystrokes and resizes are fire-and-forget (`send`), so typing has no round trip.
+  ipcMain.on(IPC.runInput, (_event, payload: unknown) => {
+    const data = RunInputSchema.safeParse(payload);
+    if (data.success) runner.write(data.data);
+  });
+  ipcMain.on(IPC.runResize, (_event, payload: unknown) => {
+    const size = RunSizeSchema.safeParse(payload);
+    if (size.success) runner.resize(size.data);
+  });
+}

@@ -9,8 +9,9 @@ import {
 import { STUDENT_API_PORT } from './hosting.js';
 
 /**
- * The run limits the teacher sets (M43): wall time, memory, output and processes. Snapshotted
- * into the exam when hosting starts, so a change reaches students at the next exam.
+ * The run limits the teacher sets (M43): wall time and output. Snapshotted into the exam when
+ * hosting starts, so a change reaches students at the next exam. Older snapshots may still hold
+ * `memoryMb` and `processes`; they are ignored.
  */
 export const RunLimitsSchema = z.object({
   timeMs: z
@@ -18,21 +19,17 @@ export const RunLimitsSchema = z.object({
     .int()
     .min(5_000)
     .max(60 * 60_000),
-  memoryMb: z.number().int().min(32).max(4_096),
   outputBytes: z
     .number()
     .int()
     .min(4 * 1024)
     .max(4 * 1024 * 1024),
-  processes: z.number().int().min(1).max(64),
 });
 export type RunLimits = z.infer<typeof RunLimitsSchema>;
 
 export const DEFAULT_RUN_LIMITS: RunLimits = {
   timeMs: RUN_LIMITS.timeMs,
-  memoryMb: RUN_LIMITS.memoryMb,
   outputBytes: RUN_LIMITS.outputBytes,
-  processes: RUN_LIMITS.processes,
 };
 
 export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';

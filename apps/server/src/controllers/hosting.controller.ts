@@ -53,7 +53,7 @@ export function createHostingController({ hosting, exams, students }: HostingCon
       res.json(body);
     },
 
-    /** The exam-wide switches (`terminal`, `internet`) and global actions (`extend_all`, `broadcast`). */
+    /** The exam-wide terminal switch and global actions (`extend_all`, `broadcast`). */
     action(req: IdRequest, res: Response): void {
       const body = ExamActionSchema.safeParse(req.body);
       if (!body.success) throw new ApiError(400, 'invalid_body', 'Unknown or invalid action');
@@ -63,8 +63,6 @@ export function createHostingController({ hosting, exams, students }: HostingCon
         throw new ApiError(400, 'invalid_body', 'Minutes only apply when turning it on');
       }
       switch (action.type) {
-        case 'internet':
-          return void res.json(hosting.internet.set(examId, action.enabled));
         case 'terminal':
           return void res.json(hosting.terminal.set(examId, action.enabled, action.minutes));
         case 'extend_all':

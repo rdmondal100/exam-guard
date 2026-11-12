@@ -6,5 +6,6 @@ onlyBuiltDependencies:
   - electron
   - esbuild
   - better-sqlite3
+  - get-windows
 overrides:
   dompurify: '>=3.4.17'

@@ -1,12 +1,11 @@
 // The installer and the app must agree on paths and registry keys: electron-builder.config.ts
-// places the files, build/installer.nsh writes the registry, main and the agent read both.
+// places the files, resources/installer.nsh writes the registry, and main reads both.
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { builderConfig, PACKED_RESOURCES } from '../../electron-builder.config';
-import { resolveAgentExe } from './agent/agent-exe.js';
-import { INSTALL_REG_KEY } from './install-type.js';
+import { INSTALL_REG_KEY } from './mode/installType.js';
 import { resolveToolchain } from './runner/toolchains.js';
 
 const desktop = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -18,7 +17,7 @@ const config = builderConfig({
   electronVersion: '44.0.0',
   electronDist: join(desktop, 'node_modules/electron/dist'),
 });
-const nsh = readFileSync(join(desktop, 'build/installer.nsh'), 'utf8');
+const nsh = readFileSync(join(desktop, 'resources/installer.nsh'), 'utf8');
 
 function nshDefine(name: string): string {
   const match = new RegExp(`^!define ${name} "(.+)"$`, 'm').exec(nsh);
@@ -29,25 +28,28 @@ function nshDefine(name: string): string {
 describe('packaged layout', () => {
   const R = 'C:\\EG\\resources';
 
-  it('puts the agent, the runner and the toolchains where main looks for them', () => {
+  it('puts SiteReader and the toolchains where main looks for them', () => {
     const targets = (config.extraResources as { to: string }[]).map((r) => r.to);
-    expect(targets).toEqual([
-      PACKED_RESOURCES.agent,
-      PACKED_RESOURCES.runner,
-      PACKED_RESOURCES.toolchains,
-    ]);
+    expect(targets).toEqual([PACKED_RESOURCES.siteReader, PACKED_RESOURCES.toolchains]);
     const exists = () => true;
     const env = { isPackaged: true, appPath: 'unused', resourcesPath: R, env: {}, exists };
-    expect(resolveAgentExe(env)).toBe(join(R, PACKED_RESOURCES.agent));
     const tools = resolveToolchain({ ...env, execPath: 'C:\\EG\\ExamGuard.exe' });
-    expect(tools.runner).toBe(join(R, PACKED_RESOURCES.runner));
     expect(tools.msysRoot).toBe(join(R, PACKED_RESOURCES.toolchains, 'msys64'));
     expect(tools.pythonExe).toBe(join(R, PACKED_RESOURCES.toolchains, 'python', 'python.exe'));
   });
 
+  it('ships no Rust agent or runner any more', () => {
+    const sources = (config.extraResources as { from: string }[]).map((r) => r.from);
+    expect(sources.some((s) => /eg-(agent|runner)|target[\\/]release/.test(s))).toBe(false);
+  });
+
   it('keeps native modules out of the asar and RunAsNode on for student JavaScript', () => {
     expect(config.asarUnpack).toEqual(
-      expect.arrayContaining(['**/node_modules/node-pty/**', '**/node_modules/better-sqlite3/**']),
+      expect.arrayContaining([
+        '**/node_modules/node-pty/**',
+        '**/node_modules/better-sqlite3/**',
+        '**/node_modules/get-windows/**',
+      ]),
     );
     expect(config.electronFuses?.runAsNode).toBe(true);
     expect(config.electronFuses?.enableNodeOptionsEnvironmentVariable).toBe(false);
@@ -56,7 +58,7 @@ describe('packaged layout', () => {
 
   it('installs per machine with the ExamGuard userData name', () => {
     expect(config.nsis?.perMachine).toBe(true);
-    expect(config.nsis?.include).toBe(join(desktop, 'build/installer.nsh'));
+    expect(config.nsis?.include).toBe(join(desktop, 'resources/installer.nsh'));
     expect(config.extraMetadata).toMatchObject({ productName: 'ExamGuard' });
   });
 });
@@ -67,12 +69,10 @@ describe('installer.nsh', () => {
     expect(nsh).toContain('WriteRegStr HKLM "${EG_REG_KEY}" "InstallType" "$egInstallType"');
   });
 
-  it("writes AppPath under the agent's key and runs the packed agent", () => {
-    const agentSource = readFileSync(join(repo, 'agent/eg-agent/src/pipe_security.rs'), 'utf8');
-    const agentKey = /const KEY: &str = r"(.+)";/.exec(agentSource)?.[1];
-    expect(agentKey?.toLowerCase()).toBe(nshDefine('EG_REG_KEY').toLowerCase());
-    expect(nsh).toContain('WriteRegStr HKLM "${EG_REG_KEY}" "AppPath"');
-    expect(nshDefine('EG_AGENT_EXE')).toBe(`$INSTDIR\\resources\\${PACKED_RESOURCES.agent}`);
+  it('installs no service and removes the old agent service an earlier version left', () => {
+    expect(nsh).not.toMatch(/--install|eg-agent\.exe/);
+    expect(nshDefine('EG_OLD_SERVICE')).toBe('ExamGuardAgent');
+    expect(nsh).toContain('sc.exe delete "${EG_OLD_SERVICE}"');
   });
 
   it('accepts only the two install types on the command line', () => {

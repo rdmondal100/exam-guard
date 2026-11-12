@@ -7,7 +7,7 @@ import {
 
 describe('ProtocolVersionSchema', () => {
   it('accepts the current version', () => {
-    expect(ProtocolVersionSchema.parse(PROTOCOL_VERSION)).toEqual({ major: 1, minor: 0 });
+    expect(ProtocolVersionSchema.parse(PROTOCOL_VERSION)).toEqual({ major: 2, minor: 0 });
   });
 
   it('rejects non-integer and negative parts', () => {
@@ -19,10 +19,10 @@ describe('ProtocolVersionSchema', () => {
 
 describe('isProtocolCompatible', () => {
   it('accepts a different minor', () => {
-    expect(isProtocolCompatible({ major: 1, minor: 7 })).toBe(true);
+    expect(isProtocolCompatible({ major: 2, minor: 7 })).toBe(true);
   });
 
-  it('rejects a different major', () => {
-    expect(isProtocolCompatible({ major: 2, minor: 0 })).toBe(false);
+  it('rejects a different major (1 = the app with the Rust agent)', () => {
+    expect(isProtocolCompatible({ major: 1, minor: 0 })).toBe(false);
   });
 });

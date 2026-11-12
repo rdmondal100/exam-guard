@@ -1,6 +1,4 @@
 import type {
-  AgentChangeResult,
-  AgentServiceStatus,
   AiKeyStatus,
   DataFolderInfo,
   DataFolderMoveResult,
@@ -38,6 +36,7 @@ import type {
   TerminalOpenResult,
   TerminalSize,
   TerminalStatus,
+  ThemeSource,
 } from '@examguard/shared';
 
 /** The only surface the renderer gets: `window.examguard`. */
@@ -122,12 +121,6 @@ export interface ExamGuardApi {
   onTerminalData(listener: (data: string) => void): () => void;
   /** The shell ended or was closed. Returns an unsubscribe function. */
   onTerminalExit(listener: (exit: TerminalExit) => void): () => void;
-  /** Student mode: is the monitoring agent service running. */
-  agentStatus(): Promise<AgentServiceStatus>;
-  /** Sets the agent service up (one UAC prompt) and starts it. */
-  installAgent(): Promise<AgentChangeResult>;
-  /** Dev builds only: removes the agent service again (one UAC prompt). */
-  uninstallAgent(): Promise<AgentChangeResult>;
   /** Teacher mode (M42): shows `exports/<fileName>` in Explorer; false when the file is gone. */
   revealExport(fileName: string): Promise<boolean>;
   /** Teacher mode (M43): whether an AI key is saved; never the key itself. */
@@ -143,4 +136,7 @@ export interface ExamGuardApi {
   chooseDataFolder(): Promise<string | null>;
   /** Moves the data (`null`: back to the profile folder). The server restarts, so sign in again. */
   moveDataFolder(path: string | null): Promise<DataFolderMoveResult>;
+  /** The colour theme (M51): system, light or dark, kept per profile. */
+  getTheme(): Promise<ThemeSource>;
+  setTheme(theme: ThemeSource): Promise<ThemeSource>;
 }

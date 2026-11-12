@@ -54,7 +54,7 @@ export function buildReport({
     ['save ack p95 < 1 s', metrics.saveLag.count > 0 && metrics.saveLag.percentile(95) < 1000],
   ];
   if (counts) {
-    checks.push(['every sim event stored', counts.agentEvents >= events.made]);
+    checks.push(['every sim event stored', counts.monitorEvents >= events.made]);
     checks.push([
       'alert lag p95 < 2 s',
       metrics.alertLag.count > 0 && metrics.alertLag.percentile(95) < 2000,
@@ -83,7 +83,7 @@ export function buildReport({
   if (counts) {
     rows.push([
       'DB rows',
-      `events ${counts.events} (agent ${counts.agentEvents}, screenshots ${counts.withScreenshot}), answer versions ${counts.answerVersions}, final answers ${counts.finalAnswers}`,
+      `events ${counts.events} (monitor ${counts.monitorEvents}, screenshots ${counts.withScreenshot}), answer versions ${counts.answerVersions}, final answers ${counts.finalAnswers}`,
     ]);
   }
   if (samples.length > 0) {

@@ -10,7 +10,7 @@ import { withInject, type Injectable } from './inject.js';
 
 const TOKEN = 'r'.repeat(40);
 const HEADERS = { 'x-teacher-token': TOKEN };
-const PROTOCOL = { major: 1, minor: 0 };
+const PROTOCOL = { major: 2, minor: 0 };
 const PASSWORD = 'correct horse battery';
 export const RESTART_PIN = '004217';
 
@@ -125,7 +125,7 @@ export class RestartableExam {
       pin: RESTART_PIN,
       deviceId,
       protocol: PROTOCOL,
-      agent: { ok: true, helper: true, captureOk: true, monitors: 1 },
+      monitor: { ok: true, captureOk: true, monitors: 1 },
     });
     const token = String(joined.token ?? '');
     await this.post('/join/confirm', { noticeAccepted: true }, token);

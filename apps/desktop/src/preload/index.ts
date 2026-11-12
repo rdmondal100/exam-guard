@@ -1,13 +1,11 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { z } from 'zod';
 import {
-  AgentChangeResultSchema,
   AiKeySetRequestSchema,
   AiKeyStatusSchema,
   DataFolderInfoSchema,
   DataFolderMoveRequestSchema,
   DataFolderMoveResultSchema,
-  AgentServiceStatusSchema,
   AnswerSaveRequestSchema,
   PasteBlockedReportSchema,
   LargeInsertionReportSchema,
@@ -46,10 +44,12 @@ import {
   TerminalOpenResultSchema,
   TerminalSizeSchema,
   TerminalStatusSchema,
+  ThemeSetRequestSchema,
+  ThemeSourceSchema,
   type AppMode,
   type ServerStatus,
 } from '@examguard/shared';
-import { IPC } from '../shared/ipc-channels.js';
+import { IPC } from '../shared/ipcChannels.js';
 import type { ExamGuardApi } from './api.js';
 
 const api: ExamGuardApi = {
@@ -221,12 +221,6 @@ const api: ExamGuardApi = {
     ipcRenderer.on(IPC.terminalExit, handler);
     return () => ipcRenderer.removeListener(IPC.terminalExit, handler);
   },
-  agentStatus: async () =>
-    AgentServiceStatusSchema.parse(await ipcRenderer.invoke(IPC.agentStatus)),
-  installAgent: async () =>
-    AgentChangeResultSchema.parse(await ipcRenderer.invoke(IPC.agentInstall)),
-  uninstallAgent: async () =>
-    AgentChangeResultSchema.parse(await ipcRenderer.invoke(IPC.agentUninstall)),
   revealExport: async (fileName: string) =>
     z
       .boolean()
@@ -252,6 +246,11 @@ const api: ExamGuardApi = {
   moveDataFolder: async (path: string | null) =>
     DataFolderMoveResultSchema.parse(
       await ipcRenderer.invoke(IPC.dataFolderMove, DataFolderMoveRequestSchema.parse({ path })),
+    ),
+  getTheme: async () => ThemeSourceSchema.parse(await ipcRenderer.invoke(IPC.themeGet)),
+  setTheme: async (theme) =>
+    ThemeSourceSchema.parse(
+      await ipcRenderer.invoke(IPC.themeSet, ThemeSetRequestSchema.parse({ theme })),
     ),
 };
 

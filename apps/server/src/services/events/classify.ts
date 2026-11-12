@@ -8,26 +8,52 @@ export const LONG_OUTSIDE_MS = 60_000;
 export interface ClassifyInput {
   type: string;
   details: Record<string, unknown>;
-  /** The exam's high-severity programs (browsers, messaging, remote access), exe names. */
+  /**
+   * The exam's high-severity list: programs (exe names, e.g. `chrome.exe`) and websites (host
+   * names, e.g. `chatgpt.com`, which also cover their subdomains).
+   */
   highSeverityApps: readonly string[];
   /** `title_changed` / `still_outside`: how long the student has been outside so far, if known. */
   outsideMs?: number;
 }
 
-const MEDIUM_TYPES = new Set([
-  'app_relaunched',
-  'taskmgr_opened',
-  'secure_desktop',
-  'paste_blocked',
-  'network_lost',
-]);
+const MEDIUM_TYPES = new Set(['taskmgr_opened', 'secure_desktop', 'paste_blocked', 'network_lost']);
 const HIGH_TYPES = new Set(['large_insertion']);
-const CRITICAL_TYPES = new Set(['agent_lost', 'duplicate_login']);
+const CRITICAL_TYPES = new Set(['duplicate_login']);
 
 const lower = (value: unknown): string => (typeof value === 'string' ? value.toLowerCase() : '');
 
 function isHighApp(exe: string, apps: readonly string[]): boolean {
   return exe !== '' && apps.some((app) => app.toLowerCase() === exe);
+}
+
+/** The host of a `url` detail (`https://gemini.google.com/app` → `gemini.google.com`), or ''. */
+function hostOf(url: unknown): string {
+  if (typeof url !== 'string') return '';
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+/** A site on the list: the page's host or its registrable domain is the entry or under it. */
+function isHighSite(details: Record<string, unknown>, apps: readonly string[]): boolean {
+  const hosts = [hostOf(details['url']), lower(details['domain'])].filter((h) => h !== '');
+  if (hosts.length === 0) return false;
+  return apps.some((app) => {
+    const entry = app.toLowerCase();
+    return hosts.some((host) => host === entry || host.endsWith(`.${entry}`));
+  });
+}
+
+/**
+ * Where the student went is high severity: a program on the list, a site on the list, or a private
+ * browser window (Incognito / InPrivate), whose address is never read.
+ */
+function isHighTarget(details: Record<string, unknown>, apps: readonly string[]): boolean {
+  if (details['privateWindow'] === true) return true;
+  return isHighApp(lower(details['exe']), apps) || isHighSite(details, apps);
 }
 
 /** Time outside → severity: short is low, long is high, in between medium. */
@@ -38,7 +64,7 @@ function byDuration(ms: number): Severity {
 
 /**
  * The server's severity for every event (M31, requirements §8.6). Leaving the exam is judged by
- * where the student went and for how long: a program on the teacher's list is high at once; any
+ * where the student went and for how long: a program or site on the teacher's list is high at once; any
  * other switch starts low and rises with the time outside (the periodic shots and the return carry
  * it), so a short Notepad switch stays low while a long one becomes high.
  */
@@ -50,7 +76,7 @@ export function classifyEvent({
 }: ClassifyInput): Severity {
   if (CRITICAL_TYPES.has(type)) return 'critical';
   if (HIGH_TYPES.has(type)) return 'high';
-  const highApp = isHighApp(lower(details['exe']), highSeverityApps);
+  const highApp = isHighTarget(details, highSeverityApps);
   switch (type) {
     case 'focus_lost':
       return highApp ? 'high' : 'low';

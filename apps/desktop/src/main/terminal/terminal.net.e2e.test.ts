@@ -5,13 +5,13 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { resolveToolchain } from '../runner/toolchains.js';
 import { spawnPty } from './pty.js';
-import { TerminalHost } from './terminal-host.js';
-import { prepareTerminal } from './terminal-launch.js';
+import { TerminalHost } from './terminalHost.js';
+import { prepareTerminal } from './terminalLaunch.js';
 
 // The M15a acceptance run through the real terminal: npm and pacman installs from the internet,
 // then a GLUT program built with plain `gcc` and run for a moment (a window opens briefly); and
 // (M15d) a pip install that Python finds in the workspace.
-// Opt in with EG_NET_E2E=1 after `pnpm fetch-toolchains` and `cargo build -p eg-runner`.
+// Opt in with EG_NET_E2E=1 after `pnpm fetch-toolchains`.
 const tools = resolveToolchain({
   isPackaged: false,
   appPath: resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'),
@@ -21,7 +21,6 @@ const tools = resolveToolchain({
 });
 const ready =
   process.env.EG_NET_E2E === '1' &&
-  !!tools.runner &&
   !!tools.msysRoot &&
   !!tools.npmCli &&
   !!tools.pythonExe &&

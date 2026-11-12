@@ -55,8 +55,8 @@ const body = (over: object = {}) => ({
   studentCode: '1',
   pin: '123456',
   deviceId: 'device-aaaaaaaa',
-  protocol: { major: 1, minor: 0 },
-  agent: { ok: true, helper: true, captureOk: true, monitors: 1 },
+  protocol: { major: 2, minor: 0 },
+  monitor: { ok: true, captureOk: true, monitors: 1 },
   ...over,
 });
 const post = (url: string, payload: unknown, headers: Record<string, string> = {}) =>

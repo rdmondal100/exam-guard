@@ -1,24 +1,25 @@
 import { z } from 'zod';
 import { ProtocolVersionSchema } from './protocol-version.js';
 
-/** What the student's agent reports through its system check (M21). */
-export const AgentStatusSchema = z.object({
+/**
+ * The student app's monitoring self-check: it can capture the screen (`captureOk`), sees at least
+ * one screen, and can read which window is in front (`ok`).
+ */
+export const MonitorStatusSchema = z.object({
   ok: z.boolean(),
-  helper: z.boolean(),
   captureOk: z.boolean(),
   monitors: z.number().int().nonnegative(),
 });
-export type AgentStatus = z.infer<typeof AgentStatusSchema>;
+export type MonitorStatus = z.infer<typeof MonitorStatusSchema>;
 
 /**
- * Why an agent block is not good enough to join an exam, or null when it is. One rule for the
+ * Why a monitor check is not good enough to join an exam, or null when it is. One rule for the
  * student app (which refuses locally) and the server (which refuses the request).
  */
-export function agentProblem(agent: AgentStatus): string | null {
-  if (!agent.helper) return 'The monitoring helper is not running.';
-  if (!agent.captureOk) return 'The monitoring agent cannot capture the screen.';
-  if (agent.monitors < 1) return 'The monitoring agent sees no screen.';
-  if (!agent.ok) return 'The monitoring agent is not healthy.';
+export function monitorProblem(monitor: MonitorStatus): string | null {
+  if (!monitor.captureOk) return 'ExamGuard cannot capture the screen on this computer.';
+  if (monitor.monitors < 1) return 'ExamGuard sees no screen on this computer.';
+  if (!monitor.ok) return 'ExamGuard cannot read which window is in front.';
   return null;
 }
 
@@ -28,7 +29,7 @@ export const JoinRequestSchema = z.object({
   pin: z.string().regex(/^\d{6}$/),
   deviceId: z.string().min(8).max(128),
   protocol: ProtocolVersionSchema,
-  agent: AgentStatusSchema,
+  monitor: MonitorStatusSchema,
 });
 export type JoinRequest = z.infer<typeof JoinRequestSchema>;
 
@@ -61,7 +62,7 @@ export const JOIN_ERROR_CODES = [
   'not_on_list',
   'already_active_elsewhere',
   'not_hosting',
-  'agent_required',
+  'monitor_required',
   'protocol_mismatch',
   'rate_limited',
 ] as const;

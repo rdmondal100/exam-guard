@@ -36,7 +36,7 @@ describe('teacher app', () => {
       headers: { 'x-teacher-token': TOKEN },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ status: 'ok', protocol: { major: 1 } });
+    expect(res.json()).toMatchObject({ status: 'ok', protocol: { major: 2 } });
   });
 
   it('rejects a missing token with the protocol error shape', async () => {

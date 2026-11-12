@@ -1,18 +1,19 @@
 import { app, BrowserWindow } from 'electron';
-import { IPC } from '../shared/ipc-channels.js';
-import { readInstallType } from './install-type.js';
-import { ExamLock } from './exam-lock.js';
+import { IPC } from '../shared/ipcChannels.js';
+import { readInstallType } from './mode/installType.js';
+import { ExamLock } from './window/examLock.js';
 import { registerIpc, type AppState } from './ipc.js';
-import { loadStoredMode, resolveMode } from './mode-store.js';
-import { DEFAULT_PROFILE, parseProfile, userDataPathFor } from './profile.js';
-import { ServerHost } from './server-host.js';
-import { createAiKeyStore } from './grading-key.js';
-import { DataFolder } from './data-folder/data-folder.js';
-import { registerDataFolderIpc } from './data-folder/data-folder-ipc.js';
-import { DataFolderMover } from './data-folder/data-folder-mover.js';
-import { registerExportsIpc } from './exports-ipc.js';
-import { registerAiKeyIpc } from './settings/ai-key-ipc.js';
-import { createMainWindow, installCsp } from './window.js';
+import { loadStoredMode, resolveMode } from './mode/modeStore.js';
+import { DEFAULT_PROFILE, parseProfile, userDataPathFor } from './mode/profile.js';
+import { ServerHost } from './server/serverHost.js';
+import { createAiKeyStore } from './settings/gradingKey.js';
+import { DataFolder } from './dataFolder/dataFolder.js';
+import { registerDataFolderIpc } from './dataFolder/dataFolderIpc.js';
+import { DataFolderMover } from './dataFolder/dataFolderMover.js';
+import { registerExportsIpc } from './exports/exportsIpc.js';
+import { registerAiKeyIpc } from './settings/aiKeyIpc.js';
+import { applyStoredTheme, registerThemeIpc } from './settings/themeIpc.js';
+import { createMainWindow, installCsp } from './window/mainWindow.js';
 
 // The live view uses host candidates only (M34): Chromium would hide the LAN address behind an
 // mDNS name, which many lab networks never resolve. Must be set before `ready`.
@@ -68,6 +69,7 @@ if (!app.requestSingleInstanceLock()) {
     const ipc = registerIpc(state, server, examLock);
     const isTeacher = () => state.mode === 'teacher';
     registerAiKeyIpc({ store: aiKeys, isTeacher });
+    registerThemeIpc(userData);
     registerExportsIpc({ dataDir, isTeacher });
     registerDataFolderIpc({
       folder: dataFolder,
@@ -75,6 +77,8 @@ if (!app.requestSingleInstanceLock()) {
       isTeacher,
     });
     installCsp();
+    // Before the window opens, so the first paint already has the right colours.
+    await applyStoredTheme(userData);
     window = createMainWindow(
       profile === DEFAULT_PROFILE ? 'ExamGuard AI' : `ExamGuard AI (${profile})`,
     );

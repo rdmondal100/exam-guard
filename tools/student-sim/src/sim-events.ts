@@ -22,11 +22,11 @@ interface Pending {
 }
 
 /**
- * What a fake agent reports while the exam runs (M47): every so often the student leaves the exam
- * (`focus_lost` with a screenshot), sometimes stays out long enough for a `still_outside` shot,
- * then comes back (`focus_returned` with the time outside). Unacked events, screenshots included,
- * are re-sent after every welcome, as the real agent replays its evidence; the server keeps each
- * dedupe key once.
+ * What the app's monitor reports while the exam runs (M47): every so often the student leaves the
+ * exam (`focus_lost` with a screenshot), sometimes stays out long enough for a `still_outside`
+ * shot, then comes back (`focus_returned` with the time outside). Unacked events, screenshots
+ * included, are re-sent after every welcome, as the real session client does; the server keeps
+ * each dedupe key once.
  */
 export class SimEvents {
   private seq = 0;

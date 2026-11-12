@@ -9,17 +9,12 @@ export interface StudentLockDeps {
 }
 
 /**
- * Locking a working student of a running exam: by the tamper lock (M24, a student whose app
- * reports `agent_lost`) or by the teacher (M35). A locked student's answers still count and the
- * timer runs; the app covers the exam with the lock screen until the teacher unlocks them.
+ * The teacher locking a working student of a running exam (M35). A locked student's answers still
+ * count and the timer runs; the app covers the exam with the lock screen until the teacher unlocks
+ * them.
  */
 export class StudentLock {
   constructor(private readonly deps: StudentLockDeps) {}
-
-  /** The student's app lost its agent link. Only a working student of a running exam is locked. */
-  agentLost(studentId: string): void {
-    this.lock(studentId, 'agent');
-  }
 
   /** `active` → `locked`. Returns whether the student was locked by this call. */
   lock(studentId: string, reason: LockReason): boolean {

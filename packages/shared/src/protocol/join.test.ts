@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  agentProblem,
+  monitorProblem,
   JOIN_CLIENT_ERROR_CODES,
   JOIN_ERROR_CODES,
   JoinAttemptSchema,
@@ -13,8 +13,8 @@ const base = {
   studentCode: ' S1001 ',
   pin: '123456',
   deviceId: 'a'.repeat(64),
-  protocol: { major: 1, minor: 0 },
-  agent: { ok: true, helper: true, captureOk: true, monitors: 1 },
+  protocol: { major: 2, minor: 0 },
+  monitor: { ok: true, captureOk: true, monitors: 1 },
 };
 
 describe('JoinRequestSchema', () => {
@@ -27,9 +27,9 @@ describe('JoinRequestSchema', () => {
     expect(JoinRequestSchema.safeParse({ ...base, pin }).success).toBe(false);
   });
 
-  it('rejects a blank student code and a missing agent block', () => {
+  it('rejects a blank student code and a missing monitor block', () => {
     expect(JoinRequestSchema.safeParse({ ...base, studentCode: '  ' }).success).toBe(false);
-    expect(JoinRequestSchema.safeParse({ ...base, agent: undefined }).success).toBe(false);
+    expect(JoinRequestSchema.safeParse({ ...base, monitor: undefined }).success).toBe(false);
   });
 });
 
@@ -71,19 +71,18 @@ describe('JoinResultSchema', () => {
   });
 });
 
-describe('agentProblem', () => {
-  const good = { ok: true, helper: true, captureOk: true, monitors: 1 };
+describe('monitorProblem', () => {
+  const good = { ok: true, captureOk: true, monitors: 1 };
 
-  it('accepts a healthy agent', () => {
-    expect(agentProblem(good)).toBeNull();
+  it('accepts a working monitor', () => {
+    expect(monitorProblem(good)).toBeNull();
   });
 
   it.each([
-    [{ helper: false }, /helper/],
     [{ captureOk: false }, /capture/],
     [{ monitors: 0 }, /no screen/],
-    [{ ok: false }, /not healthy/],
+    [{ ok: false }, /window is in front/],
   ])('names the problem for %j', (change, words) => {
-    expect(agentProblem({ ...good, ...change })).toMatch(words);
+    expect(monitorProblem({ ...good, ...change })).toMatch(words);
   });
 });

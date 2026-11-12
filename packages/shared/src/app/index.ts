@@ -1,5 +1,4 @@
 export * from './app-info.js';
-export * from './agent.js';
 export * from './runner.js';
 export * from './terminal.js';
 export * from './files.js';
@@ -11,3 +10,4 @@ export * from './insertion.js';
 export * from './exports.js';
 export * from './ai-key.js';
 export * from './data-folder.js';
+export * from './theme.js';

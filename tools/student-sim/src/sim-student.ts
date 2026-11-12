@@ -127,7 +127,7 @@ export class SimStudent {
         pin,
         deviceId: this.deviceId,
         protocol: PROTOCOL_VERSION,
-        agent: { ok: true, helper: true, captureOk: true, monitors: 1 },
+        monitor: { ok: true, captureOk: true, monitors: 1 },
       });
       const token = (joined.json as { token?: unknown } | null)?.token;
       if (joined.status !== 200 || typeof token !== 'string') {

@@ -2,19 +2,17 @@ import { z } from 'zod';
 import { QuestionLanguageSchema } from '../protocol/questions.js';
 
 /**
- * Code-run limits, the same for everyone (requirements §8.3, architecture §4). A run is a console
- * the student types into, or a program with its own window, so the wall time includes the
- * student's time and Stop is the normal way out. A teacher setting for it is a later Settings item.
+ * Code-run limits (requirements §8.3, architecture §4): wall time and output only. A run is a
+ * console the student types into, or a program with its own window, so the wall time includes the
+ * student's time and Stop is the normal way out. Stop and the time limit end the program's whole
+ * process tree. The teacher sets time and output in Settings (`RunLimitsSchema`).
  */
 export const RUN_LIMITS = {
   timeMs: 10 * 60_000,
-  memoryMb: 256,
   outputBytes: 64 * 1024,
-  processes: 8,
   cooldownMs: 2_000,
-  /** The compiler gets more room than the student's program. */
+  /** The compiler's own time limit. */
   compileTimeMs: 15_000,
-  compileMemoryMb: 1_024,
 } as const;
 
 export const MAX_RUN_CODE_CHARS = 200_000;
@@ -55,9 +53,7 @@ export const RUN_STATUSES = [
   'ok',
   'compile_error',
   'time_limit',
-  'memory_limit',
   'output_limit',
-  'process_limit',
   'stopped',
   'failed',
   /** Refused: another run is still going. */

@@ -1,6 +1,6 @@
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { resolveToolchain, type ToolchainEnv } from './toolchains.js';
+import { resolveToolchain, toolchainsDir, type ToolchainEnv } from './toolchains.js';
 
 const APP = resolve('/repo/apps/desktop');
 const base = (files: string[], over: Partial<ToolchainEnv> = {}): ToolchainEnv => ({
@@ -13,17 +13,14 @@ const base = (files: string[], over: Partial<ToolchainEnv> = {}): ToolchainEnv =
   ...over,
 });
 
-const debugRunner = resolve('/repo/target/debug/eg-runner.exe');
-const releaseRunner = resolve('/repo/target/release/eg-runner.exe');
 const devGcc = join(APP, 'resources/toolchains/mingw64/bin/gcc.exe');
 const devPacman = join(APP, 'resources/toolchains/msys64/usr/bin/pacman.exe');
 const devNpm = join(APP, 'resources/toolchains/npm/bin/npm-cli.js');
 const devPython = join(APP, 'resources/toolchains/python/python.exe');
 
 describe('resolveToolchain', () => {
-  it('finds the dev runner (release first) and the fetched MinGW', () => {
-    const t = resolveToolchain(base([debugRunner, releaseRunner, devGcc]));
-    expect(t.runner).toBe(releaseRunner);
+  it('finds the fetched MinGW and runs JavaScript on Electron itself', () => {
+    const t = resolveToolchain(base([devGcc]));
     expect(t.mingwBin).toBe(join(APP, 'resources/toolchains/mingw64/bin'));
     expect(t.nodeExe).toBe('electron.exe');
   });
@@ -37,7 +34,6 @@ describe('resolveToolchain', () => {
 
   it('reports what is missing as null', () => {
     expect(resolveToolchain(base([]))).toMatchObject({
-      runner: null,
       mingwBin: null,
       msysRoot: null,
       npmCli: null,
@@ -45,20 +41,23 @@ describe('resolveToolchain', () => {
     });
   });
 
-  it('honours the dev overrides', () => {
+  it('honours the dev MinGW override', () => {
     const gcc = resolve('/mingw/bin/gcc.exe');
-    const t = resolveToolchain(
-      base(['/r.exe', gcc], { env: { EG_RUNNER_PATH: '/r.exe', EG_MINGW_DIR: resolve('/mingw') } }),
-    );
-    expect(t).toMatchObject({ runner: '/r.exe', mingwBin: resolve('/mingw/bin') });
+    const t = resolveToolchain(base([gcc], { env: { EG_MINGW_DIR: resolve('/mingw') } }));
+    expect(t.mingwBin).toBe(resolve('/mingw/bin'));
   });
 
-  it('ignores the overrides when packaged', () => {
-    const runner = join(resolve('/res'), 'eg-runner.exe');
+  it('ignores the override when packaged', () => {
     const npm = join(resolve('/res'), 'toolchains/npm/bin/npm-cli.js');
+    const gcc = resolve('/mingw/bin/gcc.exe');
     const t = resolveToolchain(
-      base([runner, '/r.exe', npm], { isPackaged: true, env: { EG_RUNNER_PATH: '/r.exe' } }),
+      base([gcc, npm], { isPackaged: true, env: { EG_MINGW_DIR: resolve('/mingw') } }),
     );
-    expect(t).toMatchObject({ runner, mingwBin: null, npmCli: npm });
+    expect(t).toMatchObject({ mingwBin: null, npmCli: npm });
+  });
+
+  it('names the toolchains folder in dev and once installed', () => {
+    expect(toolchainsDir(base([]))).toBe(join(APP, 'resources', 'toolchains'));
+    expect(toolchainsDir(base([], { isPackaged: true }))).toBe(join(resolve('/res'), 'toolchains'));
   });
 });

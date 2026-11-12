@@ -48,7 +48,7 @@ const input = (type: string, key: string, over: Partial<RecordInput> = {}): Reco
   examId: 'e1',
   examStudentId: 's1',
   type,
-  source: 'agent',
+  source: 'monitor',
   details: {},
   serverTs: 100,
   clientTs: 1000,

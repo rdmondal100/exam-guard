@@ -20,8 +20,8 @@ describe('student messages', () => {
     expect(StudentMessageSchema.safeParse({ t: 'ping', clientSent: 5 }).success).toBe(true);
   });
 
-  it('accepts an agent.status frame and rejects one with a missing field', () => {
-    const status = { t: 'agent.status', ok: true, helper: true, captureOk: true, monitors: 2 };
+  it('accepts a monitor.status frame and rejects one with a missing field', () => {
+    const status = { t: 'monitor.status', ok: true, captureOk: true, monitors: 2 };
     expect(StudentMessageSchema.safeParse(status).success).toBe(true);
     expect(StudentMessageSchema.safeParse({ ...status, monitors: undefined }).success).toBe(false);
   });
@@ -50,7 +50,6 @@ describe('server messages', () => {
         locked: false,
         monitoring: false,
         terminal: { enabled: false, until: null },
-        internet: 'allowed',
         filesEnabled: true,
         examFiles: [],
       },
@@ -73,7 +72,6 @@ describe('server messages', () => {
         locked: false,
         monitoring: false,
         terminal: { enabled: false, until: null },
-        internet: 'allowed',
         filesEnabled: true,
         examFiles: [],
       },
@@ -92,8 +90,7 @@ describe('teacher messages', () => {
     riskScore: 0,
     outsideMs: 0,
     lastSeen: null,
-    agentOk: true,
-    internetBlocked: false,
+    monitorOk: true,
     monitors: 1,
   };
 

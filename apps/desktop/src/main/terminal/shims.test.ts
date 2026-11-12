@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { shimFiles, toMsysPath } from './shims.js';
-import { terminalPaths } from './terminal-env.js';
+import { terminalPaths } from './terminalEnv.js';
 
 const paths = terminalPaths('C:\\Users\\Ann Lee\\run\\es1');
 const tools = {

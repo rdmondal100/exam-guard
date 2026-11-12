@@ -1,12 +1,10 @@
 import { z } from 'zod';
 
 /**
- * Exam terminal limits (architecture §4). The shell and everything started from it share one
- * Job Object: each process may use `memoryMb`, at most `processes` run at once, no wall time.
+ * Exam terminal settings (architecture §4). There is no wall time; closing the terminal ends the
+ * shell and every process started from it (a process-tree kill).
  */
 export const TERMINAL_LIMITS = {
-  memoryMb: 2_048,
-  processes: 64,
   /** Output is batched for this long before it is pushed to the renderer. */
   flushMs: 16,
   maxInputChars: 64 * 1024,

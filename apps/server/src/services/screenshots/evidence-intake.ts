@@ -17,7 +17,7 @@ export interface EvidenceIntakeDeps {
 }
 
 /**
- * What the agent saw, relayed by the student app: screenshot chunks arrive as binary frames, then
+ * What the student app's monitor saw: screenshot chunks arrive as binary frames, then
  * the `event` that names them. The event is stored with its picture, and `focus_returned` adds its
  * duration to the student's outside total. A repeated event (a replay) changes nothing.
  */
@@ -40,11 +40,11 @@ export class EvidenceIntake {
         examId,
         examStudentId: studentId,
         type: message.type,
-        source: 'agent',
+        source: 'monitor',
         details,
         serverTs: this.deps.now(),
         clientTs: message.clientTs,
-        dedupeKey: `agent:${message.dedupeKey}`,
+        dedupeKey: `monitor:${message.dedupeKey}`,
       },
       (stored) => {
         if (!jpeg) return;

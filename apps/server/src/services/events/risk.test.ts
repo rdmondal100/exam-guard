@@ -11,13 +11,8 @@ describe('riskPoints', () => {
     expect(RISK_POINTS.high).toBeLessThan(RISK_POINTS.critical);
   });
 
-  it('gives the student’s own work and the teacher’s switches no points', () => {
-    for (const type of [
-      'run_executed',
-      'terminal_command',
-      'internet_blocked',
-      'processes_at_start',
-    ]) {
+  it('gives the student’s own work and the start snapshot no points', () => {
+    for (const type of ['run_executed', 'terminal_command', 'processes_at_start']) {
       expect(riskPoints(type, 'medium'), type).toBe(0);
     }
   });

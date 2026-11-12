@@ -8,7 +8,8 @@ export const ProtocolVersionSchema = z.object({
 
 export type ProtocolVersion = z.infer<typeof ProtocolVersionSchema>;
 
-export const PROTOCOL_VERSION: ProtocolVersion = { major: 1, minor: 0 };
+/** 2: the monitor moved into the student app (no agent, no internet switch). */
+export const PROTOCOL_VERSION: ProtocolVersion = { major: 2, minor: 0 };
 
 /** Same major = compatible. A different minor is accepted. */
 export function isProtocolCompatible(

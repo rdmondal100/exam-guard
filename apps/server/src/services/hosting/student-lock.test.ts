@@ -33,23 +33,23 @@ function setup(examState: ExamState = 'running', state: ExamStudent['state'] = '
 describe('StudentLock', () => {
   it('locks an active student of a running exam once and tells them why', () => {
     const t = setup();
-    t.lock.agentLost('s1');
-    t.lock.agentLost('s1');
+    expect(t.lock.lock('s1', 'teacher')).toBe(true);
+    expect(t.lock.lock('s1', 'teacher')).toBe(false);
     expect(t.student.state).toBe('locked');
     expect(t.sent).toEqual([
-      { t: 'state', state: { studentState: 'locked', locked: true, lockReason: 'agent' } },
+      { t: 'state', state: { studentState: 'locked', locked: true, lockReason: 'teacher' } },
     ]);
     expect(t.changed).toEqual(['s1']);
   });
 
   it('leaves a student alone outside a running exam or after submitting', () => {
     const hosting = setup('hosting', 'lobby');
-    hosting.lock.agentLost('s1');
+    expect(hosting.lock.lock('s1', 'teacher')).toBe(false);
     expect(hosting.sent).toEqual([]);
     const submitted = setup('running', 'submitted');
     expect(submitted.lock.lock('s1', 'teacher')).toBe(false);
     expect(submitted.student.state).toBe('submitted');
-    setup().lock.agentLost('unknown');
+    expect(setup().lock.lock('unknown', 'teacher')).toBe(false);
   });
 
   it('locks for the teacher and unlocks, pushing each state', () => {

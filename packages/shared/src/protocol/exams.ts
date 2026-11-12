@@ -68,8 +68,10 @@ export type ExamUpdateBody = z.infer<typeof ExamUpdateBodySchema>;
 export const ExamsSchema = z.array(ExamSummarySchema);
 
 /**
- * Programs whose focus or launch is high severity by default (requirements §8.6: browsers,
- * messaging, remote access, AI desktop apps). The teacher edits the list per exam (M31).
+ * Programs (exe names) and websites (host names) whose focus or launch is high severity by default
+ * (requirements §8.6: browsers, messaging, remote access, AI apps and sites). A site entry matches
+ * the site and its subdomains, so a teacher who takes the browsers off the list still sees an AI
+ * chat site as high. The teacher edits the list per exam (M31).
  */
 export const DEFAULT_HIGH_SEVERITY_APPS: readonly string[] = [
   'chrome.exe',
@@ -92,6 +94,14 @@ export const DEFAULT_HIGH_SEVERITY_APPS: readonly string[] = [
   'AnyDesk.exe',
   'TeamViewer.exe',
   'mstsc.exe',
+  'chatgpt.com',
+  'openai.com',
+  'gemini.google.com',
+  'claude.ai',
+  'copilot.microsoft.com',
+  'perplexity.ai',
+  'deepseek.com',
+  'web.whatsapp.com',
 ];
 
 /** Screenshot policy from requirements §8.5 and the 60 s grace period from §8.4. */

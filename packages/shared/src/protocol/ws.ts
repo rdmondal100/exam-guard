@@ -1,23 +1,13 @@
 import { z } from 'zod';
 import { ProtocolVersionSchema } from './protocol-version.js';
-import { AgentStatusSchema, StudentStateSchema } from './join.js';
-import {
-  EVIDENCE_KINDS,
-  EvidenceKindSchema,
-  MonitorPolicySchema,
-  type EvidenceKind,
-} from './agent-pipe.js';
+import { MonitorStatusSchema, StudentStateSchema } from './join.js';
+import { EvidenceKindSchema, MonitorPolicySchema } from './monitoring.js';
 import { ExamStateSchema } from './exams.js';
 import { EventRowSchema } from './events.js';
 import { GradingStatusSchema } from './grading.js';
 import { RunLimitsSchema } from './settings.js';
 import { StudentQuestionSchema } from './questions.js';
-import {
-  InternetStateSchema,
-  LockReasonSchema,
-  MAX_TEACHER_MESSAGE,
-  TerminalStateSchema,
-} from './actions.js';
+import { LockReasonSchema, MAX_TEACHER_MESSAGE, TerminalStateSchema } from './actions.js';
 import { ExamFilesSchema } from './exam-files.js';
 import { AnswerAckSchema, AnswerSaveSchema, SavedAnswerSchema } from './answers.js';
 import {
@@ -78,30 +68,17 @@ export const APP_EVENT_TYPES = [
   'terminal_closed',
   'terminal_command',
   'package_installed',
-  'internet_blocked',
-  'internet_allowed',
-  'internet_block_failed',
   /** Text from outside the exam was pasted and blocked (M25). */
   'paste_blocked',
-  /** The agent link stayed down while the exam ran; the server locks the student (M24). */
-  'agent_lost',
   /** A burst of text far faster than typing, not an allowed paste (M27). */
   'large_insertion',
 ] as const;
 export const AppEventTypeSchema = z.enum(APP_EVENT_TYPES);
 export type AppEventType = z.infer<typeof AppEventTypeSchema>;
 
-/** Event types that come from the agent's evidence and are relayed by the app (M22). */
-export const AGENT_EVENT_TYPES = EVIDENCE_KINDS;
-export const AgentEventTypeSchema = EvidenceKindSchema;
-export type AgentEventType = EvidenceKind;
-
-export const ReportedEventTypeSchema = z.union([AppEventTypeSchema, AgentEventTypeSchema]);
+/** App events plus the monitor's evidence kinds (`monitoring.ts`), which the server stores as `monitor`. */
+export const ReportedEventTypeSchema = z.union([AppEventTypeSchema, EvidenceKindSchema]);
 export type ReportedEventType = z.infer<typeof ReportedEventTypeSchema>;
-
-export function isAgentEventType(type: string): type is AgentEventType {
-  return (AGENT_EVENT_TYPES as readonly string[]).includes(type);
-}
 
 export const EventReportSchema = z.object({
   t: z.literal('event'),
@@ -111,7 +88,7 @@ export const EventReportSchema = z.object({
   clientTs: z.number(),
   type: ReportedEventTypeSchema,
   details: z.record(z.string(), z.unknown()),
-  /** Names the binary screenshot chunks (kind 2) sent before this event; agent events only. */
+  /** Names the binary screenshot chunks (kind 2) sent before this event; monitor events only. */
   screenshotRef: z.string().min(1).max(100).optional(),
 });
 export type EventReport = z.infer<typeof EventReportSchema>;
@@ -128,20 +105,11 @@ export const TranscriptChunkSchema = z.object({
 });
 export type TranscriptChunk = z.infer<typeof TranscriptChunkSchema>;
 
-/** The student app's view of its agent link, sent after each welcome and whenever it changes (M21). */
-export const AgentStatusMessageSchema = AgentStatusSchema.extend({ t: z.literal('agent.status') });
-export type AgentStatusMessage = z.infer<typeof AgentStatusMessageSchema>;
-
-/**
- * Whether this PC's internet is blocked right now, as the agent confirmed it (M21b). `error` says why a
- * block the teacher asked for is not in place. Sent after each welcome and on every change.
- */
-export const InternetStatusMessageSchema = z.object({
-  t: z.literal('internet.status'),
-  blocked: z.boolean(),
-  error: z.string().max(300).nullable(),
+/** The student app's monitor check, sent after each welcome and whenever it changes (screens). */
+export const MonitorStatusMessageSchema = MonitorStatusSchema.extend({
+  t: z.literal('monitor.status'),
 });
-export type InternetStatusMessage = z.infer<typeof InternetStatusMessageSchema>;
+export type MonitorStatusMessage = z.infer<typeof MonitorStatusMessageSchema>;
 
 /** The student app showed a server command (a teacher message, M35); the server stops re-sending it. */
 export const AckSchema = z.object({ t: z.literal('ack'), id: z.string().min(1).max(100) });
@@ -155,8 +123,7 @@ export const StudentMessageSchema = z.discriminatedUnion('t', [
   TranscriptChunkSchema,
   AnswerSaveSchema,
   SubmitSchema,
-  AgentStatusMessageSchema,
-  InternetStatusMessageSchema,
+  MonitorStatusMessageSchema,
   RtcSignalSchema,
   LiveStateSchema,
 ]);
@@ -178,12 +145,10 @@ export const SessionStateSchema = z.object({
   /** Why the student is locked; absent or `null` when not locked (M35). */
   lockReason: LockReasonSchema.nullable().optional(),
   monitoring: z.boolean(),
-  /** What the agent does while the exam runs; set together with `monitoring: true` (M22). */
+  /** What the app's monitor does while the exam runs; set together with `monitoring: true` (M22). */
   monitoringPolicy: MonitorPolicySchema.optional(),
   /** The teacher's exam terminal switch (server-authoritative). */
   terminal: TerminalStateSchema,
-  /** The teacher's internet switch (server-authoritative; M21b). */
-  internet: InternetStateSchema,
   /** The teacher's Files panel switch for this exam (server-authoritative). */
   filesEnabled: z.boolean(),
   /** The run limits of this exam, fixed when hosting started (M43); defaults when absent. */
@@ -288,10 +253,9 @@ export const RosterEntrySchema = z.object({
   riskScore: z.number().int(),
   outsideMs: z.number().int(),
   lastSeen: z.number().nullable(),
-  agentOk: z.boolean(),
-  /** The student's PC confirmed that its internet is blocked (M21b). */
-  internetBlocked: z.boolean(),
-  /** Screens the student's PC shows the desktop on, from the agent's last report (M26). */
+  /** The student app's monitor check passed at its last report. */
+  monitorOk: z.boolean(),
+  /** Screens the student's PC shows the desktop on, from the app's last report (M26). */
   monitors: z.number().int().nonnegative(),
 });
 export type RosterEntry = z.infer<typeof RosterEntrySchema>;

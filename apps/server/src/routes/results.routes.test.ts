@@ -49,7 +49,7 @@ describe('finalize + CSV export (M42)', () => {
     // One high and two low events and some outside time for the first student.
     const event = e.db.prepare(
       `INSERT INTO events (exam_id, exam_student_id, type, severity, server_ts, source)
-         VALUES (?, ?, 'focus_lost', ?, 1, 'agent')`,
+         VALUES (?, ?, 'focus_lost', ?, 1, 'monitor')`,
     );
     event.run(e.examId, sid('anon-valid'), 'high');
     event.run(e.examId, sid('anon-valid'), 'low');

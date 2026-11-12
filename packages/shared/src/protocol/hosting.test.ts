@@ -9,7 +9,6 @@ describe('HostingInfoSchema', () => {
       port: 47820,
       fpCode: '7K2M',
       terminal: { enabled: false, until: null },
-      internet: 'allowed',
       deadline: null,
       extensionMin: 0,
       terminalPendingMinutes: null,

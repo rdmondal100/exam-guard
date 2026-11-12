@@ -24,7 +24,7 @@ export interface SimRun {
   submits(): SubmitTotals;
   /** Grid thumbnails summed over all students (M29). */
   thumbs(): ThumbTotals;
-  /** Agent-style events summed over all students (M47). */
+  /** Monitor-style events summed over all students (M47). */
   events(): EventStats;
 }
 

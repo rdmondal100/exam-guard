@@ -1,12 +1,12 @@
 // Builds the one Windows installer (M45-M46): pnpm package [--dir] [--skip-build]
 //   --dir         stop at release/win-unpacked (no NSIS step), for a quick check of the packed app
-//   --skip-build  reuse the existing JS and Rust builds
-// Steps: build the JS packages and the Rust release binaries, copy the desktop app with its
+//   --skip-build  reuse the existing JS build and SiteReader.exe
+// Steps: build the JS packages (the desktop build also compiles SiteReader.exe), copy the desktop app with its
 // production dependencies into release/stage (`pnpm deploy`, hoisted, so electron-builder sees a
 // plain node_modules), then run electron-builder on that copy. Needs `pnpm fetch-toolchains` first.
 /* global console, process */
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -44,18 +44,24 @@ if (missing.length > 0) {
 
 if (!args.has('--skip-build')) {
   run('pnpm turbo run build --filter=@examguard/desktop...');
-  run('cargo build --release -p eg-agent -p eg-runner');
 }
-for (const exe of ['eg-agent.exe', 'eg-runner.exe']) {
-  if (!existsSync(join(repo, 'target/release', exe))) {
-    throw new Error(`target/release/${exe} is missing: run without --skip-build.`);
-  }
+if (!existsSync(join(desktop, 'resources/SiteReader.exe'))) {
+  throw new Error('apps/desktop/resources/SiteReader.exe is missing: run without --skip-build.');
 }
 
 rmSync(stage, { recursive: true, force: true });
 run(
   `pnpm --filter @examguard/desktop deploy --prod --legacy --ignore-scripts --config.node-linker=hoisted "${stage}"`,
 );
+
+// get-windows downloads its Windows binary in an install script, which the deploy skips; the copy
+// from the workspace install goes in when the stage has none.
+const binding = 'node_modules/get-windows/lib/binding/napi-9-win32-unknown-x64';
+if (!existsSync(join(stage, binding))) {
+  const installed = join(desktop, binding);
+  if (!existsSync(installed)) throw new Error(`${installed} is missing: run pnpm install.`);
+  cpSync(installed, join(stage, binding), { recursive: true });
+}
 
 // electron-builder and Electron come from the desktop package's own dev dependencies.
 const requireFromDesktop = createRequire(join(desktop, 'package.json'));

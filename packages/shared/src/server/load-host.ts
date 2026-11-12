@@ -32,7 +32,7 @@ export type LoadHostSample = z.infer<typeof LoadHostSampleSchema>;
 /** What the database holds for the load exam. */
 export const LoadHostCountsSchema = z.object({
   events: z.number().int(),
-  agentEvents: z.number().int(),
+  monitorEvents: z.number().int(),
   withScreenshot: z.number().int(),
   answerVersions: z.number().int(),
   finalAnswers: z.number().int(),

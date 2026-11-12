@@ -17,13 +17,13 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 
 ### M02 Electron shell + mode selection
 - **Goal:** the desktop app opens a secure window and the first-launch screen picks Teacher or Student.
-- **Touches:** `apps/desktop` (electron-vite, React, Tailwind, shadcn init), `main/window.ts` (contextIsolation, sandbox, no nodeIntegration, DevTools off when packaged, CSP), `preload/` typed bridge, `main/install-type.ts` (reads `HKLM\Software\ExamGuard\InstallType`; `student` hides Teacher mode), `--profile` flag → separate userData, `pnpm dev:teacher` / `dev:student`.
+- **Touches:** `apps/desktop` (electron-vite, React, Tailwind, shadcn init), `main/window/mainWindow.ts` (contextIsolation, sandbox, no nodeIntegration, DevTools off when packaged, CSP), `preload/` typed bridge, `main/mode/installType.ts` (reads `HKLM\Software\ExamGuard\InstallType`; `student` hides Teacher mode), `--profile` flag → separate userData, `pnpm dev:teacher` / `dev:student`.
 - **Accept:** the mode is remembered per profile. Two profiles run at once. The renderer has no `require`/`process`.
 - **Manual test:** start both dev scripts, pick a mode in each, restart, and the modes are remembered. In the dev console, `typeof require` is `undefined`.
 
 ### M03 Exam server in a utilityProcess
 - **Goal:** Teacher mode starts `apps/server` as a utilityProcess and restarts it on crash.
-- **Touches:** `apps/server/src/server.ts`, `app.ts` (loopback 47821, `/api/v1/health`, token check), `apps/desktop/main/server-host.ts` (spawn, backoff restart, MessagePort, token handoff to preload), logs.
+- **Touches:** `apps/server/src/server.ts`, `app.ts` (loopback 47821, `/api/v1/health`, token check), `apps/desktop/main/server/serverHost.ts` (spawn, backoff restart, MessagePort, token handoff to preload), logs.
 - **Accept:** health returns 200 with the token and 401 without it. Killing the server process makes it restart and the UI banner shows "server restarted".
 - **Manual test:** Teacher mode → status chip "Server running". End the utility process in Task Manager → it comes back within about 2 s.
 
@@ -70,7 +70,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 
 ### M10 Discovery + manual IP + cert pinning
 - **Goal:** the student app finds hosting teachers over mDNS or by manual IP, and pins the cert.
-- **Touches:** server mDNS advertiser (bonjour-service, TXT v/exam/fp), student main `discovery.ts` + `tls-pin.ts` (custom `checkServerIdentity` / Electron `setCertificateVerifyProc` limited to the pinned fp), student "Find exam" screen with the fp code shown for manual IP.
+- **Touches:** server mDNS advertiser (bonjour-service, TXT v/exam/fp), student main `discovery.ts` + `tlsPin.ts` (custom `checkServerIdentity` / Electron `setCertificateVerifyProc` limited to the pinned fp), student "Find exam" screen with the fp code shown for manual IP.
 - **Accept:** the laptop discovers the teacher on the LAN. Manual IP works. A mismatched cert (regenerated mid-session) is refused with a clear message.
 - **Manual test:** on the laptop, the exam appears in the list. Enter the IP manually and compare the 4-char code with the teacher screen.
 
@@ -175,6 +175,8 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 ## Phase 4 — Monitoring agent
 *Done when: opening Chrome or WhatsApp on a student PC creates a logged event with a screenshot.*
 
+> **Replaced on 2026-11-12 (M50).** The Rust agent of M19–M24 and M26 (service, helper, pipe, evidence buffer, relaunch, tamper lock) and the internet switch of M21a/M21b were removed: the student app monitors by itself (`apps/desktop/src/main/tracking/`) and never changes the PC. The entries below are kept as history; what they built in Rust or on the pipe no longer exists. M25 (paste control) and M27 (large insertion) are in-app and still current.
+
 ### M20 Agent service skeleton + helper lifecycle
 - **Goal:** a production-shaped service: SCM integration, config, logging, helper launch/restart, `--console` mode.
 - **Touches:** `agent/eg-agent/src/{service,helper,session,config,log}.rs`, `scripts/dev-install-agent.ps1` (admin, laptop/dev only) + uninstall.
@@ -248,9 +250,9 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Built (2026-11-02, with M31/M32):** shared `LargeInsertionReportSchema` + limits (200 chars, 5 new lines, 25 ms key gap), `large_insertion` app event; renderer `InsertionWatch` (bursts by key `timeStamp`, paste allowance, Monaco and text-box adapters), `useInsertionWatch` + context for the code and Files editors, `usePasteGuard(onAllowed)`; main `insertion:large` IPC with `ThrottledReporter` (was `PasteReporter`); teacher event line. Decisions in decisions.md (M27).
 
 ### M28 Phase 4 integration — **Phase 4 demo**
-- **Goal:** end-to-end on the laptop with the installed service and a standard user account.
-- **Touches:** fixes only. Update `architecture.md` §3 with what the spike/agent work taught.
-- **Accept / demo:** a student on the laptop opens Chrome and WhatsApp (web or desktop) → the teacher sees logged events with screenshots, and nothing is lost if ExamGuard is killed.
+- **Goal:** end-to-end on the laptop with the installed app (no service since M50) and a standard user account.
+- **Touches:** fixes only.
+- **Accept / demo:** a student on the laptop opens Chrome (ChatGPT) and WhatsApp (web or desktop) → the teacher sees logged events with the site, its address and screenshots; killing ExamGuard shows the student disconnected at once, and after a restart the events seen before are there.
 
 > **CHECKPOINT after Phase 4.** Compare progress with available time. If behind, move [D] milestones (M26, M27, M34, M41, M44) to Stage 2 and log the decision in `decisions.md`.
 
@@ -301,7 +303,7 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Fallback if deferred:** "fast thumbnail" mode in M33 (960 px every 1 s for the selected student).
 - **Manual test:** open a live view of the laptop, close it, reopen it.
 - **Built (2026-11-03, fallback only, with M36/M37):** the "fast thumbnail" mode. Shared `thumbs.focus` (at most 2 ids), `FAST_THUMB_*`; `ThumbRelay.focus` (a focus wins over a grid page: `thumb.start {1000 ms, 960 px}`, back to the grid values or `thumb.stop` after), teacher `useRoster.focusThumbs`, `FastThumbView` ("Live screen" in the student detail while running; streams only while the window is shown, closes after 60 s hidden). WebRTC (`live.*`, `rtc.signal`) is not built and waits for the M30 laptop spike; decide at that point whether to build it or keep the fallback.
-- **Built (2026-11-03, WebRTC, with M30):** shared `live.ts` (`rtc.signal` with size limits, `live.request/stop/state/open/close/session`, page IPC schemas); server `LiveRelay` (at most 2 per teacher socket, relays only between the two ends of a known session, ends sessions on close, teacher socket close, student disconnect or re-welcome, hosting stop); student main `LiveViews` + `live-window.ts` (one hidden sandboxed child window per session with its own preload `live.cjs` and page `live.html`, `getUserMedia` chromeMediaSource desktop 1280 px / 8 fps, `media` permission only for those pages, destroyed on stop/failure/monitoring end/socket close, at most 2), `SessionClient.onLive/sendLive`, `disable-features=WebRtcHideLocalIpsWithMdns`; teacher `LiveChannel` on the roster socket and `LiveView` (receive-only peer, falls back to `FastThumbView` on failure or no video in 10 s, "Try live video again"). Laptop run not done (manual).
+- **Built (2026-11-03, WebRTC, with M30):** shared `live.ts` (`rtc.signal` with size limits, `live.request/stop/state/open/close/session`, page IPC schemas); server `LiveRelay` (at most 2 per teacher socket, relays only between the two ends of a known session, ends sessions on close, teacher socket close, student disconnect or re-welcome, hosting stop); student main `LiveViews` + `liveWindow.ts` (one hidden sandboxed child window per session with its own preload `live.cjs` and page `live.html`, `getUserMedia` chromeMediaSource desktop 1280 px / 8 fps, `media` permission only for those pages, destroyed on stop/failure/monitoring end/socket close, at most 2), `SessionClient.onLive/sendLive`, `disable-features=WebRtcHideLocalIpsWithMdns`; teacher `LiveChannel` on the roster socket and `LiveView` (receive-only peer, falls back to `FastThumbView` on failure or no video in 10 s, "Try live video again"). Laptop run not done (manual).
 
 ### M35 Per-student actions
 - **Goal:** message/warning, lock/unlock, extend time, end exam (save + submit), reset session.
@@ -379,14 +381,14 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Touches:** move service (copy, verify, switch, delete old), retention job at startup.
 - **Accept:** a move during non-hosting works and is refused while hosting. Purge nulls the paths.
 - **Manual test:** move to another drive and restart. Set retention to 0 days on a test exam.
-- **Built (2026-11-03):** shared `retention` settings section + `RetentionPurgeResult`, data folder IPC schemas, `release-data`/`data-released` process messages; server `ScreenshotRetention` (start + `POST /settings/retention/purge`, live exams skipped), `MaintenanceService.dataBusyReason` (hosting/running exam or unfinished grading job), `server.ts` closes the DB on release; main `DataFolder` (pointer `data-location.json`), `DataFolderMover` (space check, release, stop, copy, SHA-256 verify, switch, wait for `running`, delete old; rollback on failure), `ServerHost.releaseData/stopAndWait/whenRunning`, the AI key store and exports follow the folder; Settings "Screenshot retention" and "Data folder" sections. Not built: wiping run folders at exam end, log rotation, pruning old backups.
+- **Built (2026-11-03):** shared `retention` settings section + `RetentionPurgeResult`, data folder IPC schemas, `release-data`/`data-released` process messages; server `ScreenshotRetention` (start + `POST /settings/retention/purge`, live exams skipped), `MaintenanceService.dataBusyReason` (hosting/running exam or unfinished grading job), `server.ts` closes the DB on release; main `DataFolder` (pointer `dataLocation.json`), `DataFolderMover` (space check, release, stop, copy, SHA-256 verify, switch, wait for `running`, delete old; rollback on failure), `ServerHost.releaseData/stopAndWait/whenRunning`, the AI key store and exports follow the folder; Settings "Screenshot retention" and "Data folder" sections. Not built: wiping run folders at exam end, log rotation, pruning old backups.
 
 ### M45 Installer: build + install type
 - **Goal:** electron-builder NSIS installer with a Teacher/Student page and a silent `/TYPE=student|teacher`, bundling MinGW (C/C++ only) + MSYS2 pacman, npm, Python + pip, node-pty, eg-runner and eg-agent. One installer always contains everything.
-- **Touches:** `apps/desktop/electron-builder.yml`, `build/installer.nsh`, registry `InstallType`, fuses config (RunAsNode kept on, see decisions.md).
+- **Touches:** `apps/desktop/electron-builder.yml`, `resources/installer.nsh`, registry `InstallType`, fuses config (RunAsNode kept on, see decisions.md).
 - **Accept:** a student install hides Teacher mode. A silent install works from an admin cmd. Installer and installed sizes are recorded in progress.md (target download ≤ 450 MB).
 - **Manual test:** install both types on the laptop (uninstalling in between).
-- **Built (2026-11-03):** `pnpm package` (`scripts/package-desktop.mjs`: build, `pnpm deploy` stage, electron-builder 26.18 with the local Electron), `apps/desktop/electron-builder.config.ts` (asar with node-pty + better-sqlite3 unpacked, agent/runner/toolchains as extra resources, MSYS2 locale/man/doc dropped, fuses with RunAsNode on), `build/installer.nsh` (Teacher/Student page, `/TYPE=`, `InstallType` + `AppPath` in HKLM, 64-bit view); renderer-only packages moved to dev dependencies, `ws` to dependencies; an installed app expects the agent at `<install dir>\resources\eg-agent.exe`; agent logs moved to `%ProgramData%\ExamGuard\logs`. **Sizes (dev PC): installer 210 MB, installed 1178 MB** (toolchains 794 MB, app.asar 50 MB). Checked here: the NSIS script compiles (warnings as errors), the packed app starts in Teacher mode with its server (better-sqlite3 from the asar), node-pty + conpty.dll and the bundled gcc, Python and pacman run from the packed folder. Not run: an actual install (manual test). No app icon yet.
+- **Built (2026-11-03):** `pnpm package` (`scripts/package-desktop.mjs`: build, `pnpm deploy` stage, electron-builder 26.18 with the local Electron), `apps/desktop/electron-builder.config.ts` (asar with node-pty + better-sqlite3 unpacked, agent/runner/toolchains as extra resources, MSYS2 locale/man/doc dropped, fuses with RunAsNode on), `resources/installer.nsh` (Teacher/Student page, `/TYPE=`, `InstallType` + `AppPath` in HKLM, 64-bit view); renderer-only packages moved to dev dependencies, `ws` to dependencies; an installed app expects the agent at `<install dir>\resources\eg-agent.exe`; agent logs moved to `%ProgramData%\ExamGuard\logs`. **Sizes (dev PC): installer 210 MB, installed 1178 MB** (toolchains 794 MB, app.asar 50 MB). Checked here: the NSIS script compiles (warnings as errors), the packed app starts in Teacher mode with its server (better-sqlite3 from the asar), node-pty + conpty.dll and the bundled gcc, Python and pacman run from the packed folder. Not run: an actual install (manual test). No app icon yet.
 
 ### M46 Installer: service, firewall, uninstall
 - **Goal:** a student install registers and starts the agent service. A teacher install adds the program firewall rules. Uninstall removes everything.
@@ -411,11 +413,24 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 
 ### M49 Hardening + lab-IT README — **Phase 7 demo / Stage 1 done**
 - **Goal:** security pass and the lab-IT README.
-- **Touches:** review rate/size limits, CSP, DevTools off, IPC surface, dependency audit, `docs/lab-it-readme.md` (install, silent flags, SmartScreen/AV, service, firewall, mDNS/subnet, uninstall).
+- **Touches:** review rate/size limits, CSP, DevTools off, IPC surface, dependency audit, `docs/lab-it-readme.md` (install, silent flags, SmartScreen/AV, firewall, mDNS/subnet, uninstall).
 - **Accept / demo:** one installer works on a freshly reset Windows PC (laptop) as Student and on the teacher PC, and the M47 run passes on the final build. Every requirements §3 objective is ticked in progress.md.
 - **Built (2026-11-03):** security pass: renderer permissions allow-listed (`clipboard-sanitized-write`, `fullscreen`), dev renderer URL ignored when packaged, limits/CSP/DevTools/IPC reviewed (decisions M49), Electron 44.10.1 (eMudhra cert advisory) and DOMPurify ≥ 3.4.17 override (Monaco); `pnpm audit` leaves only build-time `minimatch`. `docs/lab-it-readme.md` written. Demo (fresh-PC installs) not run.
+
+### M50 Remove Rust: monitoring in the student app, reference layout
+- **Goal:** no Rust and no control of the student PC: the student app monitors by itself (get-windows, a C# UI Automation reader for Chrome/Edge addresses, Electron screens and capture); the internet switch, agent service, tamper lock and relaunch go; code runs without the Job Object launcher; `apps/desktop` follows the WorkPulse reference layout.
+- **Touches:** shared `monitoring.ts` (replaces `agent-pipe.ts`), `MonitorStatus` / `monitor.status` / `monitor_required`, protocol major 2; server `monitor` source, site-aware classifier, migration 0016, internet switch and `agent_lost` lock removed; desktop `tracking/`, `screenshots/`, `runner/killTree.ts` + `cmdHost.ts`, `resources/SiteReader.cs` + `scripts/build-site-reader.mjs`; renderer agent gate and internet control removed, site + address in event lines; installer without the service; camelCase feature folders and `src/renderer/src`.
+- **Accept:** `agent/` and Cargo files are gone; switching to Chrome on ChatGPT logs `focus_lost` with `chatgpt.com`, the full address and a screenshot; Notepad started mid-exam logs `app_launched`; a second screen, the lock screen and Task Manager are logged; Run works for C, C++, Python and JS with Stop and the time limit ending the whole tree; the teacher has no internet switch.
+- **Manual test:** `pnpm dev:teacher` + `pnpm dev:student` (127.0.0.1): start an exam, switch to Chrome on chatgpt.com and to an InPrivate Edge window, open Notepad, lock the PC with Win+L, open Task Manager; check the teacher's Events list (site, Address button, screenshots, severities) and the roster. Then Run a C program with `while(1);` and press Stop.
+- **Built (2026-11-12):** all of the above; unit tests for the policy, tracker, launches, site reader, inside check, self-check, cmd host and the runner; the real-run e2e tests answer ConPTY's DA1 query like xterm.js. Not run: the manual test and a packaged build.
+
+### M51 UI on shadcn/ui, light and dark
+- **Goal:** every screen built from shadcn/ui components on one token theme (slate + the ExamGuard blue), with light and dark mode; no behavior change.
+- **Touches:** `renderer/src/styles/global.css` (tokens, `success`/`warning`/`info`), `components/ui/*` (forwardRef versions of button, input, textarea, label, card, badge, alert, select, checkbox, switch, radio-group, tabs, tooltip, dialog, alert-dialog, sheet, dropdown-menu, table, scroll-area, progress, collapsible, sonner, sidebar); `components/common/` (ConfirmProvider + `useConfirm`, FormField, ToggleField, OptionSelect, PageHeader, EmptyState, ErrorAlert, KeyValueList, Hint, Spinner, CenteredScreen, AppMark); every page and component restyled; teacher shell on the Sidebar with a Home page; ExamDetail as status card + Questions/Monitoring/Grading tabs; shared `app/theme.ts`, main `settings/themeStore.ts` + `themeIpc.ts`, preload `getTheme/setTheme`, Settings → Appearance.
+- **Accept:** no `window.confirm`, native select/checkbox/radio/table or hard-coded colour classes left in the renderer; System/Light/Dark switches the app and the title bar at once and survives a restart; Monaco follows the theme; tab switches keep xterm, Monaco and the monitoring streams mounted.
+- **Built (2026-11-12):** all of the above. Checked in the built app with throwaway profiles: mode select (dark and light, switched through `setTheme`), find exam with a discovered host, security code card, join form. Not checked by running: the teacher screens after login (the dev teacher instance held ports 47820/47821).
 
 ---
 
 ## Stage 2 (not broken down)
-Java support (trimmed JDK, jars in `workspace/lib`) · code typing replay · similarity/plagiarism check · optional strict mode · per-student internet/terminal toggles · package cache on the teacher PC for labs without internet · VM/remote-desktop/USB detection · app integrity/tamper checks · PDF reports and releasing results to students · question bank · MCQ questions · more AI providers (OpenAI) · multiple teachers/admin role · analytics across exams · plus any [D] milestones deferred at the checkpoint. (Python and the interactive terminal moved into Phase 3 on 2026-10-21; Java stays here.)
+Java support (trimmed JDK, jars in `workspace/lib`) · code typing replay · similarity/plagiarism check · optional strict mode · per-student terminal toggle · package cache on the teacher PC for labs without internet · VM/remote-desktop/USB detection · app integrity/tamper checks · PDF reports and releasing results to students · question bank · MCQ questions · more AI providers (OpenAI) · multiple teachers/admin role · analytics across exams · plus any [D] milestones deferred at the checkpoint. (Python and the interactive terminal moved into Phase 3 on 2026-10-21; Java stays here.)

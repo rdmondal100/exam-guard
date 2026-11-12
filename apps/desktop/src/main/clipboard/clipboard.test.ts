@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PasteBlockedReport, SessionState } from '@examguard/shared';
-import { ClipboardClear } from './clipboard-clear.js';
-import { ThrottledReporter } from './throttled-reporter.js';
+import { ClipboardClear } from './clipboardClear.js';
+import { ThrottledReporter } from './throttledReporter.js';
 
 const exam = (over: Partial<SessionState> = {}): SessionState => ({
   examState: 'running',
@@ -11,7 +11,6 @@ const exam = (over: Partial<SessionState> = {}): SessionState => ({
   locked: false,
   monitoring: true,
   terminal: { enabled: false, until: null },
-  internet: 'allowed',
   filesEnabled: true,
   examFiles: [],
   ...over,
