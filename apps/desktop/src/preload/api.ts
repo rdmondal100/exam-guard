@@ -10,7 +10,6 @@ import type {
   AnswerStatus,
   SubmitOutcome,
   AppInfo,
-  AppMode,
   DiscoveredHost,
   ExamFilesStatus,
   FileCreateRequest,
@@ -37,12 +36,12 @@ import type {
   TerminalSize,
   TerminalStatus,
   ThemeSource,
+  ReadinessReport,
 } from '@examguard/shared';
 
 /** The only surface the renderer gets: `window.examguard`. */
 export interface ExamGuardApi {
   getInfo(): Promise<AppInfo>;
-  setMode(mode: AppMode): Promise<AppInfo>;
   /** Teacher mode only. `null` while the server has not started. */
   getServerConnection(): Promise<ServerConnection | null>;
   getServerStatus(): Promise<ServerStatus>;
@@ -136,7 +135,42 @@ export interface ExamGuardApi {
   chooseDataFolder(): Promise<string | null>;
   /** Moves the data (`null`: back to the profile folder). The server restarts, so sign in again. */
   moveDataFolder(path: string | null): Promise<DataFolderMoveResult>;
+  /** Student app (M57): shut this PC down; refused until the answers are submitted. */
+  shutdownPc(): Promise<void>;
+  /** Student app (M54): the lobby readiness check's last result, `null` before it ran. */
+  readinessReport(): Promise<ReadinessReport | null>;
+  /** A new readiness result. Returns an unsubscribe function. */
+  onReadiness(listener: (report: ReadinessReport) => void): () => void;
   /** The colour theme (M51): system, light or dark, kept per profile. */
   getTheme(): Promise<ThemeSource>;
   setTheme(theme: ThemeSource): Promise<ThemeSource>;
+}
+
+/** Methods both apps expose. */
+const COMMON_METHODS = [
+  'getInfo',
+  'getTheme',
+  'setTheme',
+] as const satisfies readonly (keyof ExamGuardApi)[];
+
+/** Methods only the teacher app exposes (M52); everything else is the student app's. */
+const TEACHER_METHODS = [
+  'getServerConnection',
+  'getServerStatus',
+  'onServerStatus',
+  'revealExport',
+  'aiKeyStatus',
+  'setAiKey',
+  'clearAiKey',
+  'dataFolderInfo',
+  'openDataFolder',
+  'chooseDataFolder',
+  'moveDataFolder',
+] as const satisfies readonly (keyof ExamGuardApi)[];
+
+/** Whether a method belongs on `window.examguard` in the given app. */
+export function exposedIn(app: 'teacher' | 'student', method: string): boolean {
+  if ((COMMON_METHODS as readonly string[]).includes(method)) return true;
+  const teacherOnly = (TEACHER_METHODS as readonly string[]).includes(method);
+  return app === 'teacher' ? teacherOnly : !teacherOnly;
 }

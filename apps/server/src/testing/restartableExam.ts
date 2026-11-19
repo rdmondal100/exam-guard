@@ -10,7 +10,7 @@ import { withInject, type Injectable } from './inject.js';
 
 const TOKEN = 'r'.repeat(40);
 const HEADERS = { 'x-teacher-token': TOKEN };
-const PROTOCOL = { major: 2, minor: 0 };
+const PROTOCOL = { major: 5, minor: 0 };
 const PASSWORD = 'correct horse battery';
 export const RESTART_PIN = '004217';
 
@@ -213,6 +213,7 @@ export class RestartableExam {
           makePin: () => RESTART_PIN,
           addresses: () => ['127.0.0.1'],
           advertise: () => () => {},
+          restartReconnectMs: 300,
         },
       }),
     );

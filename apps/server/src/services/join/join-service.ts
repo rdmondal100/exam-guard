@@ -124,6 +124,7 @@ export class JoinService {
       examStudentId: session.id,
       name: onList.name,
       examTitle: exam.title,
+      practice: exam.practice,
       state: session.state,
     };
   }

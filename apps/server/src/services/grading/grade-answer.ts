@@ -120,6 +120,9 @@ export async function gradeAnswer(
       }
       return giveUp();
     }
+    // Cancelled while the provider was answering (M60): the teacher may already be editing this
+    // answer, so a late grade must not replace theirs.
+    signal.throwIfAborted();
 
     const check = validateGrade(text, question.criteria);
     if (check.ok) {

@@ -84,7 +84,13 @@ beforeEach(() => {
 describe('JoinClient.join', () => {
   it('posts the credentials, device id and protocol, and hides the token', async () => {
     const result = await client.join(attempt());
-    expect(result).toEqual({ ok: true, examStudentId: 'es1', name: 'Ada', examTitle: 'Mid' });
+    expect(result).toEqual({
+      ok: true,
+      examStudentId: 'es1',
+      name: 'Ada',
+      examTitle: 'Mid',
+      practice: false,
+    });
     expect(JSON.stringify(result)).not.toContain(TOKEN);
     expect(seen[0]).toMatchObject({
       method: 'POST',
@@ -93,7 +99,7 @@ describe('JoinClient.join', () => {
         studentCode: '1',
         pin: '123456',
         deviceId: 'device-xyz',
-        protocol: { major: 2 },
+        protocol: { major: 5 },
         monitor: { ok: true, captureOk: true, monitors: 2 },
       },
     });

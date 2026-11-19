@@ -14,6 +14,7 @@ export * from './ws.js';
 export * from './file-name.js';
 export * from './exam-files.js';
 export * from './monitoring.js';
+export * from './readiness.js';
 export * from './events.js';
 export * from './screenshot-frame.js';
 export * from './thumbs.js';

@@ -1,5 +1,6 @@
 import {
   StudentInfoSchema,
+  fpCodeOf,
   STUDENT_API_PORT,
   isProtocolCompatible,
   type ProbeRequest,
@@ -40,7 +41,9 @@ export async function probeHost(request: ProbeRequest): Promise<ProbeResult> {
       ok: true,
       address: request.address,
       port,
-      info: info.data,
+      // The code students compare comes from the certificate this host presented, never from its
+      // reply: a rogue host could echo the real teacher's code.
+      info: { ...info.data, fpCode: fpCodeOf(Buffer.from(response.fingerprint, 'base64url')) },
       fingerprint: response.fingerprint,
     };
   } catch (e) {

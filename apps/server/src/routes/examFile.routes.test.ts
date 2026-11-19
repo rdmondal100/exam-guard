@@ -145,18 +145,25 @@ describe('exam file routes', () => {
     expect((await json('DELETE', '/exams/nope/files/x')).statusCode).toBe(404);
   });
 
-  it('allows changes in ready, and refuses them once the exam is past ready', async () => {
+  it('allows changes in ready; hosted or running only takes new names (M58)', async () => {
     const examId = await createExam();
     const file = (await upload(examId, 'a.txt', 'x')).json();
     db.prepare("UPDATE exams SET state = 'ready' WHERE id = ?").run(examId);
     expect((await upload(examId, 'b.txt', 'x')).statusCode).toBe(201);
     db.prepare("UPDATE exams SET state = 'hosting' WHERE id = ?").run(examId);
-    const blocked = await upload(examId, 'c.txt', 'x');
-    expect(blocked.statusCode).toBe(409);
-    expect(blocked.json().error.code).toBe('invalid_state');
+    expect((await upload(examId, 'c.txt', 'x')).statusCode).toBe(201);
+    const taken = await upload(examId, 'A.TXT', 'y');
+    expect(taken.statusCode).toBe(409);
+    expect(taken.json().error.code).toBe('file_exists');
     expect((await json('DELETE', `/exams/${examId}/files/${file.id}`)).statusCode).toBe(409);
+    db.prepare("UPDATE exams SET state = 'running' WHERE id = ?").run(examId);
+    expect((await upload(examId, 'd.txt', 'x')).statusCode).toBe(201);
+    db.prepare("UPDATE exams SET state = 'ended' WHERE id = ?").run(examId);
+    const ended = await upload(examId, 'e.txt', 'x');
+    expect(ended.statusCode).toBe(409);
+    expect(ended.json().error.code).toBe('invalid_state');
     // Reading the list is always fine.
-    expect((await json('GET', `/exams/${examId}/files`)).json()).toHaveLength(2);
+    expect((await json('GET', `/exams/${examId}/files`)).json()).toHaveLength(4);
   });
 
   it('needs the teacher login', async () => {

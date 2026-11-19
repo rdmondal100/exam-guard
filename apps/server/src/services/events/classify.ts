@@ -17,7 +17,14 @@ export interface ClassifyInput {
   outsideMs?: number;
 }
 
-const MEDIUM_TYPES = new Set(['taskmgr_opened', 'secure_desktop', 'paste_blocked', 'network_lost']);
+/** `monitor_stalled` (M63): the PC was not watched for a while; the teacher should look at it. */
+const MEDIUM_TYPES = new Set([
+  'taskmgr_opened',
+  'secure_desktop',
+  'paste_blocked',
+  'network_lost',
+  'monitor_stalled',
+]);
 const HIGH_TYPES = new Set(['large_insertion']);
 const CRITICAL_TYPES = new Set(['duplicate_login']);
 

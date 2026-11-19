@@ -30,10 +30,12 @@ export function dropReason(
   if (deps.exams.get(examId)?.state !== 'running') return 'exam_not_running';
   const state = deps.students.findById(examStudentId)?.state;
   if (state !== 'active' && state !== 'locked') return 'student_not_working';
-  const deadline = deps.deadlines.forStudent(examId, examStudentId);
+  // The pause (M58) is enforced here, not only by the app's cover (M60).
+  if (deps.deadlines.pausedAt(examId) !== null) return 'paused';
+  const deadline = deps.deadlines.effective(examId, examStudentId);
   if (deadline !== null) {
     if (save.clientTs > deadline) return 'after_deadline';
-    if (deps.now() > deadline + deps.deadlines.graceMs(examId)) return 'past_grace';
+    if (deps.now() > deps.deadlines.graceEnds(examId, deadline)) return 'past_grace';
   }
   const question = deps.questions.get(save.questionId);
   if (!question || question.examId !== examId) return 'unknown_question';

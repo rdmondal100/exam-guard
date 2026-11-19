@@ -34,3 +34,11 @@ export function assertTransition(from: ExamState, to: ExamState): void {
 export function isEditable(state: ExamState): boolean {
   return state === 'draft' || state === 'ready';
 }
+
+/**
+ * Questions and files can still be added (not changed or removed) while the exam is hosted or
+ * running (M58): students already have the others.
+ */
+export function acceptsAdditions(state: ExamState): boolean {
+  return state === 'hosting' || state === 'running';
+}

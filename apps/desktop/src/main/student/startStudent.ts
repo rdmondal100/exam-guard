@@ -2,84 +2,60 @@ import { BrowserWindow, app, ipcMain, safeStorage } from 'electron';
 import {
   JoinAttemptSchema,
   ProbeRequestSchema,
-  SetModeRequestSchema,
-  allowedModesFor,
-  type AppInfo,
-  type AppMode,
-  type InstallType,
   type MonitorStatus,
   type SessionState,
 } from '@examguard/shared';
-import { IPC } from '../shared/ipcChannels.js';
-import { readDeviceId } from './join/deviceId.js';
-import { Discovery } from './join/discovery.js';
-import type { ExamLock } from './window/examLock.js';
-import { examWorking } from './session/examWorking.js';
-import { JoinClient } from './join/joinClient.js';
-import { probeHost } from './join/probeHost.js';
-import { SessionClient } from './session/sessionClient.js';
-import { SessionExitWatch } from './session/sessionExitWatch.js';
-import { resolveMode, saveStoredMode } from './mode/modeStore.js';
-import { createMonitoring, OwnProcesses, wantsMonitoring } from './tracking/index.js';
-import type { ExamMonitor } from './tracking/examMonitor.js';
-import { registerExamFilesIpc } from './examFiles/examFilesIpc.js';
-import { registerFilesIpc } from './files/filesIpc.js';
-import { registerAnswersIpc } from './answers/answersIpc.js';
-import { registerClipboardIpc } from './clipboard/clipboardIpc.js';
-import type { ClipboardClear } from './clipboard/clipboardClear.js';
-import { registerResumeIpc, type ResumeHooks } from './resume/resumeIpc.js';
-import { createSecretBox } from './resume/secretBox.js';
-import { registerRunnerIpc } from './runner/runnerIpc.js';
-import type { ServerHost } from './server/serverHost.js';
-import { registerTerminalIpc } from './terminal/terminalIpc.js';
-import { captureScreenJpeg } from './screenshots/capture.js';
-import { ThumbCapture } from './thumbs/thumbCapture.js';
-import { LiveViews } from './live/liveViews.js';
-import { openLiveWindow, primaryScreenSourceId } from './live/liveWindow.js';
+import { IPC } from '../../shared/ipcChannels.js';
+import type { AppStart, StartContext } from '../appStart.js';
+import { readDeviceId } from '../join/deviceId.js';
+import { Discovery } from '../join/discovery.js';
+import { examWorking } from '../session/examWorking.js';
+import { JoinClient } from '../join/joinClient.js';
+import { probeHost } from '../join/probeHost.js';
+import { SessionClient } from '../session/sessionClient.js';
+import { SessionExitWatch } from '../session/sessionExitWatch.js';
+import { createMonitoring, OwnProcesses, wantsMonitoring } from '../tracking/index.js';
+import type { ExamMonitor } from '../tracking/examMonitor.js';
+import { registerExamFilesIpc } from '../examFiles/examFilesIpc.js';
+import { registerFilesIpc } from '../files/filesIpc.js';
+import { registerAnswersIpc } from '../answers/answersIpc.js';
+import { registerClipboardIpc } from '../clipboard/clipboardIpc.js';
+import type { ClipboardClear } from '../clipboard/clipboardClear.js';
+import { registerResumeIpc, type ResumeHooks } from '../resume/resumeIpc.js';
+import { createSecretBox } from '../resume/secretBox.js';
+import { registerRunnerIpc } from '../runner/runnerIpc.js';
+import { registerTerminalIpc } from '../terminal/terminalIpc.js';
+import { captureScreenJpeg } from '../screenshots/capture.js';
+import { ThumbCapture } from '../thumbs/thumbCapture.js';
+import { LiveViews } from '../live/liveViews.js';
+import { openLiveWindow, primaryScreenSourceId } from '../live/liveWindow.js';
+import { resolveToolchain } from '../runner/toolchains.js';
+import { runRoot } from '../runner/runRoot.js';
+import { LobbyReadiness } from './readiness/lobbyReadiness.js';
+import { runSelfTest } from './readiness/selfTest.js';
+import { registerShutdownIpc } from './shutdown/shutdownIpc.js';
 
-export interface AppState {
-  profile: string;
-  userData: string;
-  installType: InstallType;
-  mode: AppMode | null;
-}
-
-function toInfo(state: AppState): AppInfo {
-  return {
-    mode: state.mode,
-    installType: state.installType,
-    allowedModes: allowedModesFor(state.installType),
-    profile: state.profile,
-  };
-}
-
-export interface IpcHandle {
-  /** The exam window: the parent of the hidden live view pages (M34). */
-  announceWindow(window: BrowserWindow): void;
-}
-
-export function registerIpc(state: AppState, server: ServerHost, examLock: ExamLock): IpcHandle {
+/**
+ * The student app (M52): discovery, join, the live session, the in-app monitor, answers,
+ * clipboard, resume, the runner, the Files panel, the terminal, thumbnails and the live view.
+ * Only this app contains any of it; there is no mode to check.
+ */
+export function startStudent({ userData, examLock }: StartContext): AppStart {
   const discovery = new Discovery((hosts) => {
     for (const win of BrowserWindow.getAllWindows())
       win.webContents.send(IPC.discoveryHosts, hosts);
   });
-  const requireStudent = () => {
-    if (state.mode !== 'student') throw new Error('Discovery is for Student mode');
-  };
-  ipcMain.handle(IPC.getInfo, () => toInfo(state));
-  ipcMain.handle(IPC.getServerConnection, () => server.getConnection());
-  ipcMain.handle(IPC.getServerStatus, () => server.getStatus());
+  // Every module below still takes this guard; in the student app it always passes.
+  const requireStudent = () => undefined;
 
   ipcMain.handle(IPC.startDiscovery, () => {
-    requireStudent();
     discovery.start();
     return discovery.list();
   });
   ipcMain.handle(IPC.stopDiscovery, () => discovery.stop());
-  ipcMain.handle(IPC.probeHost, (_event, payload: unknown) => {
-    requireStudent();
-    return probeHost(ProbeRequestSchema.parse(payload));
-  });
+  ipcMain.handle(IPC.probeHost, (_event, payload: unknown) =>
+    probeHost(ProbeRequestSchema.parse(payload)),
+  );
 
   // The monitor's self-check runs before each join (filled in once the session exists).
   const monitoring: { check?: () => Promise<MonitorStatus> } = {};
@@ -87,13 +63,11 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     () => readDeviceId({ override: process.env.EG_DEVICE_ID, isPackaged: app.isPackaged }),
     () => (monitoring.check ? monitoring.check() : Promise.reject(new Error('Not ready'))),
   );
-  ipcMain.handle(IPC.joinExam, (_event, payload: unknown) => {
-    requireStudent();
-    return joinClient.join(JoinAttemptSchema.parse(payload));
-  });
+  ipcMain.handle(IPC.joinExam, (_event, payload: unknown) =>
+    joinClient.join(JoinAttemptSchema.parse(payload)),
+  );
   const resume: { hooks?: ResumeHooks } = {};
   ipcMain.handle(IPC.confirmJoin, async () => {
-    requireStudent();
     const result = await joinClient.confirm();
     if (result.ok) resume.hooks?.afterConfirm();
     return result;
@@ -104,13 +78,16 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     credentials: () => joinClient.credentials(),
     requireStudent,
   });
-  let onTerminalExam: (exam: SessionState) => void = () => {};
+  let onTerminalExam: (exam: SessionState | null) => void = () => {};
+  let stopRun: () => void = () => {};
   let monitor: ExamMonitor | null = null;
   let clipboardClear: ClipboardClear | null = null;
   let thumbs: ThumbCapture | null = null;
   let liveViews: LiveViews | null = null;
   // The exam window: the parent of the hidden live view pages (M34).
   let examWindow: BrowserWindow | null = null;
+  // The lobby readiness check (M54): compile and run in every language before the exam starts.
+  let readiness: LobbyReadiness | null = null;
   // A failed session, or a link that stayed down past the deadline, must not trap the student.
   const exitWatch = new SessionExitWatch({ release: () => examLock.setActive(false) });
   app.once('will-quit', () => exitWatch.stop());
@@ -127,17 +104,24 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
     },
     onExam: (exam) => {
       examLock.setActive(examWorking(exam));
+      // The exam is over for this student (submitted, ended): a program still running stops.
+      if (!examWorking(exam)) stopRun();
       exitWatch.setExam(exam);
       onTerminalExam(exam);
       onExamFiles(exam);
       monitor?.onExam(exam);
-      thumbs?.setMonitoring(state.mode === 'student' && wantsMonitoring(exam));
-      liveViews?.setMonitoring(state.mode === 'student' && wantsMonitoring(exam));
+      thumbs?.setMonitoring(wantsMonitoring(exam));
+      liveViews?.setMonitoring(wantsMonitoring(exam));
       clipboardClear?.onExam(exam);
+      readiness?.onExam(exam);
       resume.hooks?.onExam(exam);
       for (const win of BrowserWindow.getAllWindows()) win.webContents.send(IPC.sessionExam, exam);
     },
     onStop: () => {
+      // Leave (M60): nothing of this exam keeps running into the next one.
+      stopRun();
+      onTerminalExam(null);
+      readiness?.reset();
       monitor?.reset();
       clipboardClear?.reset();
       thumbs?.stop();
@@ -156,6 +140,31 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
       for (const win of BrowserWindow.getAllWindows())
         win.webContents.send(IPC.sessionMessage, message);
     },
+  });
+  readiness = new LobbyReadiness({
+    run: () =>
+      runSelfTest({
+        tools: resolveToolchain({
+          isPackaged: app.isPackaged,
+          appPath: app.getAppPath(),
+          resourcesPath: process.resourcesPath,
+          execPath: process.execPath,
+          env: process.env,
+        }),
+        workDir: runRoot(process.env.LOCALAPPDATA ?? app.getPath('temp'), 'self-test'),
+        env: process.env,
+      }),
+    publish: (report) => {
+      session.setReadiness(report);
+      for (const win of BrowserWindow.getAllWindows())
+        win.webContents.send(IPC.readinessReport, report);
+    },
+  });
+  ipcMain.handle(IPC.readinessGet, () => readiness?.current() ?? null);
+  // After submitting, the student may turn the PC off from the receipt screen (M57).
+  registerShutdownIpc({
+    exam: () => session.examState,
+    pendingEvidence: () => session.pendingEvidence,
   });
   // Grid thumbnails while the teacher has this student on the visible page (M33).
   thumbs = new ThumbCapture({
@@ -182,23 +191,23 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
   monitor = created.monitor;
   monitoring.check = created.check;
   // After a restart mid-exam there is no join, so the server hears the check from here.
-  if (state.mode === 'student') void created.check();
+  void created.check();
   registerAnswersIpc({ session, requireStudent });
   // The clipboard is emptied at the start; blocked outside pastes are logged (M25).
   clipboardClear = registerClipboardIpc({ session, requireStudent });
   resume.hooks = registerResumeIpc({
-    userData: state.userData,
+    userData,
     box: createSecretBox(safeStorage),
     session,
     join: joinClient,
     requireStudent,
   });
-  registerRunnerIpc({
+  ({ stop: stopRun } = registerRunnerIpc({
     session,
     examStudentId: () => joinClient.examStudentId(),
     requireStudent,
     own,
-  });
+  }));
   registerFilesIpc({
     session,
     examStudentId: () => joinClient.examStudentId(),
@@ -212,22 +221,9 @@ export function registerIpc(state: AppState, server: ServerHost, examLock: ExamL
   });
 
   ipcMain.handle(IPC.startSession, () => {
-    requireStudent();
     const credentials = joinClient.credentials();
     if (!credentials) throw new Error('Join an exam first');
     session.start(credentials.target, credentials.token, resume.hooks?.queue());
-  });
-
-  ipcMain.handle(IPC.setMode, async (_event, payload: unknown) => {
-    const request = SetModeRequestSchema.parse(payload);
-    if (!allowedModesFor(state.installType).includes(request.mode)) {
-      throw new Error(`Mode "${request.mode}" is not allowed on this install`);
-    }
-    await saveStoredMode(state.userData, request.mode);
-    state.mode = resolveMode(state.installType, request.mode);
-    if (state.mode === 'teacher') server.start();
-    if (state.mode === 'student') void created.check();
-    return toInfo(state);
   });
 
   return {

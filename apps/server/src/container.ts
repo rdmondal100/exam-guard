@@ -274,7 +274,7 @@ export function createContainer({
     answers,
     answerWriter,
     finals,
-    deadlines: new StudentDeadlines(exams, students),
+    deadlines: new StudentDeadlines(exams, students, now),
     submissions: new SubmissionService({
       exams,
       students,

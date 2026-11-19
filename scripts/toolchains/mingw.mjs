@@ -33,6 +33,14 @@ export const MINGW_TRIM = [
     'gdbserver',
     'gfortran',
     'x86_64-w64-mingw32-gfortran',
+    // M55: the target-prefixed copies of the drivers; students and the runner call gcc and g++.
+    'x86_64-w64-mingw32-c++',
+    'x86_64-w64-mingw32-g++',
+    'x86_64-w64-mingw32-gcc',
+    'x86_64-w64-mingw32-gcc-16.2.0',
+    'x86_64-w64-mingw32-gcc-ar',
+    'x86_64-w64-mingw32-gcc-nm',
+    'x86_64-w64-mingw32-gcc-ranlib',
     'jwasm',
     'nasm',
     'ndisasm',
@@ -71,6 +79,8 @@ export const MINGW_TRIM = [
   'libexec/gcc/x86_64-w64-mingw32/16.2.0/f951.exe',
   'libexec/gcc/x86_64-w64-mingw32/16.2.0/cc1obj.exe',
   'libexec/gcc/x86_64-w64-mingw32/16.2.0/cc1objplus.exe',
+  // M55: link-time optimisation (`-flto`) only; 36 MB no exam needs.
+  'libexec/gcc/x86_64-w64-mingw32/16.2.0/lto1.exe',
   'lib/python3.9',
   'lib/libpython3.9.a',
   'lib/libpython3.9.dll.a',

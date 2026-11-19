@@ -1,6 +1,8 @@
 import {
   monitorProblem,
+  readinessProblems,
   type MonitorStatus,
+  type ReadinessReport,
   type RosterEntry,
   type ServerToStudent,
   type ServerToTeacher,
@@ -42,6 +44,8 @@ export class SessionHub {
   private readonly monitorOk = new Map<string, boolean>();
   /** How many screens each student's app reported last (M26). */
   private readonly monitors = new Map<string, number>();
+  /** Each student's last lobby readiness report (M54), as the problems that failed. Not stored. */
+  private readonly readiness = new Map<string, string[]>();
   private timer: NodeJS.Timeout | null = null;
   private disposed = false;
   private readonly now: () => number;
@@ -81,11 +85,23 @@ export class SessionHub {
     this.changed(id);
   }
 
+  /** What the student's lobby readiness check found (`readiness.report`, M54). */
+  setReadiness(id: string, report: ReadinessReport): void {
+    const problems = readinessProblems(report);
+    const before = this.readiness.get(id);
+    if (before && before.join('\n') === problems.join('\n')) return;
+    this.readiness.set(id, problems);
+    this.changed(id);
+  }
+
   private withMonitor(entry: RosterEntry): RosterEntry {
+    const problems = this.readiness.get(entry.id);
     return {
       ...entry,
       monitorOk: this.monitorOk.get(entry.id) ?? true,
       monitors: this.monitors.get(entry.id) ?? 1,
+      readiness: problems === undefined ? 'pending' : problems.length > 0 ? 'problem' : 'ok',
+      ...(problems && problems.length > 0 ? { readinessProblems: problems } : {}),
     };
   }
 
@@ -111,6 +127,14 @@ export class SessionHub {
   /** Closes every student socket (hosting stopped). Rows are marked disconnected by `detach`. */
   closeAll(code: number, reason: string): void {
     for (const conn of [...this.conns.values()]) conn.close(code, reason);
+    this.forgetStudents();
+  }
+
+  /** The per-student monitor and readiness reports belong to one hosting run (M60: no leak). */
+  private forgetStudents(): void {
+    this.monitorOk.clear();
+    this.monitors.clear();
+    this.readiness.clear();
   }
 
   /** Marks one student's roster row as needing a push. */
@@ -161,6 +185,7 @@ export class SessionHub {
     this.timer = null;
     this.dirty.clear();
     this.subs.clear();
+    this.forgetStudents();
   }
 
   private flush(): void {

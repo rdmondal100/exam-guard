@@ -20,7 +20,8 @@ export type MonitorPolicy = z.infer<typeof MonitorPolicySchema>;
  * while away; `app_launched` is a program that opened its first window, `processes_at_start` the
  * programs with a window when monitoring began; `monitor_changed` a second screen at the start or a
  * change of the count; `secure_desktop` the lock screen or Ctrl+Alt+Del; `taskmgr_opened` Task
- * Manager in front.
+ * Manager in front. `monitor_stalled` / `monitor_recovered` (M63): the monitor itself could not
+ * read the PC for a while (`durationMs`), and when it could again.
  */
 export const EVIDENCE_KINDS = [
   'focus_lost',
@@ -32,6 +33,8 @@ export const EVIDENCE_KINDS = [
   'monitor_changed',
   'secure_desktop',
   'taskmgr_opened',
+  'monitor_stalled',
+  'monitor_recovered',
 ] as const;
 export const EvidenceKindSchema = z.enum(EVIDENCE_KINDS);
 export type EvidenceKind = z.infer<typeof EvidenceKindSchema>;
@@ -56,7 +59,10 @@ export const EvidenceDetailsSchema = z.object({
   domain: z.string().max(253).optional(),
   url: z.string().max(2048).optional(),
   privateWindow: z.boolean().optional(),
-  /** `focus_returned`: how long the student was outside. */
+  /**
+   * `focus_returned`: how long the student was outside. `monitor_stalled`: how long nothing was
+   * read; `monitor_recovered`: how long the stall lasted.
+   */
   durationMs: z.number().int().nonnegative().optional(),
   /** `processes_at_start`: the programs with a window when monitoring began. */
   processes: z

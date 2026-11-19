@@ -24,7 +24,7 @@ import { useRoster } from '@/hooks/useRoster';
 import { useGrading } from '@/hooks/useGrading';
 import { ErrorAlert } from '../../components/common/ErrorAlert';
 import { PageHeader } from '../../components/common/PageHeader';
-import { ExamStateBadge } from '../../components/teacher/ExamStateBadge';
+import { ExamStateBadge, PracticeBadge } from '../../components/teacher/ExamStateBadge';
 import { QuestionEditor } from '../../components/teacher/QuestionEditor';
 import { QuestionsTab } from '../../components/teacher/QuestionsTab';
 import { MonitoringBoard } from '../../components/teacher/MonitoringBoard';
@@ -46,9 +46,9 @@ const AFTER_EXAM: ReadonlySet<ExamSummary['state']> = new Set([
 ]);
 
 /** The tab that matters most in each state (M51). */
-function defaultTab(state: ExamSummary['state']): Tab {
+function defaultTab(state: ExamSummary['state'], practice: boolean): Tab {
   if (state === 'hosting' || state === 'running') return 'monitoring';
-  return AFTER_EXAM.has(state) ? 'grading' : 'questions';
+  return AFTER_EXAM.has(state) && !practice ? 'grading' : 'questions';
 }
 
 interface Props {
@@ -70,20 +70,22 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
   const [problems, setProblems] = useState<ReadyProblem[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<Tab>(() => defaultTab(initial.state));
+  const [tab, setTab] = useState<Tab>(() => defaultTab(initial.state, initial.practice));
   const editable = exam.state === 'draft' || exam.state === 'ready';
   const live = exam.state === 'hosting' || exam.state === 'running';
   // One teacher socket for the page: roster, counts and live alerts (M31).
   const roster = useRoster(exam.id, live || AFTER_EXAM.has(exam.state));
   // Grading and review (M38, M39): progress arrives on the same socket.
   const afterExam = AFTER_EXAM.has(exam.state);
+  // A practice exam (M53) is never graded: no Grading tab.
+  const graded = afterExam && !exam.practice;
   const grading = useGrading(exam.id, roster.grading, roster.connects, afterExam);
   const gradedState = grading.status?.examState;
   useEffect(() => {
     if (gradedState && gradedState !== exam.state) void reloadExams();
   }, [gradedState, exam.state, reloadExams]);
   // A new state brings its own main tab forward (hosting → Monitoring, ended → Grading).
-  useEffect(() => setTab(defaultTab(exam.state)), [exam.state]);
+  useEffect(() => setTab(defaultTab(exam.state, exam.practice)), [exam.state, exam.practice]);
 
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
@@ -102,7 +104,21 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
   const save = async (body: QuestionBody) => {
     if (!api) return;
     if (editing?.question) await api.update(editing.question.id, body);
-    else await api.create(exam.id, body);
+    else {
+      // M58: a question added to a hosted or running exam reaches the students at once.
+      if (live) {
+        const ok = await confirm({
+          title: 'Send this question to every student now?',
+          description:
+            exam.state === 'running'
+              ? 'It appears after the other questions on every student screen, and cannot be changed afterwards.'
+              : 'Students get it with the other questions when the exam starts. It cannot be changed afterwards.',
+          confirmLabel: 'Add question',
+        });
+        if (!ok) return;
+      }
+      await api.create(exam.id, body);
+    }
     setEditing(null);
     setProblems([]);
     await reload();
@@ -166,6 +182,7 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
           <span className="flex flex-wrap items-center gap-3">
             {exam.title}
             <ExamStateBadge state={exam.state} />
+            {exam.practice && <PracticeBadge />}
           </span>
         }
         description={`${exam.durationMin} min · ${exam.classListName ?? 'No class list yet'}`}
@@ -226,7 +243,7 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
                   Monitoring
                 </TabsTrigger>
               )}
-              {afterExam && (
+              {graded && (
                 <TabsTrigger value="grading">
                   <ClipboardCheckIcon />
                   Grading
@@ -238,6 +255,7 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
                 examId={exam.id}
                 filesEnabled={exam.filesEnabled}
                 editable={editable}
+                live={live}
                 canAdd={!!api}
                 busy={busy}
                 questions={questions}
@@ -258,7 +276,7 @@ export function ExamDetailPage({ exam: initial, onBack }: Props) {
                 />
               </TabsContent>
             )}
-            {afterExam && (
+            {graded && (
               <TabsContent value="grading" forceMount className="flex flex-col gap-6">
                 <GradingPanel
                   examId={exam.id}

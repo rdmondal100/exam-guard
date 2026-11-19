@@ -1,4 +1,5 @@
 import { FlagIcon } from 'lucide-react';
+import { ShutdownButton } from '../../components/student/ShutdownButton';
 import { StatusCard } from '../../components/student/StatusCard';
 
 interface Props {
@@ -19,6 +20,7 @@ export function ExamEndedScreen({ name, examTitle }: Props) {
       <p role="status">
         Stop working. You can close ExamGuard now. Your teacher will tell you what happens next.
       </p>
+      <ShutdownButton submitted={false} />
     </StatusCard>
   );
 }

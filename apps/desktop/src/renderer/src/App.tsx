@@ -1,14 +1,25 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { CircleAlertIcon } from 'lucide-react';
-import type { AppInfo, AppMode } from '@examguard/shared';
+import type { AppInfo } from '@examguard/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { CenteredScreen } from './components/common/CenteredScreen';
 import { ConfirmProvider } from './components/common/ConfirmProvider';
-import { StudentFlow } from './components/student/StudentFlow';
-import { TeacherGate } from './components/teacher/TeacherGate';
-import { ModeSelect } from './components/common/ModeSelect';
+
+// One app per build (M52): the constant branch keeps the other app's screens out of the bundle.
+const Root =
+  __EG_APP__ === 'teacher'
+    ? lazy(() =>
+        import('./components/teacher/TeacherGate').then((m) => ({ default: m.TeacherGate })),
+      )
+    : lazy(() =>
+        import('./components/student/StudentFlow').then(({ StudentFlow }) => ({
+          default: function StudentRoot({ info }: { info: AppInfo }) {
+            return <StudentFlow key={info.profile} />;
+          },
+        })),
+      );
 
 function Screen() {
   const [info, setInfo] = useState<AppInfo | null>(null);
@@ -16,11 +27,8 @@ function Screen() {
 
   useEffect(() => {
     window.examguard.getInfo().then(setInfo, (e: unknown) => setError(String(e)));
+    document.title = __EG_APP__ === 'teacher' ? 'ExamGuard Teacher' : 'ExamGuard Student';
   }, []);
-
-  const choose = (mode: AppMode) => {
-    window.examguard.setMode(mode).then(setInfo, (e: unknown) => setError(String(e)));
-  };
 
   if (error) {
     return (
@@ -34,9 +42,11 @@ function Screen() {
     );
   }
   if (!info) return null;
-  if (!info.mode) return <ModeSelect allowed={info.allowedModes} onChoose={choose} />;
-  if (info.mode === 'teacher') return <TeacherGate info={info} />;
-  return <StudentFlow />;
+  return (
+    <Suspense fallback={null}>
+      <Root info={info} />
+    </Suspense>
+  );
 }
 
 /** App-wide providers (M51): tooltips, the confirm dialog and toasts. */

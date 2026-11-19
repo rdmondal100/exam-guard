@@ -5,7 +5,14 @@ import { dropReason } from './answer-intake.js';
 const DEADLINE = 1_000_000;
 const GRACE = 60_000;
 
-function deps(over: { examState?: string; studentState?: string | undefined; now?: number } = {}) {
+function deps(
+  over: {
+    examState?: string;
+    studentState?: string | undefined;
+    now?: number;
+    pausedAt?: number | null;
+  } = {},
+) {
   return {
     exams: { get: () => ({ state: over.examState ?? 'running' }) },
     students: {
@@ -22,7 +29,12 @@ function deps(over: { examState?: string; studentState?: string | undefined; now
             ? { id, examId: 'e1', type: 'written', allowedLanguages: [] }
             : undefined,
     },
-    deadlines: { forStudent: () => DEADLINE, graceMs: () => GRACE },
+    deadlines: {
+      effective: () => DEADLINE,
+      graceMs: () => GRACE,
+      graceEnds: (_examId: string, deadline: number) => deadline + GRACE,
+      pausedAt: () => over.pausedAt ?? null,
+    },
     now: () => over.now ?? DEADLINE - 1000,
   } as unknown as Parameters<typeof dropReason>[0];
 }
@@ -55,6 +67,10 @@ describe('dropReason', () => {
       expect(dropReason(deps({ studentState }), 'e1', 's', save())).toBe('student_not_working');
     },
   );
+
+  it('drops a save while the exam is paused (M60)', () => {
+    expect(dropReason(deps({ pausedAt: DEADLINE - 5000 }), 'e1', 's', save())).toBe('paused');
+  });
 
   it('accepts a save from a locked student', () => {
     expect(dropReason(deps({ studentState: 'locked' }), 'e1', 's', save())).toBeNull();

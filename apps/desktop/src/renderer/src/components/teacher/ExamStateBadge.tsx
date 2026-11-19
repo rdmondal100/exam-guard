@@ -1,3 +1,4 @@
+import { GraduationCapIcon } from 'lucide-react';
 import type { ExamSummary } from '@examguard/shared';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 
@@ -32,6 +33,16 @@ export function ExamStateBadge({ state }: { state: ExamState }) {
     <Badge variant={TONE[state]} className="gap-1.5">
       {live && <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-current" />}
       {state === 'hosting' ? 'Hosting now' : STATE_LABEL[state]}
+    </Badge>
+  );
+}
+
+/** Marks a practice exam (M53): nothing is monitored, recorded or graded. */
+export function PracticeBadge() {
+  return (
+    <Badge variant="info" className="gap-1">
+      <GraduationCapIcon aria-hidden />
+      Practice
     </Badge>
   );
 }

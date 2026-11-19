@@ -3,6 +3,14 @@ import type { FrontWindow } from './foreground.js';
 import { AppWatch, isTaskManager } from './openApps.js';
 import { SwitchPolicy, type Observation, type Seen } from './policy.js';
 import type { Site } from './site.js';
+import { withTimeout } from '../utils/withTimeout.js';
+
+/** A read of the window in front, or the window list, that takes longer is given up (M63). */
+const READ_TIMEOUT_MS = 3000;
+/** A screenshot that takes longer is given up; the event goes without it (M63). */
+const CAPTURE_TIMEOUT_MS = 5000;
+/** No read of the window in front has finished this long: the monitor is stalled (M63). */
+const STALL_AFTER_MS = 15_000;
 
 /** One thing the monitor saw, with its screenshot when the policy wanted one. */
 export interface Evidence {
@@ -32,6 +40,10 @@ export interface TrackerDeps {
   appsMs?: number;
   /** No window can be read this long: the secure desktop (Ctrl+Alt+Del, a UAC prompt). */
   secureAfterMs?: number;
+  /** The watchdog (M63): called with `true` when the monitor stalls, `false` when it is back. */
+  onStall?: (stalled: boolean) => void;
+  stallAfterMs?: number;
+  readTimeoutMs?: number;
 }
 
 const MAX_TITLE = 500;
@@ -57,6 +69,10 @@ interface Run {
   secureShown: boolean;
   reading: boolean;
   listing: boolean;
+  /** When a look at the window in front last finished (the watchdog's heartbeat, M63). */
+  lastTickAt: number;
+  /** Since when the monitor is stalled, or `null`. */
+  stalledSince: number | null;
 }
 
 /**
@@ -97,6 +113,8 @@ export class Tracker {
       secureShown: false,
       reading: false,
       listing: false,
+      lastTickAt: this.now(),
+      stalledSince: null,
     };
     this.run = run;
     if (run.screens > 1) this.report('monitor_changed', { monitors: run.screens });
@@ -117,7 +135,38 @@ export class Tracker {
     run.timers.push(
       setInterval(() => void this.readFront(run), this.deps.tickMs ?? 1000),
       setInterval(() => void this.listApps(run, false), this.deps.appsMs ?? 2000),
+      setInterval(() => this.watchdog(run), Math.min(5000, this.stallAfterMs / 3)),
     );
+  }
+
+  private get stallAfterMs(): number {
+    return this.deps.stallAfterMs ?? STALL_AFTER_MS;
+  }
+
+  /**
+   * The monitor's own health (M63): if no look at the window in front has finished for a while
+   * (a Windows call hangs), the teacher is told at once instead of seeing silence.
+   */
+  private watchdog(run: Run): void {
+    if (this.run !== run || run.stalledSince !== null) return;
+    const now = this.now();
+    if (now - run.lastTickAt < this.stallAfterMs) return;
+    run.stalledSince = run.lastTickAt;
+    this.report('monitor_stalled', { durationMs: now - run.lastTickAt });
+    this.deps.onStall?.(true);
+  }
+
+  private ticked(run: Run): void {
+    const now = this.now();
+    run.lastTickAt = now;
+    if (run.stalledSince === null) return;
+    this.report('monitor_recovered', { durationMs: now - run.stalledSince });
+    run.stalledSince = null;
+    this.deps.onStall?.(false);
+  }
+
+  private timed<T>(promise: Promise<T>, label: string): Promise<T> {
+    return withTimeout(promise, this.deps.readTimeoutMs ?? READ_TIMEOUT_MS, label);
   }
 
   /** Stops watching. What was seen before still goes out. */
@@ -138,13 +187,16 @@ export class Tracker {
     if (run.reading) return; // A slow read skips a tick instead of piling up.
     run.reading = true;
     try {
-      const window = await this.deps.readFront();
+      const window = await this.timed(this.deps.readFront(), 'Reading the window in front');
       if (this.run !== run) return;
+      this.ticked(run);
       if (!window) return this.unreadable(run);
       run.unreadableSince = null;
       run.secureShown = false;
       const inside = this.deps.isInside(window);
-      const site = inside ? null : await this.deps.resolveSite(window);
+      const site = inside
+        ? null
+        : await this.timed(this.deps.resolveSite(window), 'Reading the site').catch(() => null);
       if (this.run !== run) return;
       const now = this.now();
       this.deliver(run, [
@@ -172,7 +224,7 @@ export class Tracker {
     if (run.listing) return;
     run.listing = true;
     try {
-      const windows = await this.deps.listWindows();
+      const windows = await this.timed(this.deps.listWindows(), 'Listing the windows');
       if (this.run !== run) return;
       if (first) {
         const processes = this.apps.start(windows).map(({ exe, pid }) => ({ exe, pid }));
@@ -190,7 +242,10 @@ export class Tracker {
 
   private report(kind: EvidenceKind, details: EvidenceDetails): void {
     const ts = this.now();
-    this.chain = this.chain.then(() => this.deps.emit({ kind, ts, details }));
+    this.chain = this.chain
+      .then(() => this.deps.emit({ kind, ts, details }))
+      // One failing step must not stop every later piece of evidence (M63).
+      .catch(() => undefined);
   }
 
   private deliver(run: Run, observations: Observation[]): void {
@@ -200,12 +255,19 @@ export class Tracker {
         ...detailsOf(observation.seen),
         ...(observation.durationMs !== undefined ? { durationMs: observation.durationMs } : {}),
       };
-      this.chain = this.chain.then(async () => {
-        const jpeg = observation.shot
-          ? await this.deps.capture(run.policy, observation.seen.window.bounds).catch(() => null)
-          : null;
-        this.deps.emit({ kind: observation.kind, ts, details, ...(jpeg ? { jpeg } : {}) });
-      });
+      this.chain = this.chain
+        .then(async () => {
+          // A capture that hangs (the secure desktop) is given up: the event goes without it.
+          const jpeg = observation.shot
+            ? await withTimeout(
+                this.deps.capture(run.policy, observation.seen.window.bounds),
+                CAPTURE_TIMEOUT_MS,
+                'The screenshot',
+              ).catch(() => null)
+            : null;
+          this.deps.emit({ kind: observation.kind, ts, details, ...(jpeg ? { jpeg } : {}) });
+        })
+        .catch(() => undefined);
     }
   }
 }

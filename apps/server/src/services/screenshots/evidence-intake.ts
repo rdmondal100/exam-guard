@@ -44,7 +44,7 @@ export class EvidenceIntake {
         details,
         serverTs: this.deps.now(),
         clientTs: message.clientTs,
-        dedupeKey: `monitor:${message.dedupeKey}`,
+        dedupeKey: `monitor:${studentId}:${message.dedupeKey}`,
       },
       (stored) => {
         if (!jpeg) return;

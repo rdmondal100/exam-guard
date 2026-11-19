@@ -12,16 +12,17 @@ const WATCHER_SLACK_MS = 5000;
  * the session failed for good (replaced by another PC, unauthorized, a pin mismatch), or the link
  * is down and the student's deadline plus grace has passed, which means the server has already
  * finalized their answers and cannot tell them (its listener is closed once the exam ended).
- * `nowMs` is the local clock; the estimated server offset is applied here.
+ * `nowMs` is the local clock; the estimated server offset is applied here. While the exam is
+ * paused the deadline stands still on the server too, so it never counts as over (M60).
  */
 export function sessionExit(
-  exam: Pick<SessionState, 'deadline' | 'graceSec'>,
+  exam: Pick<SessionState, 'deadline' | 'graceSec' | 'pausedAt'>,
   status: Pick<SessionStatus, 'link' | 'offsetMs'>,
   nowMs: number,
 ): SessionExit | null {
   if (status.link === 'connected') return null;
   if (status.link === 'failed') return 'session_failed';
-  if (exam.deadline === null) return null;
+  if (exam.deadline === null || exam.pausedAt != null) return null;
   const serverNow = nowMs + (status.offsetMs ?? 0);
   const graceMs = (exam.graceSec ?? DEFAULT_GRACE_SEC) * 1000;
   return serverNow > exam.deadline + graceMs + WATCHER_SLACK_MS ? 'exam_over' : null;

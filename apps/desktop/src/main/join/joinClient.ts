@@ -155,9 +155,9 @@ export class JoinClient {
       if (response.status !== 200) return serverFailure(response.body);
       const parsed = JoinResponseSchema.safeParse(JSON.parse(response.body) as unknown);
       if (!parsed.success) return failure('bad_response');
-      const { examStudentId, name, examTitle } = parsed.data;
+      const { examStudentId, name, examTitle, practice } = parsed.data;
       this.session = { target, token: parsed.data.token, examStudentId, name, examTitle };
-      return { ok: true, examStudentId, name, examTitle };
+      return { ok: true, examStudentId, name, examTitle, practice: practice ?? false };
     } catch (e) {
       return transportFailure(e);
     }

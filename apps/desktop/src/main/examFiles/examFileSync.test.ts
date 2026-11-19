@@ -55,6 +55,14 @@ const run = async (files: ExamFile[], reveal: boolean) => {
 const read = (name: string) => readFileSync(join(workspace, name), 'utf8');
 
 describe('ExamFileSync', () => {
+  it('ignores a file whose id is not a plain id (no path outside the staging folder)', async () => {
+    const evil = file('..\\..\\evil', 'evil.bat');
+    const clash = file('revealed.json', 'x.txt');
+    await run([CSV, evil, clash], true);
+    expect(calls).toEqual(['f1']);
+    expect(await readdir(workspace)).toEqual(['data.csv']);
+  });
+
   it('downloads into the staging folder in the lobby and leaves the project folder alone', async () => {
     await run([CSV, PNG], false);
     expect(sync.status).toEqual({ state: 'done', done: 2, total: 2 });

@@ -1,7 +1,10 @@
 import { desktopCapturer, screen, type Rectangle } from 'electron';
+import { withTimeout } from '../utils/withTimeout.js';
 
 /** JPEG quality of a grid thumbnail: about 10–20 KB at 320 px (docs/architecture.md §5). */
 const THUMB_QUALITY = 50;
+/** A capture that takes longer is given up (M63). */
+const CAPTURE_TIMEOUT_MS = 5000;
 
 export interface CaptureOptions {
   /** JPEG quality, 1–100. */
@@ -32,10 +35,12 @@ export async function captureScreenJpeg(
   const display = displayFor(near);
   const { width: w, height: h } = display.size;
   const height = Math.max(1, Math.round((width * h) / Math.max(1, w)));
-  const sources = await desktopCapturer.getSources({
-    types: ['screen'],
-    thumbnailSize: { width, height },
-  });
+  // getSources can hang (the secure desktop); thumbnails and evidence must not wait for it (M63).
+  const sources = await withTimeout(
+    desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width, height } }),
+    CAPTURE_TIMEOUT_MS,
+    'The screen capture',
+  );
   const source = sources.find((s) => s.display_id === String(display.id)) ?? sources[0];
   if (!source || source.thumbnail.isEmpty()) return null;
   return new Uint8Array(source.thumbnail.toJPEG(quality));

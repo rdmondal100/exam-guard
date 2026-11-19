@@ -155,7 +155,7 @@ describe('hosting routes', () => {
     expect(student.status).toBe(200);
     expect(JSON.parse(student.body)).toEqual({
       examTitle: 'Mid',
-      protocol: { major: 2, minor: 0 },
+      protocol: { major: 5, minor: 0 },
       state: 'hosting',
       fpCode: info.fpCode,
     });

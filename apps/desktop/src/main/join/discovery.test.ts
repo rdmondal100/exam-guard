@@ -8,7 +8,7 @@ const service = (over: Partial<Service>): Service =>
   ({
     port: 47820,
     addresses: ['fe80::1', '192.168.1.7'],
-    txt: { v: '2.0', exam: 'Mid', fp: FP },
+    txt: { v: '5.0', exam: 'Mid', fp: FP },
     ...over,
   }) as Service;
 
@@ -20,13 +20,13 @@ describe('toDiscoveredHost', () => {
       address: '192.168.1.7',
       port: 47820,
       fingerprint: FP,
-      protocol: { major: 2, minor: 0 },
+      protocol: { major: 5, minor: 0 },
     });
     expect(toDiscoveredHost(service({}))?.fpCode).toMatch(/^[0-9A-Z]{4}$/);
   });
 
   it('ignores services with a bad TXT record', () => {
-    expect(toDiscoveredHost(service({ txt: { v: '2.0', exam: 'x', fp: 'short' } }))).toBeNull();
+    expect(toDiscoveredHost(service({ txt: { v: '5.0', exam: 'x', fp: 'short' } }))).toBeNull();
     expect(toDiscoveredHost(service({ txt: undefined }))).toBeNull();
   });
 

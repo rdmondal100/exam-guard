@@ -14,7 +14,7 @@ import { buildTeacherApp } from '../app.js';
 
 const TOKEN = 't'.repeat(40);
 const HEADERS = { 'x-teacher-token': TOKEN };
-const PROTOCOL = { major: 2, minor: 0 };
+const PROTOCOL = { major: 5, minor: 0 };
 
 interface Entry {
   studentCode: string;
@@ -217,6 +217,30 @@ describe('student socket', () => {
     expect(await c.closed).toBe(4401);
   });
 
+  it('refuses a student who has not accepted the notice', async () => {
+    const joined = await post('/join', {
+      studentCode: '1',
+      pin: '004217',
+      deviceId: 'device-1-aaaa',
+      protocol: PROTOCOL,
+      monitor: { ok: true, captureOk: true, monitors: 1 },
+    });
+    const c = await studentWs();
+    c.ws.send(hello(joined.token ?? ''));
+    expect(await c.closed).toBe(4401);
+    expect(has(c, 'welcome')).toBe(false);
+  });
+
+  it('drops an invalid frame after hello and keeps the socket', async () => {
+    const token = await joinStudent('1');
+    const c = await studentWs();
+    c.ws.send(hello(token));
+    await c.waitFor(() => has(c, 'welcome'));
+    c.ws.send(JSON.stringify({ t: 'readiness.report', checks: [{ name: 'c', ok: true, ms: -5 }] }));
+    c.ws.send(JSON.stringify({ t: 'ping', clientSent: 7 }));
+    await c.waitFor(() => last(c, 'pong')?.clientSent === 7);
+  });
+
   it('refuses another protocol major', async () => {
     const token = await joinStudent('1');
     const c = await studentWs();
@@ -299,7 +323,7 @@ describe('app events', () => {
         severity: 'low',
         source: 'app',
         client_ts: 5,
-        dedupe_key: 'app:ev-1',
+        dedupe_key: expect.stringMatching(/^app:.+:ev-1$/) as unknown as string,
         details_json: JSON.stringify({ language: 'c', status: 'ok' }),
       },
     ]);
@@ -443,6 +467,24 @@ describe('monitor evidence', () => {
     expect(pushed.monitoring).toBe(true);
     expect(pushed.monitoringPolicy).toEqual(monitorPolicyFor(DEFAULT_MONITORING));
   });
+
+  it('tells a student of a running practice exam not to monitor (M53)', async () => {
+    db.prepare('UPDATE exams SET practice = 1 WHERE id = ?').run(examId);
+    const token = await joinStudent('1');
+    const c = await studentWs();
+    c.ws.send(hello(token));
+    await c.waitFor(() => has(c, 'welcome'));
+    await app.inject({ method: 'POST', url: `/api/v1/exams/${examId}/start`, headers: HEADERS });
+    await c.waitFor(() => has(c, 'state'));
+    const pushed = last(c, 'state')?.state as unknown as {
+      monitoring: boolean;
+      monitoringPolicy?: object;
+      practice?: boolean;
+    };
+    expect(pushed.monitoring).toBe(false);
+    expect(pushed.monitoringPolicy).toBeUndefined();
+    expect(pushed.practice).toBe(true);
+  });
 });
 
 describe('monitor status', () => {
@@ -478,7 +520,9 @@ describe('monitor status', () => {
     c.ws.send(hello(token));
     await c.waitFor(() => has(c, 'welcome'));
     c.ws.send(JSON.stringify({ t: 'monitor.status', ok: true }));
-    expect(await c.closed).toBe(4400);
+    // Dropped, and the socket stays (M60): the next ping is still answered.
+    c.ws.send(JSON.stringify({ t: 'ping', clientSent: 11 }));
+    await c.waitFor(() => last(c, 'pong')?.clientSent === 11);
   });
 });
 
@@ -486,6 +530,13 @@ describe('teacher socket', () => {
   it('closes a socket with a bad token', async () => {
     const c = await client(`ws://127.0.0.1:${teacherPort}/ws?token=nope`);
     expect(await c.closed).toBe(4401);
+  });
+
+  it('closes open sockets when the teacher logs out', async () => {
+    const teacher = await teacherWs();
+    const res = await app.inject({ method: 'POST', url: '/api/v1/auth/logout', headers: HEADERS });
+    expect(res.statusCode).toBe(200);
+    expect(await teacher.closed).toBe(4401);
   });
 
   it('sends the full roster on subscribe', async () => {
@@ -666,7 +717,9 @@ describe('removed internet switch', () => {
     await c.waitFor(() => has(c, 'welcome'));
     expect('internet' in (last(c, 'welcome')?.state ?? {})).toBe(false);
     c.ws.send(JSON.stringify({ t: 'internet.status', blocked: true, error: null }));
-    expect(await c.closed).toBe(4400);
+    // Dropped, and the socket stays (M60): the next ping is still answered.
+    c.ws.send(JSON.stringify({ t: 'ping', clientSent: 12 }));
+    await c.waitFor(() => last(c, 'pong')?.clientSent === 12);
   });
 });
 
@@ -713,7 +766,10 @@ describe('teacher lock (M35)', () => {
     await c.waitFor(() => has(c, 'welcome'));
     const lost = { t: 'event', id: 'x', dedupeKey: 'x', clientTs: 1, type: 'agent_lost' };
     c.ws.send(JSON.stringify({ ...lost, details: {} }));
-    expect(await c.closed).toBe(4400);
+    // Dropped, and the socket stays (M60): the next ping is still answered.
+    c.ws.send(JSON.stringify({ t: 'ping', clientSent: 13 }));
+    await c.waitFor(() => last(c, 'pong')?.clientSent === 13);
+    expect(has(c, 'event.ack')).toBe(false);
   });
 
   it('refuses to unlock an unknown student', async () => {

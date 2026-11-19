@@ -32,7 +32,8 @@ export const SubmitResultSchema = z.object({
 });
 export type SubmitResult = z.infer<typeof SubmitResultSchema>;
 
-export const SUBMIT_REFUSALS = ['not_running', 'not_working'] as const;
+/** `paused` (M60): the app keeps the Submit and sends it again when the exam resumes. */
+export const SUBMIT_REFUSALS = ['not_running', 'not_working', 'paused'] as const;
 export const SubmitRefusedSchema = z.object({
   t: z.literal('submit.refused'),
   id: z.string(),

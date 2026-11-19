@@ -45,13 +45,32 @@ export const BroadcastActionSchema = z.object({
 });
 export type BroadcastAction = z.infer<typeof BroadcastActionSchema>;
 
-/** `POST /exams/:id/actions`: the exam-wide switches and the global actions (M36). */
+/**
+ * Pause or resume a running exam for everyone (M58). While paused the student apps cover the exam
+ * and the clock stops: on resume every deadline moves by the time spent paused.
+ */
+export const PauseActionSchema = z.object({ type: z.enum(['pause', 'resume']) });
+export type PauseAction = z.infer<typeof PauseActionSchema>;
+
+/** `POST /exams/:id/actions`: the exam-wide switches and the global actions (M36, M58). */
 export const ExamActionSchema = z.discriminatedUnion('type', [
   TerminalActionSchema,
   ExtendAllActionSchema,
   BroadcastActionSchema,
+  z.object({ type: z.literal('pause') }),
+  z.object({ type: z.literal('resume') }),
 ]);
 export type ExamAction = z.infer<typeof ExamActionSchema>;
+
+/** Reply to `pause` and `resume`. */
+export const PauseResultSchema = z.object({
+  ok: z.literal(true),
+  /** Server time the pause began, or `null` once running again. */
+  pausedAt: z.number().nullable(),
+  /** The exam's shared end without the pause still going on (it moves on resume). */
+  deadline: z.number().nullable(),
+});
+export type PauseResult = z.infer<typeof PauseResultSchema>;
 
 /** Reply to `extend_all`. */
 export const ExtendAllResultSchema = z.object({

@@ -1,17 +1,9 @@
-import { app, BrowserWindow } from 'electron';
+import { app, ipcMain, type BrowserWindow } from 'electron';
+import type { AppInfo } from '@examguard/shared';
 import { IPC } from '../shared/ipcChannels.js';
-import { readInstallType } from './mode/installType.js';
+import type { AppStart } from './appStart.js';
 import { ExamLock } from './window/examLock.js';
-import { registerIpc, type AppState } from './ipc.js';
-import { loadStoredMode, resolveMode } from './mode/modeStore.js';
-import { DEFAULT_PROFILE, parseProfile, userDataPathFor } from './mode/profile.js';
-import { ServerHost } from './server/serverHost.js';
-import { createAiKeyStore } from './settings/gradingKey.js';
-import { DataFolder } from './dataFolder/dataFolder.js';
-import { registerDataFolderIpc } from './dataFolder/dataFolderIpc.js';
-import { DataFolderMover } from './dataFolder/dataFolderMover.js';
-import { registerExportsIpc } from './exports/exportsIpc.js';
-import { registerAiKeyIpc } from './settings/aiKeyIpc.js';
+import { DEFAULT_PROFILE, profileOrDefault, userDataPathFor } from './mode/profile.js';
 import { applyStoredTheme, registerThemeIpc } from './settings/themeIpc.js';
 import { createMainWindow, installCsp } from './window/mainWindow.js';
 
@@ -19,12 +11,16 @@ import { createMainWindow, installCsp } from './window/mainWindow.js';
 // mDNS name, which many lab networks never resolve. Must be set before `ready`.
 app.commandLine.appendSwitch('disable-features', 'WebRtcHideLocalIpsWithMdns');
 
-// The profile must be applied before anything reads userData.
-const profile = parseProfile(process.argv);
+// The profile must be applied before anything reads userData. It is a dev aid (two profiles on
+// one PC): a packaged app ignores it, so a student cannot start a second, separate instance (M59).
+const profile = app.isPackaged ? DEFAULT_PROFILE : profileOrDefault(process.argv);
 const userData = userDataPathFor(app.getPath('userData'), profile);
 app.setPath('userData', userData);
 
-// One instance per profile, so a teacher and a student profile can run together.
+/** Which app this build is (M52); the other app's code is not in the bundle. */
+const APP_NAME = __EG_APP__ === 'teacher' ? 'ExamGuard Teacher' : 'ExamGuard Student';
+
+// One instance per profile (in dev, several profiles can run side by side).
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -37,53 +33,28 @@ if (!app.requestSingleInstanceLock()) {
   app.on('window-all-closed', () => app.quit());
 
   void app.whenReady().then(async () => {
-    const installType = await readInstallType({
-      override: process.env['EG_INSTALL_TYPE'],
-      isPackaged: app.isPackaged,
-    });
-    const state: AppState = {
-      profile,
-      userData,
-      installType,
-      mode: resolveMode(installType, await loadStoredMode(userData)),
-    };
-    // The teacher's data folder: the profile folder unless it was moved in Settings (M44).
-    const dataFolder = new DataFolder(userData);
-    const dataDir = () => dataFolder.current();
-    const aiKeys = createAiKeyStore(dataDir);
-    const server = new ServerHost(
-      dataDir,
-      (status) => {
-        for (const win of BrowserWindow.getAllWindows()) {
-          win.webContents.send(IPC.serverStatus, status);
-        }
-      },
-      () => aiKeys.key(),
-    );
     // EG_ALLOW_CLOSE is a dev escape hatch for the exam lock; a packaged app ignores it.
     const examLock = new ExamLock(!app.isPackaged && process.env['EG_ALLOW_CLOSE'] === '1');
+    const info: AppInfo = { app: __EG_APP__, profile, version: app.getVersion() };
+    ipcMain.handle(IPC.getInfo, () => info);
+    registerThemeIpc(userData);
+
+    // A constant branch with dynamic imports: Rollup drops the other app entirely.
+    const started: AppStart =
+      __EG_APP__ === 'teacher'
+        ? (await import('./teacher/startTeacher.js')).startTeacher({ userData, examLock })
+        : (await import('./student/startStudent.js')).startStudent({ userData, examLock });
+
     app.on('before-quit', (event) => {
       if (examLock.shouldBlockClose()) return event.preventDefault();
-      server.stop();
-    });
-    const ipc = registerIpc(state, server, examLock);
-    const isTeacher = () => state.mode === 'teacher';
-    registerAiKeyIpc({ store: aiKeys, isTeacher });
-    registerThemeIpc(userData);
-    registerExportsIpc({ dataDir, isTeacher });
-    registerDataFolderIpc({
-      folder: dataFolder,
-      mover: new DataFolderMover(dataFolder, server),
-      isTeacher,
+      started.onQuit?.();
     });
     installCsp();
     // Before the window opens, so the first paint already has the right colours.
     await applyStoredTheme(userData);
-    window = createMainWindow(
-      profile === DEFAULT_PROFILE ? 'ExamGuard AI' : `ExamGuard AI (${profile})`,
-    );
+    window = createMainWindow(profile === DEFAULT_PROFILE ? APP_NAME : `${APP_NAME} (${profile})`);
     examLock.attach(window);
-    ipc.announceWindow(window);
-    if (state.mode === 'teacher') server.start();
+    started.announceWindow?.(window);
+    started.afterWindow?.();
   });
 }

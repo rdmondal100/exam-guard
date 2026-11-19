@@ -27,7 +27,7 @@ let welcomeWith: 'welcome' | { closeCode: number };
 let ackEvents: boolean;
 let welcomeSaved: unknown[];
 let mute: boolean;
-let submitReply: 'result' | 'refused' | 'none';
+let submitReply: 'result' | 'refused' | 'paused' | 'none';
 
 beforeAll(async () => {
   const pems = await generate([{ name: 'commonName', value: 'ExamGuard' }], {
@@ -83,7 +83,11 @@ beforeAll(async () => {
           JSON.stringify(
             submitReply === 'result'
               ? { t: 'submit.result', id: message.id, receipt: RECEIPT }
-              : { t: 'submit.refused', id: message.id, reason: 'not_working' },
+              : {
+                  t: 'submit.refused',
+                  id: message.id,
+                  reason: submitReply === 'paused' ? 'paused' : 'not_working',
+                },
           ),
         );
       } else if (message.t === 'ping') {
@@ -152,6 +156,84 @@ async function until(check: () => boolean, ms = 3000): Promise<void> {
 }
 const links = () => statuses.map((s) => s.link);
 
+describe('SessionClient M60/M64', () => {
+  const submits = () => frames.filter((x) => (x as { t: string }).t === 'submit');
+  const push = (state: object) =>
+    clients[clients.length - 1]?.send(JSON.stringify({ t: 'state', state }));
+
+  it('keeps a Submit refused during a pause and sends it again on resume', async () => {
+    submitReply = 'paused';
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    push({ pausedAt: 5 });
+    let outcome: unknown = null;
+    void client.submit().then((o) => (outcome = o));
+    await until(() => submits().length === 1);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(outcome).toBeNull();
+    submitReply = 'result';
+    push({ pausedAt: null });
+    await until(() => outcome !== null);
+    expect(outcome).toEqual({ ok: true });
+    expect(submits()).toHaveLength(2);
+  });
+
+  it('settles a pending Submit when the session fails for good', async () => {
+    submitReply = 'none';
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    const outcome = client.submit();
+    await until(() => submits().length === 1);
+    clients[0]?.close(4401, 'no');
+    expect(await outcome).toEqual({ ok: false, reason: 'unauthorized' });
+  });
+
+  it('forgets everything unacked on Leave', async () => {
+    ackEvents = false;
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    client.sendEvent('run_executed', {});
+    client.sendTranscript('k', 'dir');
+    await until(
+      () =>
+        frames.filter((x) => ['event', 'transcript'].includes((x as { t: string }).t)).length === 2,
+    );
+    expect(client.pendingEvidence).toBe(2);
+    client.stop();
+    expect(client.pendingEvidence).toBe(0);
+    const before = frames.length;
+    client.start(target(), TOKEN);
+    await until(() => links().filter((l) => l === 'connected').length >= 2);
+    const after = frames.slice(before) as { t: string }[];
+    expect(after.some((x) => x.t === 'event' || x.t === 'transcript')).toBe(false);
+  });
+
+  it('knows the server clock from the welcome, before any pong', async () => {
+    skew = 60_000;
+    mute = true;
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    const offset = statuses.find((s) => s.link === 'connected')?.offsetMs ?? 0;
+    expect(Math.abs(offset - 60_000)).toBeLessThan(1000);
+    expect(Math.abs(client.serverNow() - (Date.now() + 60_000))).toBeLessThan(1000);
+  });
+
+  it('keeps the server clock on the monotonic clock, not the wall clock', async () => {
+    let perf = 1_000;
+    client = new SessionClient({
+      onStatus: (s) => statuses.push(s),
+      pingMs: 50,
+      perfNow: () => perf,
+    });
+    mute = true;
+    client.start(target(), TOKEN);
+    await until(() => links().includes('connected'));
+    const first = client.serverNow();
+    perf += 5_000; // five seconds pass, whatever the PC's clock does meanwhile
+    expect(client.serverNow() - first).toBe(5_000);
+  });
+});
+
 describe('SessionClient', () => {
   it('says hello with the token and reaches connected', async () => {
     client.start(target(), TOKEN);
@@ -160,7 +242,7 @@ describe('SessionClient', () => {
     expect(frames[0]).toMatchObject({
       t: 'hello',
       token: TOKEN,
-      protocol: { major: 2 },
+      protocol: { major: 5 },
       resume: { lastServerSeq: 0 },
     });
   });
@@ -384,7 +466,7 @@ describe('SessionClient evidence', () => {
     client.sendEvidence(evidence('s1:9', new Uint8Array(500).fill(2)));
     await until(() => events().length === 1);
     expect(binary()).toHaveLength(1);
-    client.stop();
+    // A restart of the same session (`start` halts the old socket); Leave (`stop`) forgets all.
     client.start(target(), TOKEN);
     await until(() => events().length === 2);
     expect(events()[1]).toMatchObject({ id: 's1:9', type: 'focus_lost' });

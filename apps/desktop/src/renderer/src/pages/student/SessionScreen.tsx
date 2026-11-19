@@ -3,6 +3,7 @@ import type { SessionState, SessionStatus } from '@examguard/shared';
 import { useRestoreAnswers } from '@/lib/restoreAnswers';
 import { useSessionExit } from '@/hooks/useSessionExit';
 import { ExamLockedOverlay } from '@/components/student/ExamLockedOverlay';
+import { ExamPausedOverlay } from '@/components/student/ExamPausedOverlay';
 import { TeacherMessagePopup } from '@/components/student/TeacherMessagePopup';
 import { ExamEndedScreen } from './ExamEndedScreen';
 import { ExamScreen } from './ExamScreen';
@@ -84,6 +85,7 @@ function SessionBody({ name, examTitle, onLeave }: Props) {
     );
   }
   if (exam?.examState === 'running' && exam.questions && exam.deadline !== null) {
+    const pausedAt = exam.pausedAt ?? null;
     return (
       <>
         <ExamScreen
@@ -91,11 +93,18 @@ function SessionBody({ name, examTitle, onLeave }: Props) {
           examTitle={examTitle}
           questions={exam.questions}
           deadline={exam.deadline}
+          pausedAt={pausedAt}
+          frozen={pausedAt !== null || exam.locked}
           terminalOn={exam.terminal.enabled}
           filesOn={exam.filesEnabled}
+          practice={exam.practice ?? false}
           status={status}
         />
-        {exam.locked && <ExamLockedOverlay />}
+        {pausedAt !== null ? (
+          <ExamPausedOverlay pausedAt={pausedAt} deadline={exam.deadline} status={status} />
+        ) : (
+          exam.locked && <ExamLockedOverlay />
+        )}
       </>
     );
   }

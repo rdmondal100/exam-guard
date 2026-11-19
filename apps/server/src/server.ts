@@ -16,6 +16,16 @@ interface ParentPort {
 
 const parentPort = (process as unknown as { parentPort?: ParentPort }).parentPort;
 
+// Last line of defence (M62): an error that escapes a handler or a timer is logged (stdout goes to
+// server.log) and the server keeps serving the exam, instead of dying mid-exam. Main still
+// restarts the process if it does exit.
+process.on('uncaughtException', (error) => {
+  console.error('uncaught exception', error);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('unhandled rejection', reason);
+});
+
 /** How long the server waits for main to hand over the grading key. */
 const KEY_TIMEOUT_MS = 5000;
 

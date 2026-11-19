@@ -25,6 +25,8 @@ export interface ExamFormValues {
   classListId: string | null;
   monitoring: MonitoringSettings;
   filesEnabled: boolean;
+  /** A practice exam (M53): nothing is monitored, recorded or graded. */
+  practice: boolean;
 }
 
 interface Props {
@@ -48,6 +50,7 @@ export function ExamSettingsForm({ exam, classLists, defaults, onSubmit, onCance
     exam?.monitoring ?? defaults?.monitoring ?? DEFAULT_MONITORING,
   );
   const [filesEnabled, setFilesEnabled] = useState(exam?.filesEnabled ?? true);
+  const [practice, setPractice] = useState(exam?.practice ?? false);
   const [apps, setApps] = useState(monitoring.highSeverityApps.join(', '));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -66,6 +69,7 @@ export function ExamSettingsForm({ exam, classLists, defaults, onSubmit, onCance
         durationMin: minutes,
         classListId: classListId === '' ? null : classListId,
         filesEnabled,
+        practice,
         monitoring: {
           ...monitoring,
           highSeverityApps: splitApps(apps),
@@ -107,6 +111,14 @@ export function ExamSettingsForm({ exam, classLists, defaults, onSubmit, onCance
               ]}
             />
           </FormField>
+          <div className="md:col-span-2">
+            <ToggleField
+              checked={practice}
+              onCheckedChange={setPractice}
+              label="Practice exam"
+              description="Students try the editor, Run, Files and terminal before a real exam. Nothing is monitored, recorded or graded."
+            />
+          </div>
         </CardContent>
       </Card>
 
@@ -132,7 +144,9 @@ export function ExamSettingsForm({ exam, classLists, defaults, onSubmit, onCance
         <CardHeader>
           <CardTitle>Monitoring</CardTitle>
           <CardDescription>
-            When screenshots are taken and which apps count as serious.
+            {practice
+              ? 'Not used: a practice exam is not monitored.'
+              : 'When screenshots are taken and which apps count as serious.'}
           </CardDescription>
         </CardHeader>
         <CardContent>

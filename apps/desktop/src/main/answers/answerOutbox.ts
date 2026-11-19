@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { AnswerSave, AnswerSaveRequest, AnswerStatus, SavedAnswer } from '@examguard/shared';
 
-/** Unacked saves kept in memory and in the disk queue; the oldest are dropped past this. */
+/**
+ * Unacked saves kept in memory and in the disk queue. Past this an outdated save goes (one whose
+ * buffer has a newer save waiting), so the newest version of every buffer is always kept (M61).
+ */
 export const MAX_PENDING_SAVES = 500;
 
 /**
@@ -9,6 +12,8 @@ export const MAX_PENDING_SAVES = 500;
  * goes up, and after a welcome it continues past the newest number the server already stored, so
  * a restarted app can never reuse one (the server keeps each number once).
  */
+const bufferKey = (s: AnswerSave) => `${s.questionId}\u0000${s.language}`;
+
 export class AnswerOutbox {
   private nextSeq = 1;
   private readonly pending = new Map<number, AnswerSave>();
@@ -47,12 +52,27 @@ export class AnswerOutbox {
 
   private keep(save: AnswerSave): void {
     this.pending.set(save.clientSeq, save);
-    if (this.pending.size > this.max) {
-      const oldest = this.pending.keys().next().value;
-      const dropped = oldest === undefined ? undefined : this.pending.get(oldest);
-      if (oldest !== undefined) this.pending.delete(oldest);
-      if (dropped) this.onDrop(dropped);
+    if (this.pending.size <= this.max) return;
+    const dropped = this.outdated() ?? this.pending.values().next().value;
+    if (!dropped) return;
+    this.pending.delete(dropped.clientSeq);
+    this.onDrop(dropped);
+  }
+
+  /** The oldest save whose buffer (question + language) has a newer save waiting, if any. */
+  private outdated(): AnswerSave | undefined {
+    const newest = new Map<string, number>();
+    for (const s of this.pending.values()) newest.set(bufferKey(s), s.clientSeq);
+    for (const s of this.pending.values()) {
+      if ((newest.get(bufferKey(s)) ?? s.clientSeq) > s.clientSeq) return s;
     }
+    return undefined;
+  }
+
+  /** Forgets every unacked save (the session was left for good). The counter keeps going. */
+  clear(): void {
+    this.pending.clear();
+    this.report();
   }
 
   ack(clientSeq: number, now: number): void {

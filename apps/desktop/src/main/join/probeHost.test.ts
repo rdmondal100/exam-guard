@@ -2,12 +2,13 @@ import { createServer, type Server } from 'node:https';
 import { X509Certificate } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { generate } from 'selfsigned';
+import { fpCodeOf } from '@examguard/shared';
 import { probeHost } from './probeHost.js';
 import { fingerprintOfDer, pinnedGet } from '../utils/tlsPin.js';
 
 const INFO = {
   examTitle: 'Mid',
-  protocol: { major: 2, minor: 0 },
+  protocol: { major: 5, minor: 0 },
   state: 'hosting',
   fpCode: '7ACN',
 };
@@ -87,7 +88,14 @@ describe('probeHost', () => {
   it('returns the info and fingerprint', async () => {
     respond = ok;
     const result = await probeHost({ address: '127.0.0.1', port });
-    expect(result).toMatchObject({ ok: true, port, fingerprint, info: INFO });
+    const fpCode = fpCodeOf(Buffer.from(fingerprint, 'base64url'));
+    expect(result).toMatchObject({ ok: true, port, fingerprint, info: { ...INFO, fpCode } });
+  });
+
+  it('shows the code of the presented certificate, not the one the reply claims', async () => {
+    respond = () => ({ status: 200, body: JSON.stringify({ ...INFO, fpCode: 'ZZZZ' }) });
+    const result = await probeHost({ address: '127.0.0.1', port });
+    expect(result.ok && result.info.fpCode).toBe(fpCodeOf(Buffer.from(fingerprint, 'base64url')));
   });
 
   it('maps a fingerprint mismatch to a clear message', async () => {

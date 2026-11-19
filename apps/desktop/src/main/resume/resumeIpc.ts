@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { ipcMain } from 'electron';
+import { app, ipcMain } from 'electron';
 import type { JoinResult, SessionState, SessionStatus } from '@examguard/shared';
 import { IPC } from '../../shared/ipcChannels.js';
 import type { JoinClient } from '../join/joinClient.js';
@@ -36,6 +36,8 @@ export function registerResumeIpc(deps: ResumeIpcDeps): ResumeHooks {
   const { userData, box, session, join: joinClient, requireStudent } = deps;
   const store = new SessionStore(join(userData, 'session', 'session.enc'), box);
   let queue: OfflineQueue | undefined;
+  // Whatever was appended last reaches the disk before the app goes (M61).
+  app.on('will-quit', () => queue?.flush());
 
   ipcMain.handle(IPC.resumeSession, (): JoinResult | null => {
     requireStudent();
@@ -91,7 +93,7 @@ export function registerResumeIpc(deps: ResumeIpcDeps): ResumeHooks {
     onExam: (exam) => {
       // Once the answers are final nothing more can be stored, so unsent saves are moot. The
       // session file stays until the exam ends, so a restart still shows the receipt.
-      if (exam.receipt) queue?.clear();
+      if (exam.receipt) queue?.forgetSaves();
       if (!ENDED.has(exam.examState)) return;
       store.clear();
       queue?.clear();

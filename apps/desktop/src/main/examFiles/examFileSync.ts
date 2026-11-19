@@ -2,6 +2,7 @@ import { constants } from 'node:fs';
 import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
+  EXAM_FILE_ID,
   IDLE_EXAM_FILES,
   checkFileName,
   type ExamFile,
@@ -99,7 +100,9 @@ export class ExamFileSync {
     this.deps.onStatus?.(next);
   }
 
-  private async pass(files: ExamFile[], reveal: boolean): Promise<void> {
+  private async pass(all: ExamFile[], reveal: boolean): Promise<void> {
+    // The id becomes a path in the staging folder: anything but a plain id is ignored.
+    const files = all.filter((f) => EXAM_FILE_ID.test(f.id));
     const stage = this.deps.stageDir();
     await mkdir(stage, { recursive: true });
     const revealed = await this.readRevealed(stage);

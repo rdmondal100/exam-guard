@@ -45,8 +45,8 @@ export function registerTerminalIpc({
   examStudentId,
   requireStudent,
   own,
-}: TerminalIpcDeps): (exam: SessionState) => void {
-  const serverNow = () => Date.now() + (session.clockOffsetMs ?? 0);
+}: TerminalIpcDeps): (exam: SessionState | null) => void {
+  const serverNow = () => session.serverNow();
   const refusal = () => terminalRefusal(session.examState, serverNow());
   const transcript = new TranscriptBuffer({
     send: (key, text) => session.sendTranscript(key, text),
@@ -138,11 +138,13 @@ export function registerTerminalIpc({
   const enforce = () => {
     if (refusal()) host.close('turned_off');
   };
+  // `null`: the session was left (M60), so the shell (and its working folder) closes now.
   return (exam) => {
+    if (!exam) host.close('closed');
     enforce();
     if (windowTimer) clearTimeout(windowTimer);
     windowTimer = null;
-    const until = exam.terminal.enabled ? exam.terminal.until : null;
+    const until = exam?.terminal.enabled ? exam.terminal.until : null;
     if (until !== null) windowTimer = setTimeout(enforce, Math.max(0, until - serverNow()) + 50);
   };
 }

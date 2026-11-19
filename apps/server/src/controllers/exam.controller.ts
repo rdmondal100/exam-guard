@@ -111,7 +111,9 @@ export function createExamController({
 
     async remove(req: IdRequest, res: Response): Promise<void> {
       const current = found(req.params.id);
-      if (!isEditable(current.state)) {
+      // An ended practice exam (M53) is never graded or finalized, so it can be deleted (M60).
+      const endedPractice = current.practice && current.state === 'ended';
+      if (!isEditable(current.state) && !endedPractice) {
         throw new ApiError(409, 'invalid_state', `A ${current.state} exam cannot be deleted`);
       }
       exams.delete(current.id);

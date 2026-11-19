@@ -21,12 +21,12 @@ describe('isUnder', () => {
 });
 
 describe('createInsideCheck', () => {
-  it('counts the app, the student’s own programs and programs from the run or toolchain folders', () => {
+  it('counts the app, the student’s own programs and programs from the toolchains', () => {
     const own = new OwnProcesses();
     const inside = createInsideCheck({
       ownPid: 100,
       own,
-      roots: () => ['C:\\Users\\s\\AppData\\Local\\ExamGuard\\run', null, 'C:\\EG\\toolchains'],
+      roots: () => [null, 'C:\\EG\\toolchains'],
     });
     expect(inside(win(100, 'C:\\EG\\ExamGuard.exe'))).toBe(true);
     expect(inside(win(200, 'C:\\Chrome\\chrome.exe'))).toBe(false);
@@ -37,6 +37,9 @@ describe('createInsideCheck', () => {
     expect(inside(win(300, 'C:\\Windows\\System32\\notepad.exe'))).toBe(false);
 
     const glut = 'C:\\Users\\s\\AppData\\Local\\ExamGuard\\run\\es1\\workspace\\game.exe';
+    // A program in the workspace counts only as the run's own process, not by its folder.
+    expect(inside(win(400, glut))).toBe(false);
+    own.set('run', 400);
     expect(inside(win(400, glut))).toBe(true);
     expect(inside(win(500, 'C:\\EG\\toolchains\\python\\pythonw.exe'))).toBe(true);
   });

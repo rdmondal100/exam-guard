@@ -62,6 +62,7 @@ export function buildTeacherApp({ token, ...options }: TeacherAppOptions): Teach
         allowed: (req) =>
           c.state.isLoggedIn() &&
           tokenMatches(token, new URL(req.url ?? '', 'http://x').searchParams.get('token')),
+        onLogout: (listener) => c.state.onLogout(listener),
       }),
     );
 

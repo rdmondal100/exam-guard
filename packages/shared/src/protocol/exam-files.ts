@@ -12,8 +12,14 @@ export const EXAM_FILE_LIMITS = {
 } as const;
 
 /** One attached file, as the teacher lists it and as students get it in `SessionState`. */
+/**
+ * File ids are server `newId`s (hex and dashes). The student app uses the id as a file name in its
+ * staging folder, so nothing else (no dots, no slashes) is accepted.
+ */
+export const EXAM_FILE_ID = /^[A-Za-z0-9-]{1,64}$/;
+
 export const ExamFileSchema = z.object({
-  id: z.string().min(1).max(100),
+  id: z.string().regex(EXAM_FILE_ID),
   /** Only the length is checked here; the student's sync checks the rest (`checkFileName`). */
   name: z.string().min(1).max(FILE_NAME_MAX_CHARS),
   size: z.number().int().nonnegative().max(EXAM_FILE_LIMITS.fileBytes),

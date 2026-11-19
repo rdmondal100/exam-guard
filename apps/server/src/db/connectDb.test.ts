@@ -23,7 +23,7 @@ describe('initDatabase', () => {
     expect(existsSync(databasePath(dir))).toBe(true);
     expect(db.pragma('journal_mode', { simple: true })).toBe('wal');
     expect(db.pragma('foreign_keys', { simple: true })).toBe(1);
-    expect(db.pragma('user_version', { simple: true })).toBe(16);
+    expect(db.pragma('user_version', { simple: true })).toBe(18);
     const tables = db
       .prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
@@ -58,7 +58,7 @@ describe('initDatabase', () => {
     new SettingsRepo(first).set('a', 1);
     first.close();
     const second = initDatabase(dir);
-    expect(second.pragma('user_version', { simple: true })).toBe(16);
+    expect(second.pragma('user_version', { simple: true })).toBe(18);
     expect(new SettingsRepo(second).get('a')).toBe(1);
     second.close();
   });
@@ -105,7 +105,7 @@ describe('0016: the monitor moved into the student app', () => {
     event.run('focus_lost', 'agent', 'agent:s1:1', 'screenshots/e1/s1/1.jpg');
     event.run('run_executed', 'app', 'app:x', null);
 
-    expect(migrate(db, all)).toBe(16);
+    expect(migrate(db, all)).toBe(18);
     expect(
       db.prepare('SELECT id, type, source, dedupe_key, screenshot_path FROM events').all(),
     ).toEqual([
@@ -161,6 +161,48 @@ describe('schema constraints and SettingsRepo', () => {
     repo.set('k', { n: 1 });
     repo.set('k', { n: 2 });
     expect(repo.get('k')).toEqual({ n: 2 });
+    db.close();
+  });
+});
+
+describe('0017: practice exams', () => {
+  it('marks every existing exam as a real (non-practice) exam', () => {
+    const all = loadMigrations(fileURLToPath(new URL('./migrations', import.meta.url)));
+    const db = openDatabase(join(dir, 'practice.sqlite'));
+    migrate(
+      db,
+      all.filter((m) => m.version <= 16),
+    );
+    db.prepare(
+      `INSERT INTO exams (id, title, duration_sec, monitoring_json, created_at, updated_at)
+         VALUES ('e1', 'Mid', 3600, '{}', 1, 1)`,
+    ).run();
+    expect(migrate(db, all)).toBe(18);
+    expect(db.prepare('SELECT practice FROM exams').get()).toEqual({ practice: 0 });
+    expect(() => db.prepare("UPDATE exams SET practice = 2 WHERE id = 'e1'").run()).toThrow(
+      /CHECK/,
+    );
+    db.close();
+  });
+});
+
+describe('0018: pause', () => {
+  it('starts every existing exam unpaused with no paused time', () => {
+    const all = loadMigrations(fileURLToPath(new URL('./migrations', import.meta.url)));
+    const db = openDatabase(join(dir, 'pause.sqlite'));
+    migrate(
+      db,
+      all.filter((m) => m.version <= 17),
+    );
+    db.prepare(
+      `INSERT INTO exams (id, title, duration_sec, monitoring_json, created_at, updated_at)
+         VALUES ('e1', 'Mid', 3600, '{}', 1, 1)`,
+    ).run();
+    expect(migrate(db, all)).toBe(18);
+    expect(db.prepare('SELECT paused_at, paused_ms FROM exams').get()).toEqual({
+      paused_at: null,
+      paused_ms: 0,
+    });
     db.close();
   });
 });

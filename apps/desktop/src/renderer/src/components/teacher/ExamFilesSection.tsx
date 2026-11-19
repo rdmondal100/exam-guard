@@ -23,6 +23,8 @@ interface Props {
   examId: string;
   /** Files can only change while the exam is a draft or ready. */
   editable: boolean;
+  /** Hosted or running (M58): new files can still be added; students get them at once. */
+  live: boolean;
   /** The exam's Files panel switch; with it off, students do not get these files. */
   filesEnabled: boolean;
 }
@@ -33,7 +35,8 @@ const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
  * Files and pictures the teacher attaches to the exam (a data file, an image a program loads).
  * Every student gets a copy in their project folder when the exam starts.
  */
-export function ExamFilesSection({ examId, editable, filesEnabled }: Props) {
+export function ExamFilesSection({ examId, editable, live, filesEnabled }: Props) {
+  const canAdd = editable || live;
   const { api, files, error, reload } = useExamFiles(examId);
   const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
@@ -99,7 +102,7 @@ export function ExamFilesSection({ examId, editable, filesEnabled }: Props) {
           />
           <Button
             variant="outline"
-            disabled={!editable || !api || busy}
+            disabled={!canAdd || !api || busy}
             onClick={() => input.current?.click()}
           >
             {busy ? <Spinner /> : <UploadIcon />}
@@ -117,10 +120,17 @@ export function ExamFilesSection({ examId, editable, filesEnabled }: Props) {
             </AlertDescription>
           </Alert>
         )}
-        {!editable && (
+        {live ? (
           <p className="text-sm text-muted-foreground">
-            Files can only be changed before the exam is hosted.
+            New files go to every student at once: into the project folder if the exam is running.
+            Files already sent cannot be removed or replaced; give a new file another name.
           </p>
+        ) : (
+          !editable && (
+            <p className="text-sm text-muted-foreground">
+              Files can only be changed before the exam is hosted.
+            </p>
+          )
         )}
         {(error || failures.length > 0) && (
           <ErrorAlert>

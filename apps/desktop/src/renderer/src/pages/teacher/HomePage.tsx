@@ -40,13 +40,13 @@ export function HomePage({ info, serverStatus, onOpenExams }: Props) {
         <Card>
           <CardHeader>
             <CardTitle>This computer</CardTitle>
-            <CardDescription>The profile and install type in use.</CardDescription>
+            <CardDescription>The profile and version in use.</CardDescription>
           </CardHeader>
           <CardContent>
             <KeyValueList
               items={[
                 { label: 'Profile', value: info.profile },
-                { label: 'Install type', value: info.installType },
+                { label: 'Version', value: info.version },
               ]}
             />
           </CardContent>

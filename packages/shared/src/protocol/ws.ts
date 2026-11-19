@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ProtocolVersionSchema } from './protocol-version.js';
 import { MonitorStatusSchema, StudentStateSchema } from './join.js';
 import { EvidenceKindSchema, MonitorPolicySchema } from './monitoring.js';
+import { ReadinessReportMessageSchema, ReadinessStateSchema } from './readiness.js';
 import { ExamStateSchema } from './exams.js';
 import { EventRowSchema } from './events.js';
 import { GradingStatusSchema } from './grading.js';
@@ -124,6 +125,7 @@ export const StudentMessageSchema = z.discriminatedUnion('t', [
   AnswerSaveSchema,
   SubmitSchema,
   MonitorStatusMessageSchema,
+  ReadinessReportMessageSchema,
   RtcSignalSchema,
   LiveStateSchema,
 ]);
@@ -142,9 +144,17 @@ export const SessionStateSchema = z.object({
   /** The newest stored version of each buffer; the client continues its `clientSeq` after these. */
   saved: z.array(SavedAnswerSchema),
   locked: z.boolean(),
+  /**
+   * Server time the teacher paused the exam (M58); `null` or absent when it is not paused. While
+   * paused the app covers the exam and the timer stands at `deadline - pausedAt`; on resume a new
+   * `deadline` arrives with `pausedAt: null`.
+   */
+  pausedAt: z.number().nullable().optional(),
   /** Why the student is locked; absent or `null` when not locked (M35). */
   lockReason: LockReasonSchema.nullable().optional(),
   monitoring: z.boolean(),
+  /** A practice exam (M53): nothing is monitored, recorded or graded. Absent from older servers. */
+  practice: z.boolean().optional(),
   /** What the app's monitor does while the exam runs; set together with `monitoring: true` (M22). */
   monitoringPolicy: MonitorPolicySchema.optional(),
   /** The teacher's exam terminal switch (server-authoritative). */
@@ -167,7 +177,10 @@ export const WelcomeSchema = z.object({
 });
 export type Welcome = z.infer<typeof WelcomeSchema>;
 
-/** Pushed on start, extend, lock, end. Carries only the fields that changed. */
+/**
+ * Pushed on start, extend, lock, pause/resume, end, and when the teacher adds a question or a file
+ * mid-exam (M58: the whole `questions` / `examFiles` list). Carries only the fields that changed.
+ */
 export const StateUpdateSchema = z.object({
   t: z.literal('state'),
   state: SessionStateSchema.partial(),
@@ -257,6 +270,10 @@ export const RosterEntrySchema = z.object({
   monitorOk: z.boolean(),
   /** Screens the student's PC shows the desktop on, from the app's last report (M26). */
   monitors: z.number().int().nonnegative(),
+  /** The lobby readiness check (M54): no report yet, all passed, or something failed. */
+  readiness: ReadinessStateSchema.optional(),
+  /** The failed checks, as "C++: Timed out". */
+  readinessProblems: z.array(z.string()).optional(),
 });
 export type RosterEntry = z.infer<typeof RosterEntrySchema>;
 

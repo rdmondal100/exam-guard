@@ -13,6 +13,8 @@ export interface TeacherSocketDeps {
   liveViews?: Pick<LiveRelay, 'open' | 'close' | 'fromTeacher' | 'closeViewer'>;
   /** Per-launch token (query string) and a logged-in teacher, the same bar as the HTTP routes. */
   allowed: (request: IncomingMessage) => boolean;
+  /** Registers a callback for the teacher's logout; the socket closes then (M59). */
+  onLogout?: (listener: () => void) => () => void;
 }
 
 /** A teacher socket this far behind skips thumbnails until it catches up. */
@@ -31,7 +33,7 @@ const text = (data: RawData): string =>
 export function onTeacherSocket(
   socket: WebSocket,
   request: IncomingMessage,
-  { hub, thumbs, liveViews, allowed }: TeacherSocketDeps,
+  { hub, thumbs, liveViews, allowed, onLogout }: TeacherSocketDeps,
 ): void {
   if (!allowed(request)) {
     socket.close(4401, 'unauthorized');
@@ -48,8 +50,9 @@ export function onTeacherSocket(
     },
   };
   const liveViewer: LiveViewer = { send };
+  const offLogout = onLogout?.(() => socket.close(4401, 'logged_out'));
 
-  socket.on('message', (data: RawData) => {
+  const handle = (data: RawData) => {
     let parsed;
     try {
       parsed = TeacherMessageSchema.safeParse(JSON.parse(text(data)));
@@ -68,8 +71,18 @@ export function onTeacherSocket(
     // A new subscribe replaces the previous one.
     unsubscribe?.();
     unsubscribe = hub.subscribe({ examId: message.examId, send });
+  };
+
+  socket.on('message', (data: RawData) => {
+    try {
+      handle(data);
+    } catch (error) {
+      // One failing frame must not take the server down (M62).
+      console.error('[teacher socket] frame failed', error);
+    }
   });
   socket.on('close', () => {
+    offLogout?.();
     unsubscribe?.();
     thumbs?.unwatch(viewer);
     liveViews?.closeViewer(liveViewer);

@@ -45,8 +45,26 @@ export function teacherRoutes(c: Container, requireLogin: RequestHandler): Route
       requireLogin,
     ),
   );
-  if (examFiles) router.use(examFileRoutes({ exams, files: examFiles, now }, requireLogin));
-  router.use(questionRoutes({ exams, questions, now }, requireLogin));
+  // Added mid-exam (M58): the hosting manager hands them to the students at once.
+  const hosting = c.live?.hosting;
+  const onFileAdded =
+    hosting && ((examId: string, name: string) => hosting.examFileAdded(examId, name));
+  const onQuestionAdded =
+    hosting && ((examId: string, id: string) => hosting.questionAdded(examId, id));
+  if (examFiles) {
+    router.use(
+      examFileRoutes(
+        { exams, files: examFiles, now, ...(onFileAdded ? { onFileAdded } : {}) },
+        requireLogin,
+      ),
+    );
+  }
+  router.use(
+    questionRoutes(
+      { exams, questions, now, ...(onQuestionAdded ? { onQuestionAdded } : {}) },
+      requireLogin,
+    ),
+  );
   router.use(eventRoutes({ exams, events, ...(screenshots ? { screenshots } : {}) }, requireLogin));
   router.use(terminalLogRoutes({ students, events, terminalLogs }, requireLogin));
   router.use(auditRoutes({ exams, actions: c.actions }, requireLogin));

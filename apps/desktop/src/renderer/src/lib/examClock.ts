@@ -1,8 +1,15 @@
 /**
  * Time left until the server deadline, in ms. `offsetMs` is the estimated server clock minus the
- * local clock (`null` before the first pong, when the best guess is that the clocks agree).
+ * local clock (`null` before the first pong, when the best guess is that the clocks agree). While
+ * the teacher has the exam paused (M58) the clock stands at what was left when the pause began.
  */
-export function remainingMs(deadline: number, nowMs: number, offsetMs: number | null): number {
+export function remainingMs(
+  deadline: number,
+  nowMs: number,
+  offsetMs: number | null,
+  pausedAt: number | null = null,
+): number {
+  if (pausedAt !== null) return Math.max(0, deadline - pausedAt);
   return Math.max(0, deadline - (nowMs + (offsetMs ?? 0)));
 }
 

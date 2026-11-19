@@ -13,7 +13,7 @@ import { buildTeacherApp } from '../app.js';
 
 const TOKEN = 't'.repeat(40);
 const HEADERS = { 'x-teacher-token': TOKEN };
-const PROTOCOL = { major: 2, minor: 0 };
+const PROTOCOL = { major: 5, minor: 0 };
 
 interface Msg {
   t: string;

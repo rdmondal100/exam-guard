@@ -13,7 +13,7 @@ const base = {
   studentCode: ' S1001 ',
   pin: '123456',
   deviceId: 'a'.repeat(64),
-  protocol: { major: 2, minor: 0 },
+  protocol: { major: 3, minor: 0 },
   monitor: { ok: true, captureOk: true, monitors: 1 },
 };
 

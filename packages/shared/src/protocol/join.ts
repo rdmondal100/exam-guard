@@ -49,6 +49,8 @@ export const JoinResponseSchema = z.object({
   examStudentId: z.string(),
   name: z.string(),
   examTitle: z.string(),
+  /** A practice exam (M53): the notice says nothing is recorded. Absent from older servers. */
+  practice: z.boolean().optional(),
   state: StudentStateSchema,
 });
 export type JoinResponse = z.infer<typeof JoinResponseSchema>;
@@ -94,6 +96,8 @@ export const JoinResultSchema = z.discriminatedUnion('ok', [
     examStudentId: z.string(),
     name: z.string(),
     examTitle: z.string(),
+    /** A practice exam (M53). */
+    practice: z.boolean().optional(),
   }),
   z.object({
     ok: z.literal(false),

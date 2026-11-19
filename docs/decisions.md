@@ -413,3 +413,16 @@ ode_moduleselectron` to `node_modules.pnpmelectron@x...`; Windows reports the re
 **M51 UI on shadcn/ui** — the user asked for shadcn throughout (2026-11-12), light + dark, blue on slate, the shadcn Sidebar.
 - 2026-11-12 — React stays 18 (requirements), so the `ui/` components are shadcn's Tailwind v4 new-york sources rewritten with `forwardRef` (the CLI emits React 19 code whose refs React 18 drops, breaking Radix `asChild` triggers). The sidebar is trimmed (no mobile sheet, state in localStorage). Dropdown menus are non-modal so an item can open the confirm dialog.
 - 2026-11-12 — Dark mode is Tailwind's `prefers-color-scheme` variant driven by `nativeTheme.themeSource` (main, `theme.json` per profile), so the page and the title bar change together with no renderer theme state. ExamDetail became a status card plus tabs; every tab panel uses `forceMount` so nothing remounts. StudentDetail is a non-modal Sheet so a click on another row still switches student.
+
+**M52–M57** — the user's requests (2026-11-12).
+- 2026-11-12 — Two apps from one codebase: `__EG_APP__` constant branches with dynamic imports keep each app's code out of the other's bundle; packaging prunes dependencies by closure. Protocol major 3 because the pair ships together and a 2.0 server would close the socket on `readiness.report`.
+- 2026-11-12 — Practice exams are filtered once in `EventRecorder.record` (also server events). Toolchain trims keep libraries students can link (libcurl and friends); `-flto` is dropped for 36 MB.
+
+**M58** — the user's request (2026-11-13).
+- 2026-11-13 — Pause is an exam flag, not a new exam state: `paused_at` + `paused_ms` move every deadline; apps get a fixed `deadline` plus `pausedAt` (frozen clock) while the server's own checks also count the pause still going on. Saves keep being accepted while paused (typed before it). Protocol major 4 so a 3.x app cannot ignore a pause.
+- 2026-11-13 — Mid-exam additions are append-only: existing questions and files stay as they are (answers, grading and downloads depend on them); a new question must be complete, a new file needs a new name.
+
+**M59–M64 audit batch** — the user asked for a whole-project bug hunt and three upgrades (2026-11-19).
+- 2026-11-19 — The pause is now enforced by the server (saves dropped as `paused`, Submit refused and re-sent by the app on resume); M58's "saves keep being accepted while paused" is replaced. Protocol major 5.
+- 2026-11-19 — Server downtime is not credited as extra time (the apps keep their editors offline); instead a running exam waits 60 s after a restart before auto-submitting, so queued saves stamped by the deadline still count.
+- 2026-11-19 — "Inside the exam" is by pid plus the toolchains folder only; a student-writable folder never counts by path.

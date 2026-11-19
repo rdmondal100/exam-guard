@@ -29,7 +29,10 @@ export function compareNames(a: RosterEntry, b: RosterEntry): number {
 /** The roster's status words. */
 export function statusText(entry: RosterEntry): string {
   const state = entry.state === 'ended_by_teacher' ? 'ended' : entry.state;
-  return entry.connected ? state : `${state} · offline`;
+  if (entry.connected) return state;
+  // After submitting, students may close the app or turn their PC off (M57): expected, not an
+  // outage. The server cannot tell which, so it says neither (M60).
+  return entry.state === 'submitted' ? 'submitted · left' : `${state} · offline`;
 }
 
 /** Risk score bands for the roster badge. */

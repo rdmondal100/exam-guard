@@ -92,7 +92,7 @@ describe('EvidenceIntake', () => {
       type: 'focus_lost',
       severity: 'low',
       source: 'monitor',
-      dedupe_key: 'monitor:s1:1',
+      dedupe_key: 'monitor:s1:s1:1',
     });
     expect(row?.screenshot_path).toBe(join('screenshots', 'e1', 's1', `${row?.id}.jpg`));
     expect(Array.from(readFileSync(join(dir, row?.screenshot_path ?? '')))).toEqual(

@@ -161,3 +161,24 @@ describe('exam routes', () => {
     expect((await send('DELETE', `/class-lists/${list.id}`)).json().error.code).toBe('list_in_use');
   });
 });
+
+describe('practice exams (M53)', () => {
+  it('are real exams by default; the flag is kept on edit and duplicate', async () => {
+    const exam = await createExam();
+    expect(exam.practice).toBe(false);
+    const edited = (await send('PATCH', `/exams/${exam.id}`, { practice: true })).json();
+    expect(edited.practice).toBe(true);
+    const copy = (await send('POST', `/exams/${exam.id}/duplicate`)).json();
+    expect(copy.practice).toBe(true);
+    const created = await createExam({ title: 'Try it', durationMin: 30, practice: true });
+    expect(created.practice).toBe(true);
+  });
+
+  it('are never graded', async () => {
+    const exam = await createExam({ title: 'Try it', durationMin: 30, practice: true });
+    db.prepare("UPDATE exams SET state = 'ended' WHERE id = ?").run(exam.id);
+    const res = await send('POST', `/exams/${exam.id}/grading`);
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe('practice_exam');
+  });
+});

@@ -7,7 +7,8 @@ export interface InsideDeps {
   ownPid: number;
   /** The program of a run and the terminal's shell. */
   own: Pick<OwnProcesses, 'has'>;
-  /** Folders whose programs are the student's own: the run folder and the bundled toolchains. */
+  /** Folders whose programs are the student's own: the bundled toolchains (not writable in a
+   * packaged install). Never the student-writable run folder (M59). */
   roots: () => (string | null)[];
 }
 
@@ -19,8 +20,8 @@ export function isUnder(path: string, root: string): boolean {
 
 /**
  * Whether a window counts as inside the exam: one of the app's own, the student's running program
- * or terminal, or a program from the run folder or the toolchains (a GUI program the student
- * started from the terminal). Everything else is outside.
+ * or terminal (by pid), or a program from the toolchains (e.g. pythonw started from the terminal).
+ * Everything else is outside, also a program copied into the workspace.
  */
 export function createInsideCheck({ ownPid, own, roots }: InsideDeps) {
   return (window: FrontWindow): boolean => {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { InfoIcon, PlayIcon, SquareIcon } from 'lucide-react';
+import { InfoIcon, PauseIcon, PlayIcon, SquareIcon } from 'lucide-react';
 import type { HostingInfo } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
 import {
@@ -19,6 +19,7 @@ import { ErrorAlert } from '../common/ErrorAlert';
 import { KeyValueList } from '../common/KeyValueList';
 import { LoadingLine } from '../common/Spinner';
 import { GlobalActionsPanel } from './GlobalActionsPanel';
+import { TeacherExamTimer } from './TeacherExamTimer';
 import { TerminalControl } from './TerminalControl';
 
 interface Props {
@@ -91,6 +92,36 @@ export function HostingPanel({ examId, api, roster, running, onStart, onStop, on
     if (ok) void act(onStart);
   };
 
+  // M58: pause or resume for everyone. The answer carries the (unchanged or moved) end time.
+  const setPaused = async (paused: boolean) => {
+    if (paused) {
+      const ok = await confirm({
+        title: 'Pause the exam for everyone?',
+        description:
+          'Every student sees "Your teacher paused the exam" and cannot type until you resume. ' +
+          'The timer stops; the time spent paused is given back.',
+        confirmLabel: 'Pause exam',
+      });
+      if (!ok) return;
+    }
+    await act(async () => {
+      try {
+        const result = await api.setPaused(examId, paused);
+        setInfo(
+          (prev) => prev && { ...prev, pausedAt: result.pausedAt, deadline: result.deadline },
+        );
+      } catch (e) {
+        // The server may have paused (or resumed) anyway: show what it says now (M60).
+        await api
+          .hosting(examId)
+          .then(setInfo)
+          .catch(() => undefined);
+        throw e;
+      }
+    });
+  };
+  const paused = running && info?.pausedAt != null;
+
   const end = async () => {
     const working = counts?.joined ?? 0;
     const ok = await confirm({
@@ -102,25 +133,54 @@ export function HostingPanel({ examId, api, roster, running, onStart, onStop, on
     if (ok) void act(onEnd);
   };
 
+  // The lobby readiness check (M54): how many waiting PCs passed it.
+  const waiting = [...roster.students.values()].filter((s) => s.state === 'lobby');
+  const ready = waiting.filter((s) => s.readiness === 'ok').length;
+  // M57: students who submitted, and how many have left since (app closed or PC off).
+  const submitted = [...roster.students.values()].filter((s) => s.state === 'submitted');
   const joined = counts
-    ? `${counts.joined} joined · ${counts.inLobby} in lobby · ${counts.connected} connected`
+    ? `${counts.joined} joined · ${counts.inLobby} in lobby · ${counts.connected} connected` +
+      (!running && waiting.length > 0 ? ` · ${ready} of ${waiting.length} ready` : '') +
+      (submitted.length > 0
+        ? ` · ${submitted.length} submitted (${submitted.filter((s) => !s.connected).length} left)`
+        : '')
     : '0 joined';
 
   return (
-    <Card aria-label="Hosting" className={running ? 'border-success/40' : 'border-primary/40'}>
+    <Card
+      aria-label="Hosting"
+      className={paused ? 'border-warning/50' : running ? 'border-success/40' : 'border-primary/40'}
+    >
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-xl">
           <span
             aria-hidden
-            className={`size-2.5 animate-pulse rounded-full ${running ? 'bg-success' : 'bg-primary'}`}
+            className={`size-2.5 rounded-full ${paused ? 'bg-warning' : running ? 'animate-pulse bg-success' : 'animate-pulse bg-primary'}`}
           />
-          {running ? 'Exam running' : 'Hosting: waiting for students'}
+          {paused ? 'Exam paused' : running ? 'Exam running' : 'Hosting: waiting for students'}
         </CardTitle>
         <CardDescription>
           {joined}
           {!roster.live && <span className="ml-2 text-warning">(reconnecting…)</span>}
         </CardDescription>
-        <CardAction className="flex gap-2">
+        <CardAction className="flex flex-wrap items-center justify-end gap-2">
+          {running && info?.deadline != null && (
+            <TeacherExamTimer
+              deadline={info.deadline}
+              extensionMin={info.extensionMin}
+              pausedAt={info.pausedAt ?? null}
+            />
+          )}
+          {running && (
+            <Button
+              variant={paused ? 'default' : 'outline'}
+              disabled={stopping || !info}
+              onClick={() => void setPaused(!paused)}
+            >
+              {paused ? <PlayIcon /> : <PauseIcon />}
+              {paused ? 'Resume exam' : 'Pause exam'}
+            </Button>
+          )}
           {running ? (
             <Button variant="destructive" disabled={stopping} onClick={() => void end()}>
               <SquareIcon />
@@ -174,6 +234,11 @@ export function HostingPanel({ examId, api, roster, running, onStart, onStop, on
                   ) : (
                     <span>
                       {clockTime(info.deadline)}
+                      {paused && (
+                        <span className="block text-xs font-normal text-warning">
+                          Paused: the end moves later when you resume
+                        </span>
+                      )}
                       {info.extensionMin > 0 && (
                         <span className="block text-xs font-normal text-muted-foreground">
                           (+{info.extensionMin} min for everyone; personal extra time on top)

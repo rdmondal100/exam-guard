@@ -18,7 +18,7 @@ import { useSettings } from '@/hooks/useSettings';
 import { ErrorAlert } from '../../components/common/ErrorAlert';
 import { PageHeader } from '../../components/common/PageHeader';
 import { DataTable } from '../../components/teacher/DataTable';
-import { ExamStateBadge } from '../../components/teacher/ExamStateBadge';
+import { ExamStateBadge, PracticeBadge } from '../../components/teacher/ExamStateBadge';
 import { ExamDetailPage } from './ExamDetailPage';
 import { ExamSettingsForm, type ExamFormValues } from '../../components/teacher/ExamSettingsForm';
 
@@ -80,6 +80,11 @@ export function ExamsPage() {
           {row.original.title}
         </button>
       ),
+    },
+    {
+      id: 'kind',
+      header: '',
+      cell: ({ row }) => (row.original.practice ? <PracticeBadge /> : null),
     },
     {
       header: 'State',

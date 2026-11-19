@@ -15,22 +15,20 @@ ExamGuard runs exams in a university computer lab. One installer, two install ty
 
 ## 2. Install
 
-The installer is `ExamGuard-Setup-<version>.exe` (about 210 MB, about 1.2 GB installed, per-machine, default `C:\Program Files\ExamGuard`).
+There are two installers (since 0.2, M52): `ExamGuard-Student-Setup-<version>.exe` for the lab PCs (about 1.1 GB installed: it includes the C/C++, Python and npm toolchains) and `ExamGuard-Teacher-Setup-<version>.exe` for the teacher's PC (about 420 MB installed). Both install per machine. **Uninstall an older combined "ExamGuard" first.**
 
-**Interactive:** run it as administrator and choose *Student computer* or *Teacher computer*.
+**Interactive:** run the right installer as administrator.
 
 **Silent** (from an elevated command prompt or your deployment tool):
 
 ```
-ExamGuard-Setup-0.2.0.exe /S /TYPE=student
-ExamGuard-Setup-0.2.0.exe /S /TYPE=teacher
-ExamGuard-Setup-0.2.0.exe /S /TYPE=student /D=D:\Apps\ExamGuard   (/D must be last, no quotes)
+ExamGuard-Student-Setup-0.2.0.exe /S
+ExamGuard-Teacher-Setup-0.2.0.exe /S
+ExamGuard-Student-Setup-0.2.0.exe /S /D=D:\Apps\ExamGuard   (/D must be last, no quotes)
 ```
 
-An unknown `/TYPE` stops the install (exit code 2), and so does a silent first install without `/TYPE`.
 
 **What a student install does**
-- Writes `HKLM\Software\ExamGuard\InstallType = student` (the app then offers Student mode only).
 - Nothing else: no service, no firewall rules. The student app only makes outbound connections to the teacher.
 - Upgrading from 0.1: it stops and deletes the old **ExamGuardAgent** service and its `AppPath` registry value.
 
@@ -65,11 +63,10 @@ The Stage 1 installer is **not code-signed**. On first run Windows SmartScreen s
 | `%APPDATA%\ExamGuard\` (teacher) | the teacher's data: database, certificate, screenshots, exam files, exports, backups, logs. The teacher can move it in Settings |
 | `%APPDATA%\ExamGuard\` (student) | the encrypted session and offline queue (work and events the teacher has not confirmed yet) |
 | `%LOCALAPPDATA%\ExamGuard\run\` (student) | the student's workspace during an exam |
-| `HKLM\Software\ExamGuard` | `InstallType` |
 
 ## 6. Uninstall
 
-*Apps & features* → ExamGuard, or silently: `"C:\Program Files\ExamGuard\Uninstall ExamGuard.exe" /S`.
+*Apps & features* → ExamGuard Teacher / ExamGuard Student, or silently with the `Uninstall … .exe /S` in the install folder.
 
 The uninstaller deletes the two firewall rules, `HKLM\Software\ExamGuard` and anything an older version left (the ExamGuardAgent service, `%ProgramData%\ExamGuard`). The teacher's data folder is **kept** unless the teacher ticks *Delete this user's ExamGuard data* (back it up first: Settings → Backup). After uninstalling, `netsh advfirewall firewall show rule name=all | findstr ExamGuard` prints nothing.
 

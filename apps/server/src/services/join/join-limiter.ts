@@ -22,8 +22,14 @@ export class JoinLimiter {
     this.failures.set(ip, [...this.recent(ip), this.now()]);
   }
 
+  /**
+   * A good join forgives one failure, not all: someone who knows the PIN could otherwise mix
+   * good joins with guesses of class-list IDs and never be slowed down (M59).
+   */
   recordSuccess(ip: string): void {
-    this.failures.delete(ip);
+    const recent = this.recent(ip);
+    if (recent.length <= 1) this.failures.delete(ip);
+    else this.failures.set(ip, recent.slice(1));
   }
 
   private recent(ip: string): number[] {

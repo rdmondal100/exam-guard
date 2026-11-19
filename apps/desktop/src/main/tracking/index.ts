@@ -1,9 +1,8 @@
-import { join } from 'node:path';
 import { app, powerMonitor, screen } from 'electron';
 import type { MonitorStatus } from '@examguard/shared';
 import { toolchainsDir } from '../runner/toolchains.js';
 import { captureScreenJpeg } from '../screenshots/capture.js';
-import { localAppData, siteReaderPath } from '../utils/paths.js';
+import { siteReaderPath } from '../utils/paths.js';
 import { ExamMonitor, type MonitorSession } from './examMonitor.js';
 import { readForeground, readOpenWindows, toFrontWindow, type FrontWindow } from './foreground.js';
 import { createInsideCheck } from './inside.js';
@@ -43,8 +42,9 @@ export function createMonitoring({ session, own }: MonitoringDeps) {
   const isInside = createInsideCheck({
     ownPid: process.pid,
     own,
+    // Not the run folder: the student can copy any program into the workspace (M59). A program
+    // from it counts only while it is the run's own process (by pid).
     roots: () => [
-      join(localAppData(), 'ExamGuard', 'run'),
       toolchainsDir({
         isPackaged: app.isPackaged,
         appPath: app.getAppPath(),
@@ -53,6 +53,7 @@ export function createMonitoring({ session, own }: MonitoringDeps) {
     ],
   });
   let monitor: ExamMonitor | null = null;
+  let stalledNow = false;
   const tracker = new Tracker({
     readFront: () => readForeground(),
     resolveSite: (window) => sites.resolve(window),
@@ -78,6 +79,11 @@ export function createMonitoring({ session, own }: MonitoringDeps) {
       return () => powerMonitor.off('lock-screen', onLock);
     },
     emit: (evidence) => monitor?.evidence(evidence),
+    // A stalled monitor shows as "Not monitored" on the teacher's roster until it is back (M63).
+    onStall: (stalled) => {
+      stalledNow = stalled;
+      if (latest) publish(latest);
+    },
   });
   monitor = new ExamMonitor(tracker, session);
   app.once('will-quit', () => tracker.stop());
@@ -85,7 +91,7 @@ export function createMonitoring({ session, own }: MonitoringDeps) {
   let latest: MonitorStatus | null = null;
   const publish = (status: MonitorStatus) => {
     latest = status;
-    session.setMonitorStatus(status);
+    session.setMonitorStatus(stalledNow ? { ...status, ok: false } : status);
   };
   const check = async (): Promise<MonitorStatus> => {
     const status = await checkMonitor({

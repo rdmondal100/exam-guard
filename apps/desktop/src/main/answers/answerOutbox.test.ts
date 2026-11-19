@@ -58,6 +58,27 @@ describe('AnswerOutbox', () => {
     expect(outbox.unacked().map((s) => s.content)).toEqual(['b', 'c', 'd']);
   });
 
+  it('past the cap drops an outdated save, never the only one of another buffer', () => {
+    const dropped: string[] = [];
+    const outbox = new AnswerOutbox(
+      () => {},
+      3,
+      (s) => dropped.push(s.content),
+    );
+    outbox.add({ ...request('q2 only'), questionId: 'q2' }, 1);
+    for (const c of ['a', 'b', 'c', 'd']) outbox.add(request(c), 1);
+    expect(outbox.unacked().map((s) => s.content)).toEqual(['q2 only', 'c', 'd']);
+    expect(dropped).toEqual(['a', 'b']);
+  });
+
+  it('forgets everything on clear but keeps counting', () => {
+    const outbox = new AnswerOutbox();
+    outbox.add(request('a'), 1);
+    outbox.clear();
+    expect(outbox.unacked()).toEqual([]);
+    expect(outbox.add(request('b'), 1).clientSeq).toBe(2);
+  });
+
   it('restores saves from disk, keeps them in order and numbers the next one after them', () => {
     const seen: AnswerStatus[] = [];
     const outbox = new AnswerOutbox((st) => seen.push(st));

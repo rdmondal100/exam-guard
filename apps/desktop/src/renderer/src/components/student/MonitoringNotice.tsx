@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { EyeIcon } from 'lucide-react';
+import { EyeIcon, GraduationCapIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -8,12 +8,14 @@ import { ErrorAlert } from '../common/ErrorAlert';
 import { Spinner } from '../common/Spinner';
 
 interface Props {
+  /** A practice exam (M53): nothing is recorded, so there is nothing to agree to. */
+  practice: boolean;
   onAccepted: () => void;
   onBack: () => void;
 }
 
 /** What ExamGuard observes during the exam. Accepting tells the server and enters the lobby. */
-export function MonitoringNotice({ onAccepted, onBack }: Props) {
+export function MonitoringNotice({ practice, onAccepted, onBack }: Props) {
   const [checked, setChecked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +33,37 @@ export function MonitoringNotice({ onAccepted, onBack }: Props) {
       setBusy(false);
     }
   };
+
+  if (practice) {
+    return (
+      <CenteredScreen>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-2xl">
+              <GraduationCapIcon className="size-5 text-primary" aria-hidden />
+              Practice exam
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4 text-sm leading-relaxed">
+            <p>
+              This is a practice exam. Nothing on this computer is recorded and nothing is graded.
+              Use it to try the editor, Run, Files and the terminal before a real exam.
+            </p>
+            {error && <ErrorAlert>{error}</ErrorAlert>}
+          </CardContent>
+          <CardFooter className="justify-between">
+            <Button variant="outline" onClick={onBack} disabled={busy}>
+              Back
+            </Button>
+            <Button onClick={() => void accept()} disabled={busy}>
+              {busy && <Spinner />}
+              Continue
+            </Button>
+          </CardFooter>
+        </Card>
+      </CenteredScreen>
+    );
+  }
 
   return (
     <CenteredScreen width="lg">

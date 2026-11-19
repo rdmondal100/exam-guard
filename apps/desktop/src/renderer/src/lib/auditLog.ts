@@ -4,6 +4,11 @@ const num = (v: unknown): number | null => (typeof v === 'number' ? v : null);
 const quote = (v: unknown): string => (typeof v === 'string' && v ? `: “${v}”` : '');
 
 /** Who an action was for: the student, or the whole exam. */
+/** "40 s" under a minute, else whole minutes. */
+function pauseLength(sec: number): string {
+  return sec < 60 ? `${Math.max(0, Math.round(sec))} s` : `${Math.round(sec / 60)} min`;
+}
+
 export function auditTarget(entry: AuditEntry): string {
   if (!entry.examStudentId) return 'Everyone';
   if (entry.studentCode) return `${entry.studentCode} ${entry.studentName ?? ''}`.trim();
@@ -22,6 +27,18 @@ export function describeAudit(entry: AuditEntry): string {
       return 'Started the exam';
     case 'end_all':
       return p.reason === 'time_up' ? 'The exam ended at time up' : 'Ended the exam for everyone';
+    case 'pause':
+      return 'Paused the exam for everyone';
+    case 'resume': {
+      const sec = num(p.pausedSec);
+      return sec === null
+        ? 'Resumed the exam'
+        : `Resumed the exam (paused ${pauseLength(sec)}; time given back)`;
+    }
+    case 'add_question':
+      return 'Added a question during the exam';
+    case 'add_file':
+      return `Attached a file during the exam${quote(p.name)}`;
     case 'extend_all':
       return `Added ${num(p.minutes) ?? '?'} minutes for everyone`;
     case 'broadcast': {

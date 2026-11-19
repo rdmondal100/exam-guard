@@ -97,6 +97,35 @@ describe('SessionHub', () => {
     expect(ok(sent)).toEqual([true]);
   });
 
+  it('shows the lobby readiness check in the roster (M54)', () => {
+    const { repo } = fakeRepo();
+    const hub = new SessionHub({ students: repo, batchMs: 250 });
+    const sent: ServerToTeacher[] = [];
+    hub.subscribe({ examId: 'e1', send: (m) => sent.push(m) });
+    const latest = () => sent.flatMap((m) => (m.t === 'roster' ? m.students : [])).at(-1);
+
+    hub.attach('a', conn(), 4409);
+    vi.advanceTimersByTime(250);
+    expect(latest()?.readiness).toBe('pending');
+
+    hub.setReadiness('a', {
+      checks: [
+        { name: 'c', ok: true, ms: 900 },
+        { name: 'python', ok: false, ms: 20000, message: 'Timed out' },
+      ],
+    });
+    vi.advanceTimersByTime(250);
+    expect(latest()).toMatchObject({
+      readiness: 'problem',
+      readinessProblems: ['Python: Timed out'],
+    });
+
+    hub.setReadiness('a', { checks: [{ name: 'python', ok: true, ms: 700 }] });
+    vi.advanceTimersByTime(250);
+    expect(latest()?.readiness).toBe('ok');
+    expect(latest()?.readinessProblems).toBeUndefined();
+  });
+
   it('shows how many screens the app reports and pushes a change (M26)', () => {
     const { repo } = fakeRepo();
     const hub = new SessionHub({ students: repo, batchMs: 250 });

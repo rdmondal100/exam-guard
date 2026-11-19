@@ -45,7 +45,11 @@ export function StudentFlow() {
   }, []);
 
   const leave = () => {
-    window.examguard.leaveSession().finally(toFind);
+    // A failed leave must not become an unhandled rejection; the student goes back either way.
+    void window.examguard
+      .leaveSession()
+      .catch(() => undefined)
+      .finally(toFind);
   };
 
   switch (step.name) {
@@ -80,6 +84,7 @@ export function StudentFlow() {
     case 'notice':
       return (
         <MonitoringNotice
+          practice={step.joined.practice ?? false}
           onAccepted={() => setStep({ name: 'lobby', joined: step.joined })}
           onBack={() => setStep({ name: 'credentials', host: step.host })}
         />

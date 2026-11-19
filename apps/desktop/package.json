@@ -1,6 +1,6 @@
 {
   "name": "@examguard/desktop",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
@@ -9,10 +9,11 @@
   ],
   "scripts": {
     "build:site-reader": "node scripts/build-site-reader.mjs",
-    "dev": "node scripts/build-site-reader.mjs && electron-vite dev",
-    "dev:teacher": "node scripts/build-site-reader.mjs && electron-vite dev -- --profile teacher",
-    "dev:student": "node scripts/build-site-reader.mjs && electron-vite dev -- --profile student",
-    "build": "node scripts/build-site-reader.mjs && electron-vite build",
+    "dev:teacher": "electron-vite dev --mode teacher -- --profile teacher",
+    "dev:student": "node scripts/build-site-reader.mjs && electron-vite dev --mode student -- --profile student",
+    "build": "pnpm run build:teacher && pnpm run build:student",
+    "build:teacher": "electron-vite build --mode teacher",
+    "build:student": "node scripts/build-site-reader.mjs && electron-vite build --mode student",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },

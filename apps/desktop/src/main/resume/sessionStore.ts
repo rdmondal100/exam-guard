@@ -1,4 +1,5 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { writeFileAtomic } from '../utils/atomicWrite.js';
 import { dirname } from 'node:path';
 import { z } from 'zod';
 import type { SecretBox } from './secretBox.js';
@@ -32,7 +33,7 @@ export class SessionStore {
     if (text === null) return;
     try {
       mkdirSync(dirname(this.file), { recursive: true });
-      writeFileSync(this.file, text);
+      writeFileAtomic(this.file, text);
     } catch (e) {
       console.warn(`Could not store the session: ${e instanceof Error ? e.message : String(e)}`);
     }

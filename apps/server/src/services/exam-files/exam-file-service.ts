@@ -35,10 +35,26 @@ export class ExamFileService {
     return this.repo.get(examId, fileId);
   }
 
-  /** Adds a file, or replaces the one with the same name (any letter case). */
-  async add(examId: string, name: string, data: Buffer, now: number): Promise<ExamFile> {
+  /**
+   * Adds a file, or replaces the one with the same name (any letter case). With `replace: false`
+   * (a hosted or running exam, M58: students may already have the old one) a taken name is refused.
+   */
+  async add(
+    examId: string,
+    name: string,
+    data: Buffer,
+    now: number,
+    { replace = true }: { replace?: boolean } = {},
+  ): Promise<ExamFile> {
     const problem = checkFileName(name);
     if (problem) throw new ExamFileError(400, 'invalid_name', problem);
+    if (!replace && this.repo.findByName(examId, name)) {
+      throw new ExamFileError(
+        409,
+        'file_exists',
+        `Students may already have ${name}: give the new file another name`,
+      );
+    }
     if (data.length > EXAM_FILE_LIMITS.fileBytes) {
       throw new ExamFileError(
         413,

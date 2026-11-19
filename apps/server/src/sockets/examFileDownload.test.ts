@@ -13,7 +13,7 @@ import { buildTeacherApp } from '../app.js';
 
 const TOKEN = 't'.repeat(40);
 const HEADERS = { 'x-teacher-token': TOKEN };
-const PROTOCOL = { major: 2, minor: 0 };
+const PROTOCOL = { major: 5, minor: 0 };
 const CSV = 'a,b\n1,2\n';
 const PNG = Buffer.from([137, 80, 78, 71, 0, 255, 0, 1]);
 

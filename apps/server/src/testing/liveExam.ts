@@ -9,7 +9,7 @@ import { withInject, type Injectable } from './inject.js';
 
 export const TEST_TOKEN = 't'.repeat(40);
 const HEADERS = { 'x-teacher-token': TEST_TOKEN };
-const PROTOCOL = { major: 2, minor: 0 };
+const PROTOCOL = { major: 5, minor: 0 };
 const PIN = '004217';
 
 /** A socket that records what it gets: JSON frames parsed, binary frames as bytes. */

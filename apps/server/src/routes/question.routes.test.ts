@@ -144,12 +144,11 @@ describe('question routes', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM marking_criteria').get()).toEqual({ n: 0 });
   });
 
-  it('locks questions once the exam is past ready', async () => {
+  it('locks existing questions once the exam is past ready', async () => {
     const exam = await newExam();
     const q = await addQ(exam.id);
     db.prepare("UPDATE exams SET state = 'hosting' WHERE id = ?").run(exam.id);
     for (const res of [
-      await send('POST', `/exams/${exam.id}/questions`, codeQ()),
       await send('PATCH', `/questions/${q.id}`, codeQ()),
       await send('DELETE', `/questions/${q.id}`),
       await send('POST', `/exams/${exam.id}/questions/reorder`, { ids: [q.id] }),
@@ -157,6 +156,28 @@ describe('question routes', () => {
       expect(res.statusCode).toBe(409);
       expect(res.json().error.code).toBe('invalid_state');
     }
+  });
+
+  it('adds a complete question last to a hosted or running exam (M58)', async () => {
+    const exam = await newExam();
+    await addQ(exam.id);
+    for (const state of ['hosting', 'running']) {
+      db.prepare('UPDATE exams SET state = ? WHERE id = ?').run(state, exam.id);
+      const res = await send('POST', `/exams/${exam.id}/questions`, codeQ());
+      expect(res.statusCode).toBe(201);
+    }
+    const list = (await send('GET', `/exams/${exam.id}/questions`)).json();
+    expect(list.map((q: { position: number }) => q.position)).toEqual([1, 2, 3]);
+  });
+
+  it('refuses an incomplete question once students may have the exam (M58)', async () => {
+    const exam = await newExam();
+    db.prepare("UPDATE exams SET state = 'running' WHERE id = ?").run(exam.id);
+    const res = await send('POST', `/exams/${exam.id}/questions`, codeQ({ sampleAnswer: '' }));
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe('question_incomplete');
+    db.prepare("UPDATE exams SET state = 'ended' WHERE id = ?").run(exam.id);
+    expect((await send('POST', `/exams/${exam.id}/questions`, codeQ())).statusCode).toBe(409);
   });
 
   it('duplicate copies questions and criteria with new ids', async () => {
@@ -223,5 +244,16 @@ describe('ready / unready', () => {
     expect((await send('POST', `/exams/${exam.id}/ready`)).statusCode).toBe(409);
     expect((await send('POST', `/exams/${exam.id}/unready`)).statusCode).toBe(409);
     expect((await send('POST', '/exams/nope/ready')).statusCode).toBe(404);
+  });
+});
+
+describe('practice exams (M53)', () => {
+  it('can be marked Ready without sample answers or marking criteria', async () => {
+    const exam = await newExam();
+    await send('PATCH', `/exams/${exam.id}`, { practice: true });
+    await addQ(exam.id, codeQ({ sampleAnswer: '', criteria: [] }));
+    const res = await send('POST', `/exams/${exam.id}/ready`);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().state).toBe('ready');
   });
 });

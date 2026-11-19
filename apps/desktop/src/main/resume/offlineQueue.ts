@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import {
   AnswerSaveSchema,
@@ -8,7 +8,11 @@ import {
   type EventReport,
   type TranscriptChunk,
 } from '@examguard/shared';
+import { fsyncFile, writeFileAtomic } from '../utils/atomicWrite.js';
 import type { SecretBox } from './secretBox.js';
+
+/** Appends reach the disk within this long (fsync is batched, M61). */
+const SYNC_EVERY_MS = 250;
 
 /** A frame that must reach the server even if the app or the network goes down first. */
 export type QueueItem = AnswerSave | EventReport | TranscriptChunk;
@@ -47,6 +51,7 @@ export class OfflineQueue {
   private warned = false;
   /** After `clear()` nothing more is written: the exam is over for this queue. */
   private closed = false;
+  private syncTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly file: string,
@@ -92,6 +97,32 @@ export class OfflineQueue {
       return this.warnOnce('Cannot encrypt the offline queue; keeping it in memory');
     this.live.set(queueKey(item), line);
     this.write(() => appendFileSync(this.file, `${line}\n`));
+    this.syncSoon();
+  }
+
+  /**
+   * The answers are final (a receipt): unsent saves can never count, but the monitor's events and
+   * the terminal transcript still go to the teacher, so they stay (M60).
+   */
+  forgetSaves(): void {
+    let removed = false;
+    for (const key of [...this.live.keys()]) {
+      if (key.startsWith('s')) removed = this.live.delete(key) || removed;
+    }
+    if (removed) this.rewrite();
+  }
+
+  /** Writes what was appended to the disk now (quit, shutdown). */
+  flush(): void {
+    if (this.syncTimer) clearTimeout(this.syncTimer);
+    this.syncTimer = null;
+    if (this.live.size > 0) this.write(() => fsyncFile(this.file));
+  }
+
+  private syncSoon(): void {
+    if (this.syncTimer) return;
+    this.syncTimer = setTimeout(() => this.flush(), SYNC_EVERY_MS);
+    this.syncTimer.unref?.();
   }
 
   remove(key: string): void {
@@ -104,6 +135,8 @@ export class OfflineQueue {
 
   /** Forgets everything and removes the file. */
   clear(): void {
+    if (this.syncTimer) clearTimeout(this.syncTimer);
+    this.syncTimer = null;
     this.closed = true;
     this.live.clear();
     this.tombstones = 0;
@@ -116,7 +149,8 @@ export class OfflineQueue {
       return this.write(() => rmSync(this.file, { force: true }));
     }
     const body = [...this.live.values()].map((line) => `${line}\n`).join('');
-    this.write(() => writeFileSync(this.file, body));
+    // Atomic (M61): a power cut during the rewrite must not empty the queue.
+    this.write(() => writeFileAtomic(this.file, body));
   }
 
   private write(action: () => void): void {

@@ -62,8 +62,9 @@ export function createAuthController({
           retryAfterSec,
         });
       }
+      // Counted before the (slow) check, so parallel tries cannot all pass the lockout check.
+      limiter.recordFailure();
       if (!(await verifyPassword(body.data.password, hash))) {
-        limiter.recordFailure();
         const lockedFor = limiter.retryAfterSec();
         throw new ApiError(
           401,
@@ -95,8 +96,8 @@ export function createAuthController({
           retryAfterSec,
         });
       }
+      limiter.recordFailure();
       if (!(await verifyPassword(body.data.currentPassword, hash))) {
-        limiter.recordFailure();
         throw new ApiError(401, 'bad_password', 'The current password is wrong');
       }
       limiter.recordSuccess();

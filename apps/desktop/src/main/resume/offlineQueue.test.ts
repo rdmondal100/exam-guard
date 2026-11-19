@@ -151,4 +151,24 @@ describe('OfflineQueue', () => {
     expect(existsSync(file)).toBe(false);
     expect(open().load()).toEqual([]);
   });
+
+  it('after a receipt forgets the saves but keeps events and transcript (M60)', () => {
+    const q = open();
+    q.add(save(1));
+    q.add(event);
+    q.add(chunk);
+    q.forgetSaves();
+    q.add(save(2)); // still open: a late save is harmless
+    expect(open().load().map(queueKey)).toEqual(['eev1', 'ck1', 's2']);
+  });
+
+  it('rewrites atomically: a temp file left by a crash never replaces the queue (M61)', () => {
+    const q = open();
+    q.add(save(1));
+    q.add(save(2));
+    writeFileSync(`${file}.tmp`, ''); // a rewrite that died before its rename
+    q.remove('s1');
+    expect(open().load().map(queueKey)).toEqual(['s2']);
+    expect(existsSync(`${file}.tmp`)).toBe(false);
+  });
 });

@@ -21,6 +21,14 @@ export function RosterFlags({ s }: { s: RosterEntry }) {
           <Badge variant="warning">{s.monitors} screens</Badge>
         </Hint>
       )}
+      {s.readiness === 'problem' && (
+        <Hint label={(s.readinessProblems ?? []).join(' · ') || 'The lobby check failed'}>
+          <Badge variant="danger">Setup problem</Badge>
+        </Hint>
+      )}
+      {s.readiness === 'pending' && s.state === 'lobby' && (
+        <Badge variant="neutral">Checking…</Badge>
+      )}
     </span>
   );
 }

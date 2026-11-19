@@ -46,6 +46,10 @@ export class SubmissionService {
     if (this.deps.exams.get(student.examId)?.state !== 'running') {
       return { ok: false, reason: 'not_running' };
     }
+    // While paused nothing changes (M60); the app keeps the Submit and sends it on resume.
+    if ((this.deps.exams.timing(student.examId)?.pausedAt ?? null) !== null) {
+      return { ok: false, reason: 'paused' };
+    }
     const receipt = this.finalize(studentId, 'student');
     return receipt ? { ok: true, receipt } : { ok: false, reason: 'not_working' };
   }

@@ -64,6 +64,10 @@ export class SimStudent {
   private readonly saves: SimSaves | null;
   private receipt: Receipt | null = null;
   private submitting = false;
+  private paused = false;
+  /** Server clock minus this PC's, from the pongs (M60). */
+  private offsetMs = 0;
+  private readonly serverNow = () => Date.now() + this.offsetMs;
   private submitTimer: NodeJS.Timeout | null = null;
   private dropTimer: NodeJS.Timeout | null = null;
   private readonly submitId = `sim-submit-${randomBytes(6).toString('hex')}`;
@@ -82,6 +86,7 @@ export class SimStudent {
     this.saves = options.autosaveMs
       ? new SimSaves(options.autosaveMs, options.code, metrics)
       : null;
+    if (this.saves) this.saves.clock = this.serverNow;
     this.events =
       options.eventsEveryMs && metrics
         ? new SimEvents(
@@ -185,9 +190,30 @@ export class SimStudent {
         clientSeq?: number;
         intervalMs?: number;
         id?: string;
-        state?: { questions?: unknown; saved?: unknown; receipt?: Receipt | null };
+        state?: {
+          questions?: unknown;
+          saved?: unknown;
+          receipt?: Receipt | null;
+          pausedAt?: number | null;
+        };
         receipt?: Receipt;
+        reason?: string;
+        clientSent?: number;
+        serverTime?: number;
       };
+      if (message.t === 'pong' && message.clientSent !== undefined && message.serverTime) {
+        const rtt = Date.now() - message.clientSent;
+        if (rtt >= 0) this.offsetMs = message.serverTime - (message.clientSent + rtt / 2);
+        return;
+      }
+      // M58/M60: no typing while paused; a Submit refused for the pause goes again on resume.
+      if (message.state && 'pausedAt' in message.state) {
+        const paused = message.state.pausedAt != null;
+        const resumed = this.paused && !paused;
+        this.paused = paused;
+        this.saves?.setPaused(paused);
+        if (resumed && this.submitting && message.t === 'state') this.sendSubmit(ws);
+      }
       if (message.t === 'answer.ack' && message.clientSeq !== undefined) {
         return this.saves?.ack(message.clientSeq);
       }
@@ -200,7 +226,7 @@ export class SimStudent {
       if (message.t === 'thumb.start') return this.thumbs.start(ws, message.intervalMs ?? 4000);
       if (message.t === 'thumb.stop') return this.thumbs.stop();
       if (message.t === 'submit.refused') {
-        this.refused += 1;
+        if (message.reason !== 'paused') this.refused += 1;
         return;
       }
       if (message.t === 'state') {
@@ -220,6 +246,13 @@ export class SimStudent {
       if (message.t !== 'welcome') return;
       this.attempt = 0;
       onState(code, 'connected');
+      // A simulated PC always passes the lobby readiness check (M54).
+      ws.send(
+        JSON.stringify({
+          t: 'readiness.report',
+          checks: ['c', 'cpp', 'python', 'js', 'disk'].map((name) => ({ name, ok: true, ms: 0 })),
+        }),
+      );
       this.pingTimer = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ t: 'ping', clientSent: Date.now() }));
@@ -275,7 +308,7 @@ export class SimStudent {
 
   private sendSubmit(ws: WebSocket): void {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ t: 'submit', id: this.submitId, clientTs: Date.now() }));
+      ws.send(JSON.stringify({ t: 'submit', id: this.submitId, clientTs: this.serverNow() }));
     }
   }
 

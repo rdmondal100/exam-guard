@@ -17,6 +17,7 @@ import {
   type LiveState,
   type LiveStop,
   type MonitorStatus,
+  type ReadinessReport,
   type RtcSignal,
   type SessionState,
   type SessionStatus,
@@ -31,6 +32,10 @@ import {
 export const MAX_PENDING_EVENTS = 500;
 /** Unacked transcript chunks kept in memory (16 KB each at most). */
 export const MAX_PENDING_TRANSCRIPT = 128;
+/** Screenshots of unacked events kept in memory; past this the oldest go without a picture (M61). */
+export const MAX_PENDING_PICTURE_BYTES = 50 * 1024 * 1024;
+/** A clock sample older than this is replaced by the next one even with a slower round trip (M64). */
+const CLOCK_SAMPLE_MAX_AGE_MS = 60_000;
 import { AnswerOutbox, MAX_PENDING_SAVES } from '../answers/answerOutbox.js';
 import { queueKey, type OfflineQueue } from '../resume/offlineQueue.js';
 import { PinError, connectPinned, type PinnedTarget } from '../utils/tlsPin.js';
@@ -63,6 +68,8 @@ export interface SessionClientDeps {
   onTeacherMessage?: (message: TeacherMessageToStudent) => void;
   pingMs?: number;
   random?: () => number;
+  /** A monotonic clock in ms (`performance.now`); the server clock is anchored on it (M64). */
+  perfNow?: () => number;
 }
 
 /** Closes after which retrying cannot help. */
@@ -85,11 +92,21 @@ export class SessionClient {
   private attempt = 0;
   private offsetMs: number | null = null;
   private bestRtt = Infinity;
+  /**
+   * The server clock, anchored on the monotonic clock (M64): `server` was the server's time at
+   * monotonic `perf`. A jump of the PC's wall clock changes nothing here; `offsetMs` (server minus
+   * wall clock) is recomputed from it on every pong.
+   */
+  private anchor: { server: number; perf: number; takenAt: number } | null = null;
+  /** Monotonic send time of each unanswered ping, by its `clientSent`. */
+  private readonly pings = new Map<number, number>();
   private generation = 0;
   private exam: SessionState | null = null;
   private welcomed: WebSocket | null = null;
   /** The monitor's latest self-check, sent after each welcome and whenever it changes. */
   private monitorStatus: MonitorStatus | null = null;
+  /** The lobby readiness check's last result (M54), re-sent after every welcome. */
+  private readiness: ReadinessReport | null = null;
   /** Sent events waiting for `event.ack`, in send order. */
   private readonly pending = new Map<string, EventReport>();
   /** Sent transcript chunks waiting for `transcript.ack`, in send order. */
@@ -99,6 +116,7 @@ export class SessionClient {
    * the event. They stay in memory only: after a restart the event goes out without its picture.
    */
   private readonly pictures = new Map<string, Uint8Array>();
+  private pictureBytes = 0;
 
   /** Autosaves waiting for `answer.ack`, and the counter that numbers them. */
   private readonly answers: AnswerOutbox;
@@ -129,9 +147,15 @@ export class SessionClient {
     if (this.welcomed) this.sendFrame(this.welcomed, { t: 'monitor.status', ...status });
   }
 
+  /** The lobby readiness check's result (M54); the teacher's roster shows it. */
+  setReadiness(report: ReadinessReport): void {
+    this.readiness = report;
+    if (this.welcomed) this.sendFrame(this.welcomed, { t: 'readiness.report', ...report });
+  }
+
   /** Saves one answer buffer. It is re-sent after every reconnect until the server acks it. */
   sendAnswer(request: AnswerSaveRequest): void {
-    const save = this.answers.add(request, Date.now() + (this.offsetMs ?? 0));
+    const save = this.answers.add(request, this.serverNow());
     this.queue?.add(save);
     if (this.welcomed) this.sendFrame(this.welcomed, save);
   }
@@ -157,7 +181,7 @@ export class SessionClient {
       t: 'event',
       id,
       dedupeKey: id,
-      clientTs: Date.now(),
+      clientTs: this.serverNow(),
       type,
       details,
     };
@@ -185,7 +209,7 @@ export class SessionClient {
     this.queue?.add(event);
     const sent = jpeg ? { ...event, screenshotRef: key } : event;
     this.pending.set(key, sent);
-    if (jpeg) this.pictures.set(key, jpeg);
+    if (jpeg) this.keepPicture(key, jpeg);
     this.trimPending();
     if (this.welcomed) this.sendEventFrames(this.welcomed, sent);
   }
@@ -196,8 +220,50 @@ export class SessionClient {
     const oldest = this.pending.keys().next().value;
     if (oldest === undefined) return;
     this.pending.delete(oldest);
-    this.pictures.delete(oldest);
+    this.dropPicture(oldest);
     this.queue?.remove(`e${oldest}`);
+  }
+
+  /**
+   * Keeps a screenshot until its event is acked. A long outage would otherwise hold hundreds of
+   * full-screen pictures: past the cap the oldest events go on without theirs (M61).
+   */
+  private keepPicture(key: string, jpeg: Uint8Array): void {
+    this.pictures.set(key, jpeg);
+    this.pictureBytes += jpeg.byteLength;
+    while (this.pictureBytes > MAX_PENDING_PICTURE_BYTES && this.pictures.size > 1) {
+      const oldest = this.pictures.keys().next().value;
+      if (oldest === undefined) break;
+      this.dropPicture(oldest);
+      const event = this.pending.get(oldest);
+      if (event?.screenshotRef) {
+        const withoutPicture: EventReport = { ...event };
+        delete withoutPicture.screenshotRef;
+        this.pending.set(oldest, withoutPicture);
+      }
+    }
+  }
+
+  private dropPicture(key: string): void {
+    const jpeg = this.pictures.get(key);
+    if (!jpeg) return;
+    this.pictures.delete(key);
+    this.pictureBytes -= jpeg.byteLength;
+  }
+
+  /** Events and terminal transcript the server has not acked yet (M60: shut down waits for them). */
+  get pendingEvidence(): number {
+    return this.pending.size + this.pendingTranscript.size;
+  }
+
+  /** The server's clock now, as well as it is known (the PC's clock before the first sample). */
+  serverNow(): number {
+    if (!this.anchor) return Date.now() + (this.offsetMs ?? 0);
+    return Math.round(this.anchor.server + (this.perfNow() - this.anchor.perf));
+  }
+
+  private perfNow(): number {
+    return this.deps.perfNow ? this.deps.perfNow() : performance.now();
   }
 
   /** An event, preceded by its screenshot when it has one (the server waits for the pieces). */
@@ -224,7 +290,7 @@ export class SessionClient {
 
   /** Sends a piece of the terminal transcript; re-sent after reconnects until acked. */
   sendTranscript(key: string, text: string): void {
-    const chunk: TranscriptChunk = { t: 'transcript', key, clientTs: Date.now(), text };
+    const chunk: TranscriptChunk = { t: 'transcript', key, clientTs: this.serverNow(), text };
     this.pendingTranscript.set(key, chunk);
     this.queue?.add(chunk);
     if (this.pendingTranscript.size > MAX_PENDING_TRANSCRIPT) {
@@ -248,7 +314,7 @@ export class SessionClient {
     const frame: Submit = {
       t: 'submit',
       id: randomUUID(),
-      clientTs: Date.now() + (this.offsetMs ?? 0),
+      clientTs: this.serverNow(),
     };
     let settle: (outcome: SubmitOutcome) => void = () => {};
     const promise = new Promise<SubmitOutcome>((resolve) => (settle = resolve));
@@ -280,6 +346,7 @@ export class SessionClient {
     this.attempt = 0;
     this.offsetMs = null;
     this.bestRtt = Infinity;
+    this.anchor = null;
     this.exam = null;
     this.emit('connecting');
     void this.connect(this.generation);
@@ -295,8 +362,18 @@ export class SessionClient {
     this.answers.restore(saves);
   }
 
+  /**
+   * Ends the session for good (Leave): nothing of it may reach the next exam's server, so
+   * everything unacked is forgotten too (M60). A restart of the same session goes through `start`.
+   */
   stop(): void {
     this.halt();
+    this.pending.clear();
+    this.pendingTranscript.clear();
+    this.answers.clear();
+    this.shownMessages.clear();
+    this.exam = null;
+    this.queue = null;
     this.deps.onStop?.();
   }
 
@@ -312,6 +389,8 @@ export class SessionClient {
       }
     }
     this.pictures.clear();
+    this.pictureBytes = 0;
+    this.pings.clear();
     this.generation += 1;
     this.target = null;
     this.clearTimers();
@@ -352,6 +431,8 @@ export class SessionClient {
     } catch (e) {
       if (generation !== this.generation) return;
       if (e instanceof PinError && e.code === 'fingerprint_mismatch') {
+        // Retrying cannot help, so a pending Submit must not wait forever (M60).
+        this.settleSubmit({ ok: false, reason: 'fingerprint_mismatch' });
         return this.emit('failed', 'fingerprint_mismatch');
       }
       return this.retry(generation);
@@ -396,6 +477,13 @@ export class SessionClient {
     const message = parsed.data;
     if (message.t === 'welcome') {
       this.attempt = 0;
+      // A first clock sample at once (M64), so a PC whose clock is far off never shows a wrong
+      // time until the first pong; any pong replaces it.
+      if (!this.anchor) {
+        const perf = this.perfNow();
+        this.anchor = { server: message.serverTime, perf, takenAt: perf };
+        this.offsetMs = this.serverNow() - Date.now();
+      }
       this.exam = message.state;
       this.deps.onExam?.(message.state);
       this.emit('connected');
@@ -403,6 +491,7 @@ export class SessionClient {
       this.ping(ws);
       this.welcomed = ws;
       if (this.monitorStatus) this.sendFrame(ws, { t: 'monitor.status', ...this.monitorStatus });
+      if (this.readiness) this.sendFrame(ws, { t: 'readiness.report', ...this.readiness });
       this.answers.continueAfter(message.state.saved);
       for (const save of this.answers.unacked()) this.sendFrame(ws, save);
       for (const event of this.pending.values()) this.sendEventFrames(ws, event);
@@ -413,7 +502,7 @@ export class SessionClient {
     } else if (message.t === 'event.ack') {
       this.pending.delete(message.id);
       this.queue?.remove(`e${message.id}`);
-      this.pictures.delete(message.id);
+      this.dropPicture(message.id);
     } else if (message.t === 'answer.ack') {
       this.answers.ack(message.clientSeq, Date.now());
       this.queue?.remove(`s${message.clientSeq}`);
@@ -422,15 +511,22 @@ export class SessionClient {
       this.queue?.remove(`c${message.key}`);
     } else if (message.t === 'state') {
       if (!this.exam) return;
+      const wasPaused = this.exam.pausedAt != null;
       this.exam = { ...this.exam, ...message.state };
       this.deps.onExam?.(this.exam);
       if (message.state.receipt) this.settleSubmit({ ok: true });
+      // A Submit the server refused during the pause goes out again once it ends (M60).
+      else if (wasPaused && this.exam.pausedAt == null && this.pendingSubmit) {
+        this.sendFrame(ws, this.pendingSubmit.frame);
+      }
     } else if (message.t === 'submit.result') {
       if (!this.exam) return;
       this.exam = { ...this.exam, studentState: 'submitted', receipt: message.receipt };
       this.deps.onExam?.(this.exam);
       this.settleSubmit({ ok: true });
     } else if (message.t === 'submit.refused') {
+      // Paused (M60): the Submit stays pending and is sent again when the exam resumes.
+      if (message.reason === 'paused') return;
       this.settleSubmit({ ok: false, reason: message.reason });
     } else if (message.t === 'message') {
       this.sendFrame(ws, { t: 'ack', id: message.id });
@@ -452,14 +548,31 @@ export class SessionClient {
     ) {
       this.deps.onLive?.(message);
     } else if (message.t === 'pong') {
-      const received = Date.now();
-      const rtt = received - message.clientSent;
-      // The sample with the shortest round trip is the least distorted by queueing.
-      if (rtt >= 0 && rtt <= this.bestRtt) {
-        this.bestRtt = rtt;
-        this.offsetMs = Math.round(message.serverTime - (message.clientSent + rtt / 2));
-        this.emit('connected');
-      }
+      this.onPong(message.clientSent, message.serverTime);
+    }
+  }
+
+  /**
+   * One clock sample (M64). Round trips are measured on the monotonic clock. The sample with the
+   * shortest round trip is the least distorted by queueing, but a sample older than a minute is
+   * replaced anyway. The offset to the wall clock is recomputed on every pong, so a Windows time
+   * sync mid-exam is followed within one ping.
+   */
+  private onPong(clientSent: number, serverTime: number): void {
+    const sentPerf = this.pings.get(clientSent);
+    if (sentPerf === undefined) return;
+    this.pings.delete(clientSent);
+    const perf = this.perfNow();
+    const rtt = perf - sentPerf;
+    const stale = !this.anchor || perf - this.anchor.takenAt > CLOCK_SAMPLE_MAX_AGE_MS;
+    if (rtt >= 0 && (rtt <= this.bestRtt || stale)) {
+      this.bestRtt = rtt;
+      this.anchor = { server: serverTime, perf: sentPerf + rtt / 2, takenAt: perf };
+    }
+    const offset = this.serverNow() - Date.now();
+    if (this.offsetMs === null || Math.abs(offset - this.offsetMs) >= 50) {
+      this.offsetMs = offset;
+      this.emit('connected');
     }
   }
 
@@ -474,7 +587,11 @@ export class SessionClient {
 
   private ping(ws: WebSocket): void {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ t: 'ping', clientSent: Date.now() }));
+      const clientSent = Date.now();
+      this.pings.set(clientSent, this.perfNow());
+      // Unanswered pings of a dead link are not kept forever.
+      if (this.pings.size > 10) this.pings.delete(this.pings.keys().next().value ?? clientSent);
+      ws.send(JSON.stringify({ t: 'ping', clientSent }));
     }
   }
 
@@ -488,7 +605,11 @@ export class SessionClient {
     }
     this.welcomed = null;
     const final = FINAL[code];
-    if (final) return this.emit('failed', final);
+    if (final) {
+      // Retrying cannot help, so a pending Submit must not wait forever (M60).
+      this.settleSubmit({ ok: false, reason: final });
+      return this.emit('failed', final);
+    }
     this.retry(generation);
   }
 

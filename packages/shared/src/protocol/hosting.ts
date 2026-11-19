@@ -18,6 +18,8 @@ export const HostingInfoSchema = z.object({
   deadline: z.number().nullable(),
   /** Extra time everyone got, minutes (M36). */
   extensionMin: z.number().int().nonnegative(),
+  /** Server time the teacher paused the exam (M58); `null` or absent when it is not paused. */
+  pausedAt: z.number().nullable().optional(),
 });
 export type HostingInfo = z.infer<typeof HostingInfoSchema>;
 

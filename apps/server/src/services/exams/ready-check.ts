@@ -2,7 +2,7 @@ import type { ExamSummary, Question, ReadyProblem } from '@examguard/shared';
 
 /** Everything that stops an exam from being marked Ready. An empty list means it can go. */
 export function readyProblems(
-  exam: Pick<ExamSummary, 'classListId'>,
+  exam: Pick<ExamSummary, 'classListId'> & { practice?: boolean },
   questions: Question[],
 ): ReadyProblem[] {
   const problems: ReadyProblem[] = [];
@@ -12,29 +12,42 @@ export function readyProblems(
   if (questions.length === 0) {
     problems.push({ code: 'no_questions', message: 'Add at least one question' });
   }
-  for (const q of questions) {
-    const label = `Question ${q.position}`;
-    if (q.sampleAnswer.trim() === '') {
-      problems.push({
-        code: 'missing_sample_answer',
-        message: `${label} has no sample answer`,
-        questionId: q.id,
-      });
-    }
-    if (q.criteria.length === 0) {
-      problems.push({
-        code: 'no_criteria',
-        message: `${label} has no marking criteria`,
-        questionId: q.id,
-      });
-    }
-    if (q.type === 'code' && q.allowedLanguages.length === 0) {
-      problems.push({
-        code: 'no_languages',
-        message: `${label} allows no programming language`,
-        questionId: q.id,
-      });
-    }
+  for (const q of questions) problems.push(...questionProblems(exam, q));
+  return problems;
+}
+
+/**
+ * What one question lacks before students may get it: at Ready, and when the teacher adds it to a
+ * hosted or running exam (M58).
+ */
+export function questionProblems(
+  exam: { practice?: boolean },
+  q: Pick<Question, 'id' | 'position' | 'sampleAnswer' | 'criteria' | 'type' | 'allowedLanguages'>,
+): ReadyProblem[] {
+  // A practice exam (M53) is never graded, so it needs no sample answers or marking criteria.
+  const graded = !exam.practice;
+  const label = `Question ${q.position}`;
+  const problems: ReadyProblem[] = [];
+  if (graded && q.sampleAnswer.trim() === '') {
+    problems.push({
+      code: 'missing_sample_answer',
+      message: `${label} has no sample answer`,
+      questionId: q.id,
+    });
+  }
+  if (graded && q.criteria.length === 0) {
+    problems.push({
+      code: 'no_criteria',
+      message: `${label} has no marking criteria`,
+      questionId: q.id,
+    });
+  }
+  if (q.type === 'code' && q.allowedLanguages.length === 0) {
+    problems.push({
+      code: 'no_languages',
+      message: `${label} allows no programming language`,
+      questionId: q.id,
+    });
   }
   return problems;
 }

@@ -23,6 +23,7 @@ interface ExamRow {
   class_list_name: string | null;
   monitoring_json: string;
   files_enabled: number;
+  practice: number;
   created_at: number;
   updated_at: number;
 }
@@ -33,10 +34,14 @@ export interface ExamTiming {
   globalExtensionSec: number;
   /** How long after a deadline queued saves are still accepted (`monitoring.graceSec`). */
   graceSec: number;
+  /** When the current pause began (M58), or `null` when the exam is not paused. */
+  pausedAt: number | null;
+  /** All finished pauses together, ms: every deadline moves by it. */
+  pausedMs: number;
 }
 
 const SELECT = `SELECT e.id, e.title, e.state, e.duration_sec, e.class_list_id,
-    l.name AS class_list_name, e.monitoring_json, e.files_enabled,
+    l.name AS class_list_name, e.monitoring_json, e.files_enabled, e.practice,
     e.created_at, e.updated_at
   FROM exams e LEFT JOIN class_lists l ON l.id = e.class_list_id`;
 
@@ -50,6 +55,7 @@ function toSummary(row: ExamRow): ExamSummary {
     classListName: row.class_list_name,
     monitoring: MonitoringSettingsSchema.parse(JSON.parse(row.monitoring_json)),
     filesEnabled: row.files_enabled === 1,
+    practice: row.practice === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -94,6 +100,7 @@ export class ExamRepo {
       body.classListId ?? null,
       body.monitoring ?? defaultMonitoring,
       body.filesEnabled ?? true,
+      body.practice ?? false,
       now,
     );
     return this.requireExam(id);
@@ -106,7 +113,7 @@ export class ExamRepo {
     this.db
       .prepare(
         `UPDATE exams SET title = ?, duration_sec = ?, class_list_id = ?, monitoring_json = ?,
-           files_enabled = ?, updated_at = ? WHERE id = ?`,
+           files_enabled = ?, practice = ?, updated_at = ? WHERE id = ?`,
       )
       .run(
         patch.title ?? current.title,
@@ -114,6 +121,7 @@ export class ExamRepo {
         patch.classListId === undefined ? current.classListId : patch.classListId,
         JSON.stringify(patch.monitoring ?? current.monitoring),
         (patch.filesEnabled ?? current.filesEnabled) ? 1 : 0,
+        (patch.practice ?? current.practice) ? 1 : 0,
         now,
         id,
       );
@@ -136,6 +144,7 @@ export class ExamRepo {
         source.classListId,
         source.monitoring,
         source.filesEnabled,
+        source.practice,
         now,
       );
       new QuestionRepo(this.db).copyAll(id, copyId, now);
@@ -170,13 +179,15 @@ export class ExamRepo {
     now: number,
     runLimits: RunLimits | null = null,
   ): ExamSummary | undefined {
-    this.db
+    // Only from `ready` (M60): the exam may have been edited back to draft or deleted while the
+    // listener was opening.
+    const changed = this.db
       .prepare(
         `UPDATE exams SET state = 'hosting', pin = ?, hosting_started_at = ?, updated_at = ?,
-           run_limits_json = ? WHERE id = ?`,
+           run_limits_json = ? WHERE id = ? AND state = 'ready'`,
       )
-      .run(pin, now, now, runLimits && JSON.stringify(runLimits), id);
-    return this.get(id);
+      .run(pin, now, now, runLimits && JSON.stringify(runLimits), id).changes;
+    return changed > 0 ? this.get(id) : undefined;
   }
 
   /** The exam's run limits as fixed at hosting start (M43), else the defaults. */
@@ -216,14 +227,34 @@ export class ExamRepo {
     return this.get(id);
   }
 
-  /** running → ended. The PIN is cleared: nobody can join an ended exam. */
+  /**
+   * running → ended. The PIN is cleared: nobody can join an ended exam. A pause still going on ends
+   * too, and its length counts in `paused_ms` (M60).
+   */
   endRunning(id: string, now: number): ExamSummary | undefined {
     this.db
       .prepare(
-        "UPDATE exams SET state = 'ended', pin = NULL, ended_at = ?, updated_at = ? WHERE id = ?",
+        `UPDATE exams SET state = 'ended', pin = NULL, ended_at = ?,
+           paused_ms = paused_ms + CASE WHEN paused_at IS NULL THEN 0 ELSE MAX(0, ? - paused_at) END,
+           paused_at = NULL, updated_at = ?
+           WHERE id = ?`,
       )
-      .run(now, now, id);
+      .run(now, now, now, id);
     return this.get(id);
+  }
+
+  /** Pauses a running exam (M58). Returns whether it was running and not yet paused. */
+  pause(id: string, now: number): boolean {
+    const sql = `UPDATE exams SET paused_at = ?, updated_at = ?
+      WHERE id = ? AND state = 'running' AND paused_at IS NULL`;
+    return this.db.prepare(sql).run(now, now, id).changes > 0;
+  }
+
+  /** Ends the pause; its length goes into `paused_ms`. Returns whether the exam was paused. */
+  resume(id: string, now: number): boolean {
+    const sql = `UPDATE exams SET paused_ms = paused_ms + MAX(0, ? - paused_at), paused_at = NULL,
+      updated_at = ? WHERE id = ? AND state = 'running' AND paused_at IS NOT NULL`;
+    return this.db.prepare(sql).run(now, now, id).changes > 0;
   }
 
   /** The exam currently in `hosting`, with its PIN. At most one exists. */
@@ -240,7 +271,8 @@ export class ExamRepo {
   timing(id: string): ExamTiming | undefined {
     const row = this.db
       .prepare(
-        'SELECT started_at, duration_sec, global_extension_sec, monitoring_json FROM exams WHERE id = ?',
+        `SELECT started_at, duration_sec, global_extension_sec, monitoring_json, paused_at, paused_ms
+           FROM exams WHERE id = ?`,
       )
       .get(id) as
       | {
@@ -248,6 +280,8 @@ export class ExamRepo {
           duration_sec: number;
           global_extension_sec: number;
           monitoring_json: string;
+          paused_at: number | null;
+          paused_ms: number;
         }
       | undefined;
     return (
@@ -256,6 +290,8 @@ export class ExamRepo {
         durationSec: row.duration_sec,
         globalExtensionSec: row.global_extension_sec,
         graceSec: MonitoringSettingsSchema.parse(JSON.parse(row.monitoring_json)).graceSec,
+        pausedAt: row.paused_at,
+        pausedMs: row.paused_ms,
       }
     );
   }
@@ -278,12 +314,14 @@ export class ExamRepo {
     classListId: string | null,
     monitoring: ExamSummary['monitoring'],
     filesEnabled: boolean,
+    practice: boolean,
     now: number,
   ): void {
     this.db
       .prepare(
         `INSERT INTO exams (id, title, state, duration_sec, class_list_id, monitoring_json,
-           files_enabled, created_at, updated_at) VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?)`,
+           files_enabled, practice, created_at, updated_at)
+         VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -292,6 +330,7 @@ export class ExamRepo {
         classListId,
         JSON.stringify(monitoring),
         filesEnabled ? 1 : 0,
+        practice ? 1 : 0,
         now,
         now,
       );

@@ -113,3 +113,14 @@ describe('EventRecorder', () => {
     expect(heard[0]?.riskAdded).toBe(0);
   });
 });
+
+describe('practice exams (M53)', () => {
+  it('store no event, add no risk and tell no listener', () => {
+    db.prepare("UPDATE exams SET practice = 1 WHERE id = 'e1'").run();
+    expect(recorder.record(input('focus_lost', 'k1'))).toBeNull();
+    expect(recorder.record(input('network_lost', 'k2', { source: 'server' }))).toBeNull();
+    expect(db.prepare('SELECT COUNT(*) AS n FROM events').get()).toEqual({ n: 0 });
+    expect(risk()).toBe(0);
+    expect(heard).toEqual([]);
+  });
+});

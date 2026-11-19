@@ -24,6 +24,12 @@ describe('sessionExit', () => {
     expect(sessionExit({ deadline: 100_000 }, status, 100_000 + 55_001)).toBe('exam_over');
   });
 
+  it('is null while the exam is paused, however late (the deadline moves on resume)', () => {
+    const status = { link: 'reconnecting', offsetMs: 0 } as const;
+    expect(sessionExit({ ...exam, pausedAt: 90_000 }, status, 1e12)).toBeNull();
+    expect(sessionExit({ ...exam, pausedAt: null }, status, 1e12)).toBe('exam_over');
+  });
+
   it('is null without a deadline', () => {
     expect(sessionExit({ deadline: null }, { link: 'reconnecting', offsetMs: 0 }, 1e12)).toBeNull();
   });

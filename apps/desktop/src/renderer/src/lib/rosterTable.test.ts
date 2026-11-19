@@ -47,6 +47,8 @@ describe('rosterTable', () => {
   it('describes the status and the risk band', () => {
     expect(statusText(entry({ state: 'ended_by_teacher' }))).toBe('ended');
     expect(statusText(entry({ connected: false }))).toBe('active · offline');
+    expect(statusText(entry({ state: 'submitted', connected: false }))).toBe('submitted · left');
+    expect(statusText(entry({ state: 'submitted' }))).toBe('submitted');
     expect([0, 3, 15, 40].map(riskLevel)).toEqual(['none', 'low', 'medium', 'high']);
   });
 });

@@ -31,12 +31,9 @@ const MAX_LOGGED_FLAGS = 500;
  * `runner:run` / `runner:stop`, `runner:input|resize` for the program's console and the
  * `runner:data` push. Every finished run is reported as a `run_executed` event.
  */
-export function registerRunnerIpc({
-  session,
-  examStudentId,
-  requireStudent,
-  own,
-}: RunnerIpcDeps): void {
+export function registerRunnerIpc({ session, examStudentId, requireStudent, own }: RunnerIpcDeps): {
+  stop: () => void;
+} {
   const runner = new CodeRunner({
     // Resolved per run, so `pnpm fetch-toolchains` is picked up without a restart.
     toolchain: () =>
@@ -98,4 +95,8 @@ export function registerRunnerIpc({
     const size = RunSizeSchema.safeParse(payload);
     if (size.success) runner.resize(size.data);
   });
+  // A running program never outlives the app (M60).
+  app.on('will-quit', () => runner.stop());
+  // Main stops the program when the exam is over for this student or the session is left.
+  return { stop: () => runner.stop() };
 }

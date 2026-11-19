@@ -39,8 +39,15 @@ export async function saveNow(reason: SaveReason): Promise<void> {
  * changes question or language (a Run calls `saveNow('run')`).
  */
 export function useAutosave(questions: Questions, selectedId: string): void {
+  // The question list changes with every state push (pause, an added question): the scheduler
+  // below keeps running and only reads the newest list (M60), instead of starting over each time.
+  const latest = useRef(questions);
   useEffect(() => {
-    active = { questions };
+    latest.current = questions;
+    if (active) active.questions = questions;
+  }, [questions]);
+  useEffect(() => {
+    active = { questions: latest.current };
     const tick = setInterval(() => void saveNow('interval'), AUTOSAVE_MS);
     const unsubscribe = useAnswerStore.subscribe((state, before) => {
       if (state.languages !== before.languages) void saveNow('switch_language');
@@ -51,7 +58,7 @@ export function useAutosave(questions: Questions, selectedId: string): void {
       void saveNow('interval');
       active = null;
     };
-  }, [questions]);
+  }, []);
 
   const first = useRef(true);
   useEffect(() => {

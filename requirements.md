@@ -51,7 +51,7 @@ ExamGuard AI is a Windows desktop examination platform for university computer l
 
 | Area | Decision |
 |---|---|
-| App | **One Electron + TypeScript desktop app** with two modes: **Teacher mode** and **Student mode** |
+| App | **Two Electron + TypeScript desktop apps from one codebase** (changed 2026-11-12, M52): **ExamGuard Teacher** and **ExamGuard Student**. Each contains only its own code and files |
 | UI | React 18, electron-vite, Tailwind, shadcn/ui, Zustand, TanStack Query/Table |
 | Exam server | Node.js + TypeScript (Express 5 for HTTPS, `ws` WebSocket for real-time), runs **inside the teacher app as a separate background process** (Electron `utilityProcess`), auto-restarted if it crashes |
 | Database | **SQLite** (better-sqlite3, WAL mode) on the teacher PC; files (screenshots, exports) in an app data folder |
@@ -226,10 +226,12 @@ Per student: send message/warning, lock/unlock screen, extend time, end exam (sa
 - Data folder location and backup (copy database + files).
 
 ### 8.12 Installer
-- One Windows installer containing both modes, the bundled runtimes and package managers (MinGW trimmed to C/C++ + MSYS2 pacman, npm, Python + pip) and `SiteReader.exe`. Everything is always included (no optional components), so every lab PC is identical.
-- The **installer asks for the install type** (Teacher or Student); lab IT can pass a silent flag (e.g. `/TYPE=student`) for mass deployment.
-  - **Student install:** locks the app to Student mode. Nothing else: no service, no firewall rules, no network changes. (It removes the agent service an older version may have left.)
-  - **Teacher install:** adds inbound firewall rules for the ExamGuard app (exam port and WebRTC) so students can connect.
+- **Two Windows installers** (M52): `ExamGuard-Teacher-Setup` (the exam server, no toolchains) and `ExamGuard-Student-Setup` (the bundled runtimes and package managers: MinGW trimmed to C/C++ + MSYS2 pacman, npm, Python + pip, and `SiteReader.exe`). Everything an app needs is always included (no optional components), so every lab PC is identical. Lab IT installs silently with `/S`.
+  - **Student install:** nothing else: no service, no firewall rules, no network changes. (It removes the agent service an older version may have left.)
+  - **Teacher install:** adds inbound firewall rules for the teacher app (exam port and WebRTC) so students can connect.
+- **Practice exam** (M53): a hosted exam that is not monitored, recorded or graded, so students can try the client before exam day.
+- **Lobby readiness check** (M54): in the lobby each student PC compiles and runs a tiny C, C++, Python and JavaScript program and checks its disk; the teacher's roster shows PCs with a problem before Start.
+- **Teacher timer** (M56): the exam countdown is shown on the teacher's screen. **After submitting** (M57) a student may shut the PC down from the receipt screen; the roster shows "submitted · PC off", not an alert.
 - Installer is unsigned in Stage 1; a short README for lab IT covers Windows SmartScreen and antivirus warnings.
 
 ---

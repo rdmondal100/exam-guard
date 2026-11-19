@@ -35,6 +35,16 @@ export class DeadlineWatcher {
   }
 
   private tick(examId: string): void {
+    // A failing tick (a busy or full database) is logged and tried again next second; it must
+    // never throw out of the timer and take the server down (M62).
+    try {
+      this.check(examId);
+    } catch (error) {
+      console.error('[deadline watcher] tick failed', error);
+    }
+  }
+
+  private check(examId: string): void {
     const { deadlines, submissions, onTick, endExam, now } = this.deps;
     const last = deadlines.last(examId);
     if (last === null) return;
@@ -42,7 +52,7 @@ export class DeadlineWatcher {
     for (const studentId of deadlines.overdue(examId, now())) {
       submissions.finalize(studentId, 'time_up');
     }
-    if (now() < last + deadlines.graceMs(examId)) return;
+    if (now() < deadlines.graceEnds(examId, last)) return;
     endExam(examId).catch(() => this.stop());
   }
 }

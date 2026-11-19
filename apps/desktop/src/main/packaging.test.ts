@@ -1,87 +1,120 @@
-// The installer and the app must agree on paths and registry keys: electron-builder.config.ts
-// places the files, resources/installer.nsh writes the registry, and main reads both.
+// The installers and the apps must agree on paths and contents: electron-builder.config.ts places
+// the files per app (M52), resources/{teacher,student}.nsh do the install steps, main reads both.
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { builderConfig, PACKED_RESOURCES } from '../../electron-builder.config';
-import { INSTALL_REG_KEY } from './mode/installType.js';
+import {
+  builderConfig,
+  FLAVORS,
+  keepClosure,
+  PACKED_RESOURCES,
+} from '../../electron-builder.config';
 import { resolveToolchain } from './runner/toolchains.js';
 
 const desktop = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const repo = resolve(desktop, '..', '..');
-const config = builderConfig({
+const paths = {
   repo,
   desktop,
   output: join(repo, 'release'),
   electronVersion: '44.0.0',
   electronDist: join(desktop, 'node_modules/electron/dist'),
-});
-const nsh = readFileSync(join(desktop, 'resources/installer.nsh'), 'utf8');
+};
+const teacher = builderConfig(paths, 'teacher');
+const student = builderConfig(paths, 'student');
+const nsh = (name: string) => readFileSync(join(desktop, `resources/${name}.nsh`), 'utf8');
 
-function nshDefine(name: string): string {
-  const match = new RegExp(`^!define ${name} "(.+)"$`, 'm').exec(nsh);
-  if (!match?.[1]) throw new Error(`${name} is not defined in installer.nsh`);
-  return match[1];
-}
-
-describe('packaged layout', () => {
+describe('student app layout', () => {
   const R = 'C:\\EG\\resources';
 
   it('puts SiteReader and the toolchains where main looks for them', () => {
-    const targets = (config.extraResources as { to: string }[]).map((r) => r.to);
+    const targets = (student.extraResources as { to: string }[]).map((r) => r.to);
     expect(targets).toEqual([PACKED_RESOURCES.siteReader, PACKED_RESOURCES.toolchains]);
     const exists = () => true;
     const env = { isPackaged: true, appPath: 'unused', resourcesPath: R, env: {}, exists };
-    const tools = resolveToolchain({ ...env, execPath: 'C:\\EG\\ExamGuard.exe' });
+    const tools = resolveToolchain({ ...env, execPath: 'C:\\EG\\ExamGuardStudent.exe' });
     expect(tools.msysRoot).toBe(join(R, PACKED_RESOURCES.toolchains, 'msys64'));
     expect(tools.pythonExe).toBe(join(R, PACKED_RESOURCES.toolchains, 'python', 'python.exe'));
   });
 
-  it('ships no Rust agent or runner any more', () => {
-    const sources = (config.extraResources as { from: string }[]).map((r) => r.from);
-    expect(sources.some((s) => /eg-(agent|runner)|target[\\/]release/.test(s))).toBe(false);
+  it('keeps node-pty and get-windows out of the asar, RunAsNode on for student JavaScript', () => {
+    expect(student.asarUnpack).toEqual([
+      '**/node_modules/node-pty/**',
+      '**/node_modules/get-windows/**',
+    ]);
+    expect(student.electronFuses?.runAsNode).toBe(true);
+    expect(student.electronFuses?.enableNodeOptionsEnvironmentVariable).toBe(false);
   });
 
-  it('keeps native modules out of the asar and RunAsNode on for student JavaScript', () => {
-    expect(config.asarUnpack).toEqual(
-      expect.arrayContaining([
-        '**/node_modules/node-pty/**',
-        '**/node_modules/better-sqlite3/**',
-        '**/node_modules/get-windows/**',
-      ]),
-    );
-    expect(config.electronFuses?.runAsNode).toBe(true);
-    expect(config.electronFuses?.enableNodeOptionsEnvironmentVariable).toBe(false);
-    expect(config.electronFuses?.enableNodeCliInspectArguments).toBe(false);
-  });
-
-  it('installs per machine with the ExamGuard userData name', () => {
-    expect(config.nsis?.perMachine).toBe(true);
-    expect(config.nsis?.include).toBe(join(desktop, 'resources/installer.nsh'));
-    expect(config.extraMetadata).toMatchObject({ productName: 'ExamGuard' });
+  it('ships without the exam server', () => {
+    expect(FLAVORS.student.dropDependencies).toContain('@examguard/server');
+    expect(student.extraMetadata).toMatchObject({ productName: 'ExamGuard Student' });
   });
 });
 
-describe('installer.nsh', () => {
-  it('writes InstallType under the key the app reads', () => {
-    expect(`HKLM\\${nshDefine('EG_REG_KEY')}`.toLowerCase()).toBe(INSTALL_REG_KEY.toLowerCase());
-    expect(nsh).toContain('WriteRegStr HKLM "${EG_REG_KEY}" "InstallType" "$egInstallType"');
+describe('teacher app layout', () => {
+  it('ships no toolchains, SiteReader, node-pty or get-windows', () => {
+    expect(teacher.extraResources).toEqual([]);
+    expect(FLAVORS.teacher.dropDependencies).toEqual(['node-pty', 'get-windows']);
+    expect(teacher.asarUnpack).toEqual(['**/node_modules/better-sqlite3/**']);
   });
 
-  it('installs no service and removes the old agent service an earlier version left', () => {
-    expect(nsh).not.toMatch(/--install|eg-agent\.exe/);
-    expect(nshDefine('EG_OLD_SERVICE')).toBe('ExamGuardAgent');
-    expect(nsh).toContain('sc.exe delete "${EG_OLD_SERVICE}"');
+  it('turns RunAsNode off and keeps the pre-M52 userData name', () => {
+    expect(teacher.electronFuses?.runAsNode).toBe(false);
+    expect(teacher.extraMetadata).toMatchObject({ productName: 'ExamGuard' });
+  });
+});
+
+describe('both installers', () => {
+  it('install per machine with their own app id, exe and include', () => {
+    for (const [app, config] of [
+      ['teacher', teacher],
+      ['student', student],
+    ] as const) {
+      expect(config.nsis?.perMachine).toBe(true);
+      expect(config.nsis?.include).toBe(join(desktop, `resources/${app}.nsh`));
+      expect(config.appId).toBe(`ai.examguard.${app}`);
+    }
+    expect(teacher.win?.executableName).not.toBe(student.win?.executableName);
   });
 
-  it('accepts only the two install types on the command line', () => {
-    expect(nsh).toContain('${GetOptions} $R0 "/TYPE=" $R1');
-    expect(nsh.match(/StrCpy \$egInstallType "(\w+)"/g)).toEqual(
-      expect.arrayContaining([
-        'StrCpy $egInstallType "student"',
-        'StrCpy $egInstallType "teacher"',
-      ]),
-    );
+  it('have no install-type page or /TYPE switch any more', () => {
+    for (const name of ['teacher', 'student']) {
+      expect(nsh(name)).not.toMatch(/\/TYPE=|InstallType|customWelcomePage/);
+    }
+  });
+
+  it('add firewall rules only for the teacher', () => {
+    expect(nsh('teacher')).toContain('netsh advfirewall firewall add rule');
+    expect(nsh('student')).not.toContain('advfirewall');
+  });
+
+  it('remove the old agent service on student PCs and install no service', () => {
+    const s = nsh('student');
+    expect(s).not.toMatch(/--install|eg-agent\.exe/);
+    expect(s).toContain('sc.exe delete "${EG_OLD_SERVICE}"');
+  });
+});
+
+describe('keepClosure (pruning the packaged dependencies)', () => {
+  // root → a → c; root → b (dropped) → d; a has its own nested c? no: c is shared.
+  const deps: Record<string, string[]> = {
+    '/s/node_modules/a': ['c'],
+    '/s/node_modules/b': ['d'],
+    '/s/node_modules/c': [],
+    '/s/node_modules/d': [],
+  };
+  const resolveFrom = (_from: string, name: string) =>
+    deps[`/s/node_modules/${name}`] ? `/s/node_modules/${name}` : null;
+
+  it('keeps what the remaining roots need and nothing that only a dropped root used', () => {
+    const keep = keepClosure('/s', ['a'], (dir) => deps[dir] ?? [], resolveFrom);
+    expect([...keep].sort()).toEqual(['/s/node_modules/a', '/s/node_modules/c']);
+  });
+
+  it('skips dependencies that are not installed', () => {
+    const keep = keepClosure('/s', ['a', 'missing'], (dir) => deps[dir] ?? [], resolveFrom);
+    expect(keep.has('/s/node_modules/missing')).toBe(false);
   });
 });

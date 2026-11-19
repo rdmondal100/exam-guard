@@ -8,8 +8,14 @@ export const ProtocolVersionSchema = z.object({
 
 export type ProtocolVersion = z.infer<typeof ProtocolVersionSchema>;
 
-/** 2: the monitor moved into the student app (no agent, no internet switch). */
-export const PROTOCOL_VERSION: ProtocolVersion = { major: 2, minor: 0 };
+/**
+ * 5 (M59-M64): the server refuses saves and Submit while paused (`paused`), a readiness report
+ * must hold every check, and the `monitor_stalled`/`monitor_recovered` events.
+ * 4 (M58): pause/resume (a 3.x app would keep its editor open while paused) and questions or files
+ * added mid-exam. 3 (M52-M57): separate Teacher and Student apps, practice exams, the readiness
+ * report. 2: the monitor moved into the student app.
+ */
+export const PROTOCOL_VERSION: ProtocolVersion = { major: 5, minor: 0 };
 
 /** Same major = compatible. A different minor is accepted. */
 export function isProtocolCompatible(

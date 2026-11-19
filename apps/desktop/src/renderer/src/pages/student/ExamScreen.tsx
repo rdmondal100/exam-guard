@@ -1,14 +1,18 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { ClipboardXIcon, InfoIcon, TimerOffIcon } from 'lucide-react';
+import { useTick } from '@/hooks/useTick';
+import { ClipboardXIcon, InfoIcon, ListPlusIcon, TimerOffIcon, XIcon } from 'lucide-react';
 import type { SessionStatus, StudentQuestion } from '@examguard/shared';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ANSWER_TEXT_KEY, answeredIds, getAnswer, useAnswerStore } from '@/store/answerStore';
 import { pickLanguage } from '@/lib/languages';
 import { isTimeUp, submitAnswers, submitRefusalText } from '@/lib/submit';
 import { saveNow, useAnswerStatus, useAutosave } from '@/hooks/useAutosave';
 import { useExamFilesStatus } from '@/hooks/useExamFilesStatus';
+import { useAddedQuestions } from '@/hooks/useAddedQuestions';
+import { addedQuestionsText } from '@/lib/addedQuestions';
 import { usePasteGuard } from '@/hooks/usePasteGuard';
 import { InsertionWatchContext, useInsertionWatch } from '@/hooks/useInsertionWatch';
 import { LoadingLine } from '../../components/common/Spinner';
@@ -32,10 +36,16 @@ interface Props {
   examTitle: string;
   questions: StudentQuestion[];
   deadline: number;
+  /** The teacher paused the exam (M58): the timer stands still. */
+  pausedAt: number | null;
+  /** Paused or locked by the teacher: an overlay covers the screen and nothing under it works. */
+  frozen: boolean;
   /** The teacher's terminal switch; main closes the shell itself when it goes off. */
   terminalOn: boolean;
   /** The teacher's Files panel switch (the project folder explorer). */
   filesOn: boolean;
+  /** A practice exam (M53): nothing is monitored or graded. */
+  practice: boolean;
   status: SessionStatus;
 }
 
@@ -49,8 +59,11 @@ export function ExamScreen({
   examTitle,
   questions,
   deadline,
+  pausedAt,
+  frozen,
   terminalOn,
   filesOn,
+  practice,
   status,
 }: Props) {
   const [selectedId, setSelectedId] = useState(questions[0]?.id ?? '');
@@ -82,6 +95,7 @@ export function ExamScreen({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const submit = () => {
+    if (submitting) return;
     setSubmitError(null);
     setSubmitting(true);
     submitAnswers()
@@ -92,23 +106,30 @@ export function ExamScreen({
       .catch(() => setSubmitError(submitRefusalText('')))
       .finally(() => setSubmitting(false));
   };
-  // At the deadline the editors lock; the server auto-submits after the grace period.
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(id);
-  }, []);
-  const timeUp = isTimeUp(deadline, now, status.offsetMs);
+  // At the deadline the editors lock; the server auto-submits after the grace period. Checked on
+  // a ticker that re-renders only when the answer flips (M64), not four times a second.
+  const timeUp = useTick((now) => isTimeUp(deadline, now, status.offsetMs, pausedAt));
+  // Questions the teacher added mid-exam (M58) are announced until dismissed.
+  const addedQuestions = useAddedQuestions(questions);
   // Only text copied inside the exam may be pasted (M25); typing far faster than a person is
   // reported (M27), except the pastes the guard let through.
   const insertionWatch = useInsertionWatch();
   const pasteBlockedAt = usePasteGuard(insertionWatch.allow);
-  const pasteNotice = pasteBlockedAt !== null && now - pasteBlockedAt < PASTE_NOTICE_MS;
+  const pasteNotice = useTick(
+    (now) => pasteBlockedAt !== null && now - pasteBlockedAt < PASTE_NOTICE_MS,
+  );
   useEffect(() => {
     if (!timeUp) return;
     setConfirming(false);
     void saveNow('interval');
   }, [timeUp]);
+  // Frozen by the teacher (M58 pause, M35 lock): what was typed goes out now, and the dialog closes.
+  useEffect(() => {
+    if (!frozen) return;
+    setConfirming(false);
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    void saveNow('interval');
+  }, [frozen]);
   useEffect(() => {
     void window.examguard.terminalStatus().then((s) => {
       if (s.open) {
@@ -120,10 +141,11 @@ export function ExamScreen({
 
   return (
     <InsertionWatchContext.Provider value={insertionWatch}>
-      <div className="flex h-screen flex-col bg-background">
+      <div className="flex h-screen flex-col bg-background" {...(frozen ? { inert: '' } : {})}>
         <ExamHeader
           examTitle={examTitle}
           name={name}
+          practice={practice}
           filesOn={filesOn}
           filesShown={filesShown}
           onToggleFiles={() => {
@@ -140,8 +162,12 @@ export function ExamScreen({
           link={status.link}
           offsetMs={status.offsetMs}
           deadline={deadline}
+          pausedAt={pausedAt}
           timeUp={timeUp}
           onSubmit={() => setConfirming(true)}
+          submitBusy={submitting}
+          submitError={submitError}
+          onRetrySubmit={submit}
         />
         <ExamFilesNotice status={examFiles} className={BANNER} />
         {timeUp && (
@@ -153,12 +179,31 @@ export function ExamScreen({
             </AlertDescription>
           </Alert>
         )}
+        {addedQuestions.added.length > 0 && (
+          <Alert role="status" variant="info" className={BANNER}>
+            <ListPlusIcon />
+            <AlertDescription className="flex items-center justify-between gap-3">
+              <span>{addedQuestionsText(addedQuestions.added)} Find it in the question list.</span>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Dismiss"
+                onClick={addedQuestions.dismiss}
+              >
+                <XIcon />
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
         {pasteNotice && (
           <Alert role="status" variant="warning" className={BANNER}>
             <ClipboardXIcon />
             <AlertDescription>
               Pasting text from outside the exam is not allowed. Only text copied inside the exam
-              can be pasted. Your teacher has been notified.
+              can be pasted.{' '}
+              {practice
+                ? 'In a real exam your teacher is notified.'
+                : 'Your teacher has been notified.'}
             </AlertDescription>
           </Alert>
         )}
@@ -180,7 +225,9 @@ export function ExamScreen({
             <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-6">
               <div className="flex items-center gap-3">
                 <h2 className="text-lg font-semibold">Question {question.position}</h2>
-                <Badge variant="secondary">{question.marks} marks</Badge>
+                <Badge variant="secondary">
+                  {question.marks} {question.marks === 1 ? 'mark' : 'marks'}
+                </Badge>
               </div>
               <p className="leading-relaxed whitespace-pre-wrap">{question.body}</p>
               {question.studentNote && (
@@ -218,7 +265,7 @@ export function ExamScreen({
             <main className="p-6 text-muted-foreground">This exam has no questions.</main>
           )}
         </div>
-        {confirming && !timeUp && (
+        {confirming && !timeUp && !frozen && (
           <SubmitDialog
             answered={answered.size}
             total={questions.length}

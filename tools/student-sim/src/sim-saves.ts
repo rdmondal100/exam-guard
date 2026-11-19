@@ -52,6 +52,10 @@ export class SimSaves {
   private acked = 0;
   private timer: NodeJS.Timeout | null = null;
   private frozen = false;
+  /** The teacher paused the exam (M58): the real app's editor is covered, so nothing is typed. */
+  private paused = false;
+  /** The server's clock as this student knows it (M60): saves are stamped with it, like the app. */
+  clock: () => number = Date.now;
   /** When each unacked save was first sent (save lag, M47). */
   private readonly firstSent = new Map<number, number>();
 
@@ -67,11 +71,17 @@ export class SimSaves {
    */
   setQuestions(questions: unknown, saved: unknown): boolean {
     this.continueAfter(saved);
-    if (this.questions.length > 0 || !Array.isArray(questions) || questions.length === 0) {
-      return false;
+    if (!Array.isArray(questions) || questions.length === 0) return false;
+    const first = this.questions.length === 0;
+    // A question added mid-exam (M58) arrives as a longer list; it is answered too (M60).
+    if (first || questions.length > this.questions.length) {
+      this.questions = questions as QuestionInfo[];
     }
-    this.questions = questions as QuestionInfo[];
-    return true;
+    return first;
+  }
+
+  setPaused(paused: boolean): void {
+    this.paused = paused;
   }
 
   private continueAfter(saved: unknown): void {
@@ -134,6 +144,7 @@ export class SimSaves {
   }
 
   private tick(ws: WebSocket): void {
+    if (this.paused) return;
     const q = this.questions[Math.floor(Math.random() * this.questions.length)];
     if (!q) return;
     const languages = languagesOf(q);
@@ -159,7 +170,7 @@ export class SimSaves {
       t: 'answer.save',
       id: `sim-${this.code}-${this.nextSeq}`,
       clientSeq: this.nextSeq,
-      clientTs: Date.now(),
+      clientTs: this.clock(),
       questionId: q.id,
       language,
       content,

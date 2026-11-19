@@ -19,6 +19,16 @@ export function parseProfile(argv: readonly string[]): string {
   return DEFAULT_PROFILE;
 }
 
+/** Like `parseProfile`, but a bad value is reported and the default used, never a crash at start. */
+export function profileOrDefault(argv: readonly string[]): string {
+  try {
+    return parseProfile(argv);
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : e);
+    return DEFAULT_PROFILE;
+  }
+}
+
 /** The default profile keeps Electron's own folder; others get a sibling folder. */
 export function userDataPathFor(defaultUserData: string, profile: string): string {
   return profile === DEFAULT_PROFILE ? defaultUserData : join(defaultUserData, 'profiles', profile);

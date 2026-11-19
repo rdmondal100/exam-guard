@@ -2,6 +2,7 @@ import { CircleCheckIcon, FileCheckIcon } from 'lucide-react';
 import type { Receipt, StudentQuestion } from '@examguard/shared';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { ShutdownButton } from '../../components/student/ShutdownButton';
 import { StatusCard } from '../../components/student/StatusCard';
 
 interface Props {
@@ -67,9 +68,10 @@ export function ReceiptScreen({
         <AlertDescription>
           {examEnded
             ? 'The exam has ended. You can close ExamGuard now.'
-            : 'You are done. Wait for your teacher before you close ExamGuard; the exam is still running for others.'}
+            : 'You are done. The exam is still running for others, so leave quietly.'}
         </AlertDescription>
       </Alert>
+      <ShutdownButton />
     </StatusCard>
   );
 }

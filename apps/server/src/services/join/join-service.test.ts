@@ -18,7 +18,7 @@ const request = (over: Partial<JoinRequest> = {}): JoinRequest => ({
   studentCode: '1',
   pin: PIN,
   deviceId: 'device-aaaaaaaa',
-  protocol: { major: 2, minor: 0 },
+  protocol: { major: 5, minor: 0 },
   monitor: { ok: true, captureOk: true, monitors: 1 },
   ...over,
 });

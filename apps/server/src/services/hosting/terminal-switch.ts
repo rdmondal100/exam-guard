@@ -10,6 +10,8 @@ export interface TerminalSwitchDeps {
   hub: SessionHub;
   /** The exam's current state, or `undefined` if it does not exist. */
   examState: (examId: string) => ExamState | undefined;
+  /** When the exam was paused (M58), or `null`: a paused exam's terminal window stands still. */
+  pausedAt?: (examId: string) => number | null;
   now: () => number;
 }
 
@@ -90,18 +92,43 @@ export class TerminalSwitch {
     const setting = this.deps.terminals.get(examId);
     if (!setting?.enabled || setting.until === null) return;
     if (this.deps.examState(examId) !== 'running') return;
+    if (this.paused(examId)) return;
     const fire = () => {
       this.timer = null;
-      this.check(examId);
+      // A timer must never throw (M62); the 1 s watcher calls `check` again anyway.
+      try {
+        this.check(examId);
+      } catch (error) {
+        console.error('[terminal switch] check failed', error);
+      }
     };
     this.timer = setTimeout(fire, Math.max(0, setting.until - this.deps.now()));
     this.timer.unref();
+  }
+
+  /**
+   * The exam was resumed after `pausedMs` (M60): an "N minutes" window moves by the pause, like
+   * every deadline, so the students lose none of it.
+   */
+  shift(examId: string, pausedMs: number): void {
+    const setting = this.deps.terminals.get(examId);
+    if (setting?.enabled && setting.until !== null && pausedMs > 0) {
+      this.deps.terminals.set(
+        examId,
+        { ...setting, until: setting.until + pausedMs },
+        this.deps.now(),
+      );
+      this.push(examId);
+    }
+    this.arm(examId);
   }
 
   /** Turns the terminal off once its window has passed. Safe to call at any time. */
   check(examId: string): void {
     const setting = this.deps.terminals.get(examId);
     if (!setting?.enabled || setting.until === null) return;
+    // While paused the window stands still; `shift` moves it on resume.
+    if (this.paused(examId)) return this.disarm();
     const now = this.deps.now();
     if (now < setting.until) {
       // A timer can fire a little early; try again at the real end.
@@ -118,6 +145,10 @@ export class TerminalSwitch {
       ts: now,
     });
     this.push(examId);
+  }
+
+  private paused(examId: string): boolean {
+    return (this.deps.pausedAt?.(examId) ?? null) !== null;
   }
 
   disarm(): void {

@@ -55,7 +55,7 @@ const body = (over: object = {}) => ({
   studentCode: '1',
   pin: '123456',
   deviceId: 'device-aaaaaaaa',
-  protocol: { major: 2, minor: 0 },
+  protocol: { major: 5, minor: 0 },
   monitor: { ok: true, captureOk: true, monitors: 1 },
   ...over,
 });

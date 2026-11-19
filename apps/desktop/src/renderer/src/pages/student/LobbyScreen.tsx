@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useExamFilesStatus } from '@/hooks/useExamFilesStatus';
 import { ErrorAlert } from '../../components/common/ErrorAlert';
 import { ExamFilesNotice } from '../../components/student/ExamFilesNotice';
+import { ReadinessChecklist } from '../../components/student/ReadinessChecklist';
 import { StatusCard } from '../../components/student/StatusCard';
 
 interface Props {
@@ -59,6 +60,7 @@ export function LobbyScreen({ name, examTitle, status, error, onLeave }: Props) 
         </ErrorAlert>
       )}
       <ExamFilesNotice status={examFiles} confirmReady />
+      <ReadinessChecklist />
       <p className="text-muted-foreground">Waiting for the teacher to start the exam.</p>
       {(status.link === 'reconnecting' || status.link === 'failed') && (
         <Button variant="outline" className="w-fit" onClick={onLeave}>

@@ -98,6 +98,10 @@ export function describeEvent(event: EventRow): string {
       if (typeof before === 'number') return `Screens changed: ${before} → ${now}`;
       return `${now} screen${now === 1 ? '' : 's'} connected at the start`;
     }
+    case 'monitor_stalled':
+      return 'The monitor stopped seeing this PC (Windows did not answer)';
+    case 'monitor_recovered':
+      return 'The monitor sees this PC again';
     case 'secure_desktop': {
       const desktop = text(details['desktop']);
       if (desktop === 'lock') return 'Locked the computer (lock screen)';

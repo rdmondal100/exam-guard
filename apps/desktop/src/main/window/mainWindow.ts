@@ -90,7 +90,9 @@ export function createMainWindow(title: string): BrowserWindow {
 
   win.once('ready-to-show', () => win.show());
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https:\/\//.test(url)) void shell.openExternal(url);
+    // The student app never opens a browser: a link in a question or a message would take the
+    // student out of the exam (M59). The teacher app opens https links in the system browser.
+    if (__EG_APP__ === 'teacher' && /^https:\/\//.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (event, url) => {

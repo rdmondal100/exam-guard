@@ -19,6 +19,7 @@ const EXAM = {
     graceSec: 60,
   },
   filesEnabled: true,
+  practice: false,
   createdAt: 1,
   updatedAt: 1,
 };

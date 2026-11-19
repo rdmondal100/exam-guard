@@ -178,3 +178,36 @@ describe('Tracker', () => {
     expect(kinds()).toEqual(['processes_at_start']);
   });
 });
+
+describe('Tracker watchdog (M63)', () => {
+  it('reports a stall when reading the window hangs, and the recovery after', async () => {
+    let hang = true;
+    const stalls: boolean[] = [];
+    tracker = new Tracker({
+      ...deps(),
+      readFront: () => (hang ? new Promise<FrontWindow | null>(() => {}) : Promise.resolve(front)),
+      onStall: (stalled) => stalls.push(stalled),
+    });
+    tracker.start(POLICY);
+    await advance(20_000);
+    expect(kinds()).toContain('monitor_stalled');
+    expect(stalls).toEqual([true]);
+    hang = false;
+    await advance(5_000);
+    expect(kinds()).toContain('monitor_recovered');
+    expect(stalls).toEqual([true, false]);
+    const recovered = seen.find((e) => e.kind === 'monitor_recovered');
+    expect(recovered?.details.durationMs).toBeGreaterThan(15_000);
+  });
+
+  it('sends the event without its picture when the screenshot hangs', async () => {
+    tracker = new Tracker({ ...deps(), capture: () => new Promise<Uint8Array | null>(() => {}) });
+    tracker.start(POLICY);
+    await advance(1500);
+    front = chrome;
+    await advance(7000);
+    const lost = seen.find((e) => e.kind === 'focus_lost');
+    expect(lost).toBeDefined();
+    expect(lost?.jpeg).toBeUndefined();
+  });
+});

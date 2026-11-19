@@ -73,6 +73,9 @@ export class GradingService {
     const { exams, questions, jobs, grades } = this.deps;
     const exam = exams.get(examId);
     if (!exam) throw new GradingError(404, 'not_found', 'Exam not found');
+    if (exam.practice) {
+      throw new GradingError(409, 'practice_exam', 'A practice exam is not graded');
+    }
     if (!canTransition(exam.state, 'grading')) {
       throw new GradingError(409, 'invalid_state', `A ${exam.state} exam cannot be graded`);
     }
@@ -85,6 +88,15 @@ export class GradingService {
     const now = this.now();
     let created = 0;
     exams.transaction(() => {
+      // Checked again after waiting for the key (M60): a second click may have started already.
+      const state = exams.get(examId)?.state;
+      if (!state || !canTransition(state, 'grading')) {
+        throw new GradingError(
+          409,
+          'invalid_state',
+          `A ${state ?? 'deleted'} exam cannot be graded`,
+        );
+      }
       for (const q of chosen) {
         const scope = grades.queueAnswers(q.id, ['pending', 'needs_manual'], now);
         if (scope.length === 0) continue;

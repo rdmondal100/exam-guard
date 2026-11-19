@@ -8,6 +8,7 @@ import {
   ExamsSchema,
   ExamSummarySchema,
   HostingInfoSchema,
+  PauseResultSchema,
   StartResultSchema,
   TerminalActionResultSchema,
   TerminalLogResponseSchema,
@@ -22,6 +23,7 @@ import {
   type ExamSummary,
   type ExamUpdateBody,
   type HostingInfo,
+  type PauseResult,
   type ServerConnection,
   type Severity,
   type StudentAction,
@@ -63,6 +65,8 @@ export interface ExamApi {
   extendAll(id: string, minutes: number): Promise<ExtendAllResult>;
   /** A popup for every joined student (M36); hosting or running. */
   broadcast(id: string, message: Omit<BroadcastAction, 'type'>): Promise<BroadcastResult>;
+  /** Pause or resume a running exam for everyone (M58); `invalid_state` when it is not running. */
+  setPaused(id: string, paused: boolean): Promise<PauseResult>;
   /** The teacher action log (M36), newest first, in any exam state. */
   auditLog(id: string): Promise<AuditEntry[]>;
   /** One student's terminal events and transcript, in any exam state. */
@@ -131,6 +135,10 @@ export function createExamApi(connection: ServerConnection, fetchFn: FetchFn = f
       call(connection, fetchFn, `${path(id)}/actions`, BroadcastResultSchema, {
         type: 'broadcast',
         ...message,
+      }),
+    setPaused: (id, paused) =>
+      call(connection, fetchFn, `${path(id)}/actions`, PauseResultSchema, {
+        type: paused ? 'pause' : 'resume',
       }),
     auditLog: async (id) =>
       (await call(connection, fetchFn, `${path(id)}/actions`, AuditResponseSchema)).actions,

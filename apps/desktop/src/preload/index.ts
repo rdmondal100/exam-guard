@@ -45,17 +45,15 @@ import {
   TerminalSizeSchema,
   TerminalStatusSchema,
   ThemeSetRequestSchema,
+  ReadinessReportSchema,
   ThemeSourceSchema,
-  type AppMode,
   type ServerStatus,
 } from '@examguard/shared';
 import { IPC } from '../shared/ipcChannels.js';
-import type { ExamGuardApi } from './api.js';
+import { exposedIn, type ExamGuardApi } from './api.js';
 
 const api: ExamGuardApi = {
   getInfo: async () => AppInfoSchema.parse(await ipcRenderer.invoke(IPC.getInfo)),
-  setMode: async (mode: AppMode) =>
-    AppInfoSchema.parse(await ipcRenderer.invoke(IPC.setMode, { mode })),
   getServerConnection: async () =>
     ServerConnectionSchema.nullable().parse(await ipcRenderer.invoke(IPC.getServerConnection)),
   getServerStatus: async () =>
@@ -247,6 +245,19 @@ const api: ExamGuardApi = {
     DataFolderMoveResultSchema.parse(
       await ipcRenderer.invoke(IPC.dataFolderMove, DataFolderMoveRequestSchema.parse({ path })),
     ),
+  shutdownPc: async () => {
+    await ipcRenderer.invoke(IPC.shutdownPc);
+  },
+  readinessReport: async () =>
+    ReadinessReportSchema.nullable().parse(await ipcRenderer.invoke(IPC.readinessGet)),
+  onReadiness: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown) => {
+      const parsed = ReadinessReportSchema.safeParse(payload);
+      if (parsed.success) listener(parsed.data);
+    };
+    ipcRenderer.on(IPC.readinessReport, handler);
+    return () => ipcRenderer.removeListener(IPC.readinessReport, handler);
+  },
   getTheme: async () => ThemeSourceSchema.parse(await ipcRenderer.invoke(IPC.themeGet)),
   setTheme: async (theme) =>
     ThemeSourceSchema.parse(
@@ -254,4 +265,8 @@ const api: ExamGuardApi = {
     ),
 };
 
-contextBridge.exposeInMainWorld('examguard', api);
+// Each app exposes only the common methods and its own (M52).
+contextBridge.exposeInMainWorld(
+  'examguard',
+  Object.fromEntries(Object.entries(api).filter(([method]) => exposedIn(__EG_APP__, method))),
+);

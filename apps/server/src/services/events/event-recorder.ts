@@ -28,8 +28,8 @@ const OUTSIDE_TYPES = ['focus_lost', 'focus_returned'] as const;
 
 /**
  * The one way events get stored (M31): classify the severity, insert once per dedupe key, add the
- * risk points to the student and tell the listeners (live alert, roster push). A repeated event
- * changes nothing and returns `null`.
+ * risk points to the student and tell the listeners (live alert, roster push). A repeated event,
+ * or any event of a practice exam, changes nothing and returns `null`.
  */
 export class EventRecorder {
   private readonly listeners = new Set<(stored: StoredEvent) => void>();
@@ -49,6 +49,8 @@ export class EventRecorder {
    * (the screenshot is linked there, so the alert knows it has one).
    */
   record(input: RecordInput, attach?: (id: number) => void): number | null {
+    // A practice exam (M53) records nothing: the caller acks as for a duplicate.
+    if (this.deps.exams.get(input.examId)?.practice) return null;
     const severity = input.severity ?? this.classify(input);
     const id = this.deps.events.insertReturningId({ ...input, severity });
     if (id === null) return null;

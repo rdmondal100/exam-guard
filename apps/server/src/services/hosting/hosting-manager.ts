@@ -48,6 +48,9 @@ import { TerminalSwitch } from './terminal-switch.js';
 
 export { HostingError };
 
+/** After a restart, a running exam waits this long for the apps before auto-submitting (M62). */
+export const RESTART_RECONNECT_MS = 60_000;
+
 export interface HostingManagerDeps {
   exams: ExamRepo;
   questions: QuestionRepo;
@@ -92,6 +95,8 @@ export interface HostingManagerDeps {
   advertise?: Advertise;
   /** Student socket timings; tests shorten them. */
   socketTimings?: { helloTimeoutMs?: number; idleMs?: number };
+  /** After a restart, how long a running exam waits for the apps before auto-submitting (M62). */
+  restartReconnectMs?: number;
 }
 
 interface Active {
@@ -126,6 +131,7 @@ export class HostingManager {
       actions: deps.actions,
       hub: deps.hub,
       examState: (id) => deps.exams.get(id)?.state,
+      pausedAt: (id) => deps.exams.timing(id)?.pausedAt ?? null,
       now: this.now,
     });
     this.locks = new StudentLock({
@@ -152,6 +158,7 @@ export class HostingManager {
       hub: deps.hub,
       messages: this.messages,
       deadlines: deps.deadlines,
+      terminal: this.terminal,
       now: this.now,
     });
     this.watcher = new DeadlineWatcher({
@@ -181,7 +188,17 @@ export class HostingManager {
     }
     const pin = (this.deps.makePin ?? generatePin)();
     const opened = await this.open(exam.id, pin);
-    exams.startHosting(exam.id, pin, this.now(), this.deps.settings?.().runLimits ?? null);
+    const hosted = exams.startHosting(
+      exam.id,
+      pin,
+      this.now(),
+      this.deps.settings?.().runLimits ?? null,
+    );
+    if (!hosted) {
+      // Changed or deleted while the listener opened (M60): give the listener back.
+      await this.close();
+      throw new HostingError(409, 'invalid_state', 'The exam changed while hosting started');
+    }
     this.audit(exam.id, 'host', {});
     return this.describe(opened);
   }
@@ -235,6 +252,11 @@ export class HostingManager {
     }
     assertTransition(exam.state, 'ended');
     this.watcher.stop();
+    // Ending a paused exam ends the pause too; the audit log keeps its length (M60).
+    const pausedAt = exams.timing(examId)?.pausedAt ?? null;
+    if (pausedAt !== null) {
+      this.audit(examId, 'resume', { pausedSec: Math.round((this.now() - pausedAt) / 1000) });
+    }
     submissions.finalizeAll(examId, reason === 'manual' ? 'teacher_end' : 'time_up');
     exams.endRunning(examId, this.now());
     // The exam-wide end (M36): by the teacher, or by the server at time up.
@@ -266,15 +288,46 @@ export class HostingManager {
       questions: running ? questions.list(student.examId).map(toStudentQuestion) : undefined,
       saved: this.deps.answers.savedFor(studentId),
       locked: state === 'locked',
+      pausedAt: running ? this.deps.deadlines.pausedAt(student.examId) : null,
       lockReason: state === 'locked' ? 'teacher' : null,
-      monitoring: running,
-      ...(running && exam ? { monitoringPolicy: monitorPolicyFor(exam.monitoring) } : {}),
+      // A practice exam (M53) runs without the monitor, thumbnails or live view.
+      monitoring: running && !exam?.practice,
+      ...(running && exam && !exam.practice
+        ? { monitoringPolicy: monitorPolicyFor(exam.monitoring) }
+        : {}),
+      practice: exam?.practice ?? false,
       terminal: this.terminal.state(student.examId),
       filesEnabled: exam?.filesEnabled ?? true,
       runLimits: exams.runLimits(student.examId),
       examFiles: exam?.filesEnabled ? this.deps.examFiles.list(student.examId) : [],
       receipt: this.deps.finals.receiptFor(studentId),
     };
+  }
+
+  /**
+   * The teacher added a question to a hosted or running exam (M58). Students already working get
+   * the whole list at once; the lobby gets it at Start as usual.
+   */
+  questionAdded(examId: string, questionId: string): void {
+    const exam = this.deps.exams.get(examId);
+    this.audit(examId, 'add_question', { questionId });
+    if (exam?.state !== 'running') return;
+    const questions = this.deps.questions.list(examId).map(toStudentQuestion);
+    for (const s of this.deps.students.working(examId)) {
+      this.deps.hub.sendTo(s.id, { t: 'state', state: { questions } });
+    }
+  }
+
+  /**
+   * The teacher attached a file to a hosted or running exam (M58). Every connected student gets the
+   * new list: the lobby downloads it, a running exam copies it into the project folder.
+   */
+  examFileAdded(examId: string, name: string): void {
+    const exam = this.deps.exams.get(examId);
+    this.audit(examId, 'add_file', { name });
+    if (!exam?.filesEnabled || (exam.state !== 'hosting' && exam.state !== 'running')) return;
+    const examFiles = this.deps.examFiles.list(examId);
+    this.deps.hub.broadcast(() => ({ t: 'state', state: { examFiles } }));
   }
 
   info(examId: string): HostingInfo | null {
@@ -285,10 +338,21 @@ export class HostingManager {
   async resume(): Promise<void> {
     const { exams } = this.deps;
     const hosted = exams.hostedExam() ?? exams.runningExam();
-    if (hosted && !this.active) await this.open(hosted.exam.id, hosted.pin);
-    if (hosted?.exam.state === 'running') {
-      this.watcher.start(hosted.exam.id);
-      this.terminal.arm(hosted.exam.id);
+    try {
+      if (hosted && !this.active) await this.open(hosted.exam.id, hosted.pin);
+    } finally {
+      // Deadlines are enforced even if the listener could not reopen (port taken, say): the
+      // answers already stored are finalized on time (M60).
+      if (hosted?.exam.state === 'running') {
+        // The apps kept working while the server was down; give them a moment to reconnect and
+        // send what they queued before anyone is auto-submitted (M62).
+        this.deps.deadlines.allowLateUntil(
+          hosted.exam.id,
+          this.now() + (this.deps.restartReconnectMs ?? RESTART_RECONNECT_MS),
+        );
+        this.watcher.start(hosted.exam.id);
+        this.terminal.arm(hosted.exam.id);
+      }
     }
   }
 

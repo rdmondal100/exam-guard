@@ -53,6 +53,8 @@ UNIQUE(class_list_id, student_code)
 | monitoring_json | TEXT | per-exam monitoring settings (screenshot policy, high-severity apps, thresholds) |
 | pin | TEXT | 6 digits, set when hosting starts |
 | global_extension_sec | INTEGER DEFAULT 0 | "extend all" |
+| paused_at | INTEGER | M58 (0018): server time the teacher paused the running exam; NULL when not paused, cleared at the end |
+| paused_ms | INTEGER DEFAULT 0 | M58: all finished pauses, ms; every deadline moves by it (the pause still going on counts only in the server's own checks) |
 | terminal_enabled | INTEGER DEFAULT 0 | exam terminal switch (M15b, migration 0006); off by default |
 | terminal_minutes | INTEGER | "on for N minutes" chosen before Start, cleared when Start sets `terminal_until` |
 | terminal_until | INTEGER | server time the terminal turns off by itself; NULL = no end |
@@ -241,7 +243,7 @@ INDEX(question_id, status); INDEX(queued_job_id)
 Deleting an exam cascades to everything under it and deletes its screenshot folder and its `exam-files/<examId>/` folder (`exams 1─* exam_files`). Class lists that are assigned to an exam can't be deleted.
 
 ## Data folder layout (teacher PC)
-Default `%APPDATA%\ExamGuard\` (Electron userData, per profile in dev). Movable in Settings (M44): `<userData>\dataLocation.json` `{dataDir}` then points at the new folder; only the entries below move (Electron's own files and `mode.json` stay in userData).
+Default `%APPDATA%\ExamGuard\` (Electron userData, per profile in dev). Movable in Settings (M44): `<userData>\dataLocation.json` `{dataDir}` then points at the new folder; only the entries below move (Electron's own files and `theme.json` stay in userData). `exams.practice` (0017, M53): a practice exam records no events and is never graded.
 ```
 db/examguard.sqlite (+ -wal, -shm)
 secrets.bin                      safeStorage-encrypted: AI API key
@@ -257,7 +259,7 @@ logs/main.log, server.log        rotated, 5 × 5 MB
 
 ## Student PC local storage
 ```
-%APPDATA%\ExamGuard\                   (Electron userData, student user)
+%APPDATA%\ExamGuard Student\           (Electron userData, student user; M52)
   queue/<examStudentId>.jsonl          pending `answer.save` / `event` (monitor evidence too, without its picture) / `transcript` frames the server has not acked (M17). One safeStorage-encrypted line per frame, plus a plain `-<key>` line when it is acked; the file is deleted when empty and compacted when acked lines pile up. Named after the student row because main does not know the exam id; a re-join finds the same file
   session/session.enc                  encrypted (safeStorage): token, server address and port, pinned fingerprint, examStudentId, name, exam title (M17). Written when the student accepts the notice; removed on `unauthorized`, when the exam ends and on Leave. The editors' content is not stored here: it comes from the server (`GET /answers/latest`) plus the queue
 %LOCALAPPDATA%\ExamGuard\run\<examStudentId>\

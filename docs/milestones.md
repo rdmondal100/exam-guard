@@ -430,6 +430,48 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 - **Accept:** no `window.confirm`, native select/checkbox/radio/table or hard-coded colour classes left in the renderer; System/Light/Dark switches the app and the title bar at once and survives a restart; Monaco follows the theme; tab switches keep xterm, Monaco and the monitoring streams mounted.
 - **Built (2026-11-12):** all of the above. Checked in the built app with throwaway profiles: mode select (dark and light, switched through `setTheme`), find exam with a discovered host, security code card, join form. Not checked by running: the teacher screens after login (the dev teacher instance held ports 47820/47821).
 
+### M52 Separate Teacher and Student apps
+- **Goal:** two apps from one codebase so each carries only what it needs (user's decision, 2026-11-12).
+- **Built (2026-11-12):** `--mode teacher|student` → `__EG_APP__`; `main/teacher/startTeacher.ts`, `main/student/startStudent.ts`; preload `exposedIn`; no mode choice, install type, `mode.json` or HKLM key; `FLAVORS` + `keepClosure` pruning; `teacher.nsh` / `student.nsh`; `pnpm package --app`. Teacher 419 MB installed (RunAsNode off), Student 1,112 MB after M55. Packed student app checked (opens on Find exam, no teacher API). Not run: installing either installer.
+
+### M53 Practice exam
+- **Built (2026-11-12):** migration 0017 `exams.practice`; monitoring off in the session state, events not recorded, Ready check without criteria/sample answers, grading refused (`practice_exam`); Practice toggle and badge, no Grading tab; student practice notice and badge.
+
+### M54 Lobby readiness check
+- **Built (2026-11-12):** `readiness.report`; student self-test (C, C++, Python, JS hello programs + 500 MB free) once per lobby, retried after a minute only on a problem; roster "Setup problem"/"Checking…", "N of M ready"; lobby checklist; the sim reports ready. Real-toolchain test passes on the dev PC.
+
+### M55 Smaller student toolchains
+- **Built (2026-11-12):** removed `lto1.exe` (`-flto` no longer works) and the `x86_64-w64-mingw32-*` driver copies; MSYS2 `zoneinfo` and `bash-completion` filtered from the package. Kept: the TLS/crypto DLLs (libcurl, libzip and libarchive use them) and `ensurepip` (`python -m venv`). MinGW 546 → 490 MB, Student 1,161 → 1,112 MB installed.
+
+### M56 Exam timer on the teacher app
+- **Built (2026-11-12):** `TeacherExamTimer` in the Hosting card (above the tabs), red in the last five minutes, "+N min". Not done: per-student end times in the roster (the roster has no per-student deadline).
+
+### M57 Submit, then turn off the PC
+- **Built (2026-11-12):** receipt and exam-ended screens offer "Shut down this PC" (confirm → `shutdown /s /t 5`; main refuses before a receipt or the exam's end); roster "submitted · PC off"; Hosting "N submitted (M PCs off)". `network_lost` was already raised only for active or locked students.
+
+### M58 Pause the exam; add questions and files mid-exam
+- **Goal:** the teacher pauses a running exam at any moment (students see "Your teacher paused the exam" and cannot type; the timer stops and the time is given back), and adds questions or attaches files while the exam is hosted or running (user's request, 2026-11-13).
+- **Built (2026-11-13):** migration 0018 `paused_at`/`paused_ms`; `pause`/`resume` exam actions, `pausedAt` in the session state and hosting info, `StudentDeadlines.effective` (the pause going on counts in the watcher and answer intake); question create and file upload accepted while hosting/running (complete question only, new file names only), pushed as `state {questions}` / `state {examFiles}`; student pause overlay over an inert exam (also used for the lock now), frozen timer, "Your teacher added Question N" notice; teacher Pause/Resume button, paused timer and Hosting card, add buttons while live, audit lines; protocol major 4. Not run: the manual test.
+- **Manual test:** `pnpm dev:teacher` + `pnpm dev:student`: start an exam, Pause (student screen covered, typing does nothing, both timers frozen), wait a minute, Resume (the end time moves one minute later); while running add a written question and a file (the question appears with a notice, the file lands in the project folder); try to edit an old question (refused).
+
+### M59 Security fixes (audit, 2026-11-19)
+- **Built:** the join's fingerprint code is computed from the presented certificate (a rogue host could echo the real code); `not_joined` students are refused at hello; exam-file ids are plain ids only; the run folder no longer counts as "inside" by path; `--profile` is dev-only; the student app opens no external links; event dedupe keys include the student; login failures are counted before the password check, a good join forgives one failure, logout closes teacher sockets.
+
+### M60 Pause, submit and session correctness (audit, 2026-11-19)
+- **Built:** the server drops saves and refuses Submit while paused (the app re-sends the Submit on resume); the terminal's timed window moves by the pause; ending while paused keeps the pause length; `sessionExit` never ends a paused exam; an invalid frame after hello is dropped (no reconnect loop), readiness `ms` is monotonic and a report needs every check; Leave clears the session client, closes the terminal and stops the runner (also on exam end and quit); a final close settles Submit; a receipt keeps unsent evidence and Shut down waits up to 10 s for it; ended practice exams can be deleted and record no transcript; guarded hosting start and grading start, a cancelled grade is not written; hub maps cleared; renderer wording fixes; the sim follows pauses, added questions and the server clock.
+
+### M61 Offline durability (audit, 2026-11-19)
+- **Built:** past its cap the answer outbox drops an outdated save, never a buffer's newest; the offline queue and the session file are rewritten atomically (temp + fsync + rename) and appends are fsynced within 250 ms and on quit; unacked screenshots are capped at 50 MB.
+
+### M62 Server hardening (audit, 2026-11-19)
+- **Built:** student and teacher socket handlers, the deadline watcher and the terminal timer catch their errors; `uncaughtException`/`unhandledRejection` are logged; per-socket token buckets for `event`, `transcript`, `readiness.report`; after a restart a running exam waits 60 s for the apps to reconnect before auto-submitting (instead of crediting downtime, since students keep working offline).
+
+### M63 Monitor watchdog (audit, 2026-11-19)
+- **Built:** timeouts on reading the window in front, the window list, the site and screen captures; the evidence chain survives a failing step; `monitor_stalled` (medium) after 15 s without a finished read and `monitor_recovered` after; the roster shows "Not monitored" while stalled.
+
+### M64 Submit status and clock UX (audit, 2026-11-19)
+- **Built:** the server clock is anchored on the monotonic clock, seeded from the welcome, re-sampled each minute; `useTick` re-renders the exam screen only when "time is up" or the paste notice flips; the Submit state (sending, waiting for the connection, refused + Try again) stays in the toolbar and Submit is disabled while one is pending; the pause overlay shows how long it has lasted, the time left and the link state.
+
 ---
 
 ## Stage 2 (not broken down)
