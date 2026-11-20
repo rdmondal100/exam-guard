@@ -68,8 +68,8 @@ describe('dropReason', () => {
     },
   );
 
-  it('drops a save while the exam is paused (M60)', () => {
-    expect(dropReason(deps({ pausedAt: DEADLINE - 5000 }), 'e1', 's', save())).toBe('paused');
+  it('still takes a save while the exam is paused: it holds what was typed before the pause', () => {
+    expect(dropReason(deps({ pausedAt: DEADLINE - 5000 }), 'e1', 's', save())).toBeNull();
   });
 
   it('accepts a save from a locked student', () => {

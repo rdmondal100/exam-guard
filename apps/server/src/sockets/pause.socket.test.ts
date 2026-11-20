@@ -64,6 +64,34 @@ describe('pause and resume (M58)', () => {
     await ada.peer.waitFor(() => ada.peer.last('submit.result') !== undefined);
   });
 
+  it('keeps the save that arrives just after the pause began (the app sends it on freeze)', async () => {
+    const ada = await live.student('1');
+    await live.start();
+    await ada.peer.waitFor(() => (stateOf(ada.peer.last('state')).questions?.length ?? 0) > 0);
+    const q = (stateOf(ada.peer.last('state')).questions?.[0] ?? {}) as { id?: string };
+    await act({ type: 'pause' });
+    ada.peer.ws.send(
+      JSON.stringify({
+        t: 'answer.save',
+        id: 'save-1',
+        clientSeq: 1,
+        clientTs: Date.now(),
+        questionId: q.id,
+        language: 'text',
+        content: 'typed before the pause',
+        selected: true,
+        reason: 'interval',
+      }),
+    );
+    await ada.peer.waitFor(() => ada.peer.last('answer.ack') !== undefined);
+    await act({ type: 'resume' });
+    ada.peer.ws.send(JSON.stringify({ t: 'submit', id: 'sub-1', clientTs: Date.now() }));
+    await ada.peer.waitFor(() => ada.peer.last('submit.result') !== undefined);
+    const receipt = ada.peer.last('submit.result')?.receipt as { answers: { sha256: string }[] };
+    const EMPTY = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+    expect(receipt.answers[0]?.sha256).not.toBe(EMPTY);
+  });
+
   it('moves a timed terminal window by the pause (M60)', async () => {
     const ada = await live.student('1');
     await live.start();

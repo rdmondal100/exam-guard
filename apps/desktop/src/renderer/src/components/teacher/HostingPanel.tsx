@@ -204,17 +204,21 @@ export function HostingPanel({ examId, api, roster, running, onStart, onStop, on
         {info ? (
           <KeyValueList
             layout="tiles"
+            // Five tiles only on a wide window: a 6-digit PIN wrapped in a 140 px tile.
+            className="lg:grid-cols-3 2xl:grid-cols-5"
             items={[
               {
                 label: 'PIN',
                 value: (
-                  <span className="font-mono text-3xl font-bold tracking-widest">{info.pin}</span>
+                  <span className="font-mono text-3xl font-bold tracking-widest whitespace-nowrap">
+                    {info.pin}
+                  </span>
                 ),
               },
               {
                 label: 'Address',
                 value: (
-                  <span className="font-mono">
+                  <span className="font-mono whitespace-nowrap">
                     {info.addresses.length > 0
                       ? info.addresses.map((a) => `${a}:${info.port}`).join('   ')
                       : 'No network address found'}

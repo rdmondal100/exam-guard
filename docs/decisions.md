@@ -426,3 +426,4 @@ ode_moduleselectron` to `node_modules.pnpmelectron@x...`; Windows reports the re
 - 2026-11-19 — The pause is now enforced by the server (saves dropped as `paused`, Submit refused and re-sent by the app on resume); M58's "saves keep being accepted while paused" is replaced. Protocol major 5.
 - 2026-11-19 — Server downtime is not credited as extra time (the apps keep their editors offline); instead a running exam waits 60 s after a restart before auto-submitting, so queued saves stamped by the deadline still count.
 - 2026-11-19 — "Inside the exam" is by pid plus the toolchains folder only; a student-writable folder never counts by path.
+- 2026-11-20 — Live test: dropping saves while paused lost a written answer (the app's freeze save reaches the server just after the pause starts and was acked as dropped). Saves are taken again while paused; only Submit is refused. Regression test in `pause.socket.test.ts`.

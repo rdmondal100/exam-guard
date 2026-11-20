@@ -239,7 +239,8 @@ describe('SessionClient', () => {
     client.start(target(), TOKEN);
     await until(() => links().includes('connected'));
     expect(links()[0]).toBe('connecting');
-    expect(frames[0]).toMatchObject({
+    // A late frame of the previous test's closing socket may arrive first under load.
+    expect(frames.find((f) => (f as { t: string }).t === 'hello')).toMatchObject({
       t: 'hello',
       token: TOKEN,
       protocol: { major: 5 },

@@ -30,8 +30,9 @@ export function dropReason(
   if (deps.exams.get(examId)?.state !== 'running') return 'exam_not_running';
   const state = deps.students.findById(examStudentId)?.state;
   if (state !== 'active' && state !== 'locked') return 'student_not_working';
-  // The pause (M58) is enforced here, not only by the app's cover (M60).
-  if (deps.deadlines.pausedAt(examId) !== null) return 'paused';
+  // Saves are still taken while paused: the app sends what was typed when the pause began, and
+  // that save arrives after it (dropping it lost the answer). The editor is inert while paused,
+  // and Submit is refused until the resume (M60).
   const deadline = deps.deadlines.effective(examId, examStudentId);
   if (deadline !== null) {
     if (save.clientTs > deadline) return 'after_deadline';
