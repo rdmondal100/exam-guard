@@ -21,4 +21,5 @@ export * from './thumbs.js';
 export * from './live.js';
 export * from './audit.js';
 export * from './grading.js';
+export * from './student-answers.js';
 export * from './settings.js';

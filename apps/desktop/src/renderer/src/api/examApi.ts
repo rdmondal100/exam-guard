@@ -12,6 +12,7 @@ import {
   StartResultSchema,
   TerminalActionResultSchema,
   TerminalLogResponseSchema,
+  StudentAnswersResponseSchema,
   ThumbStatsSchema,
   StudentActionResultSchema,
   type AuditEntry,
@@ -31,6 +32,7 @@ import {
   type StartResult,
   type TerminalActionResult,
   type TerminalLogResponse,
+  type StudentAnswersResponse,
   type ThumbStats,
 } from '@examguard/shared';
 import { jpegDataUrl } from '../lib/eventsView';
@@ -71,6 +73,8 @@ export interface ExamApi {
   auditLog(id: string): Promise<AuditEntry[]>;
   /** One student's terminal events and transcript, in any exam state. */
   terminalLog(id: string, studentId: string): Promise<TerminalLogResponse>;
+  /** One student's answers: final once submitted, else the newest autosaves (M65). */
+  studentAnswers(id: string, studentId: string): Promise<StudentAnswersResponse>;
   /** What the students' monitors saw, newest first. `after` is the id of the newest event already shown. */
   events(id: string, options?: EventsOptions): Promise<EventRow[]>;
   /** The picture of an event as a `data:` URL; rejects `not_found` when it has none. */
@@ -148,6 +152,13 @@ export function createExamApi(connection: ServerConnection, fetchFn: FetchFn = f
         fetchFn,
         `${path(id)}/students/${encodeURIComponent(studentId)}/terminal`,
         TerminalLogResponseSchema,
+      ),
+    studentAnswers: (id, studentId) =>
+      call(
+        connection,
+        fetchFn,
+        `${path(id)}/students/${encodeURIComponent(studentId)}/answers`,
+        StudentAnswersResponseSchema,
       ),
     events: async (id, options = {}) => {
       // The monitor's evidence plus the app and server events the teacher must see (M25, M31).

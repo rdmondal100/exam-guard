@@ -116,4 +116,24 @@ describe('AnswerRepo', () => {
   it('refuses an unknown question', () => {
     expect(() => repo.insertMany([version({ questionId: 'nope' })])).toThrow(/FOREIGN KEY/);
   });
+
+  it('gives the teacher the selected language per question, else the newest save (M65)', () => {
+    repo.insertMany([
+      version({ clientSeq: 1, language: 'c', content: 'c chosen', selected: true }),
+      version({ clientSeq: 2, language: 'cpp', content: 'cpp tried', selected: false }),
+      version({
+        clientSeq: 3,
+        questionId: 'q2',
+        language: 'text',
+        content: 'essay',
+        selected: false,
+      }),
+    ]);
+    const latest = repo.latestByQuestion('s1');
+    expect(latest.map((v) => [v.questionId, v.content]).sort()).toEqual([
+      ['q1', 'c chosen'],
+      ['q2', 'essay'],
+    ]);
+    expect(repo.latestByQuestion('s2')).toEqual([]);
+  });
 });

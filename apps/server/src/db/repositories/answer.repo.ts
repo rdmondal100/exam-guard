@@ -160,6 +160,29 @@ export class AnswerRepo {
     return row && toVersion(row);
   }
 
+  /**
+   * Per question, the version a teacher should see while the exam runs (M65): the newest save of
+   * the language last saved as selected, else the newest save of any language.
+   */
+  latestByQuestion(examStudentId: string): AnswerVersion[] {
+    const selected = new Map(
+      this.selectedFor(examStudentId).map((s) => [s.questionId, s.language] as const),
+    );
+    const newest = this.db
+      .prepare(
+        `SELECT v.* FROM answer_versions v
+           WHERE v.exam_student_id = ? AND v.client_seq = (
+             SELECT MAX(client_seq) FROM answer_versions
+              WHERE exam_student_id = v.exam_student_id AND question_id = v.question_id)`,
+      )
+      .all(examStudentId) as VersionRow[];
+    return newest.map((row) => {
+      const language = selected.get(row.question_id);
+      const chosen = language ? this.latest(examStudentId, row.question_id, language) : undefined;
+      return chosen ?? toVersion(row);
+    });
+  }
+
   /** Every version of one student, oldest first. */
   list(examStudentId: string): AnswerVersion[] {
     const rows = this.db

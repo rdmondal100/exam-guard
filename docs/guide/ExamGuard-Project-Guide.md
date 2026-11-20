@@ -109,7 +109,7 @@ While the exam runs the teacher sees:
 - a **roster**: status, connected or offline, risk score, time spent outside the exam, "Not monitored" and "2 screens" flags
 - a **grid of live thumbnails** of student screens and a **live view** (WebRTC video) of any one student
 - an **alert feed**: switching to another app, a website in Chrome/Edge (e.g. `chatgpt.com`, high severity), a private browser window, Task Manager, a second monitor, the lock screen, a paste from outside the exam, typing too fast to be human (pasted from elsewhere), all with screenshots
-- a **timeline per student**
+- a **timeline per student**, and **Answers**: the student's whole answer sheet. During the exam it shows the latest autosave of every answer (refreshed every 10 s); once submitted, the final answers with the receipt and, later, the grades
 
 Teacher actions: message or warn one student or everyone, **lock** a student's screen, give **extra time** (one student or everyone), turn the **terminal** on (for N minutes), **pause** the whole exam, add a question or file mid-exam, end the exam.
 
@@ -168,6 +168,7 @@ Finally **Finalize marks** (a backup is taken first, and marks are then locked) 
 
 ### Live supervision
 - Roster table (TanStack Table, 200 rows), thumbnail grid (every 4 s, 320 px), live view (WebRTC, about 8 fps)
+- Per-student answer sheet: live answers while the student writes, final answers after Submit (also for practice exams)
 - Alerts as they happen, audit log of every teacher action
 
 ### AI grading
@@ -387,7 +388,10 @@ renderer/src/        React app
 2. `SessionClient.submit()` sends `submit` after the unsent saves on the same ordered socket. If offline, it waits and sends it after reconnecting; during a pause the server refuses it and the app sends it again on resume.
 3. `SubmissionService.finalize()` in one database transaction: flush pending saves, take the newest version of each answer, write `final_answers`, compute the **receipt** hash, set the student `submitted`. The same function is used for the deadline auto-submit and for "End exam", so the rules cannot drift apart.
 
-### 8.5 AI grading
+### 8.5 Reading a student's answers (teacher)
+Monitoring tab → click a student → **Answers** opens `components/teacher/StudentAnswersDialog.tsx`. It calls `GET /exams/:id/students/:sid/answers` (`routes/studentAnswers.routes.ts` → `services/answers/student-answers.ts`). Once the student is finalized, the service returns the rows of `final_answers` with the receipt and the current grade. Before that it returns the newest autosave of each question (`AnswerRepo.latestByQuestion`), and the dialog refreshes it every 10 s while the exam runs. For grading, the Grading tab's Review shows the same answers question by question, beside the sample answer.
+
+### 8.6 AI grading
 1. `grading-service.ts` creates one job per question and runs them; inside a job a small pool grades up to 4 answers at a time.
 2. `grade-answer.ts` builds the input with `input.ts` (anonymous id, question, sample answer, criteria, the answer), calls the provider (`providers/gemini.ts`), and validates the JSON with `validate.ts`. It retries on rate limits and server errors and asks for a repair on an invalid reply.
 3. Every attempt is stored in `evaluations` (an append-only history); the current grade is in `answer_grades`. Progress is pushed live to the teacher.
@@ -448,8 +452,8 @@ The data folder also holds the TLS certificate, screenshots, exam files, backups
 
 - **Automated tests (Vitest):** about 1,300 tests in total, run with `pnpm test`.
   - **Shared:** 194, covering the schemas and shared rules.
-  - **Server:** 430, including route tests through supertest, real socket tests with a live server, and crash/restart recovery tests.
-  - **Desktop:** 638, covering main-process logic, the monitor and the runner with fakes and real compilers, plus the renderer's pure logic.
+  - **Server:** 433, including route tests through supertest, real socket tests with a live server, and crash/restart recovery tests.
+  - **Desktop:** 642, covering main-process logic, the monitor and the runner with fakes and real compilers, plus the renderer's pure logic.
   - **Simulator:** 38.
 - **Load test:** `tools/student-sim` runs 200 fake students against a real server (joins, autosave, events with screenshots, disconnects, submits). Measured: 200 joined in 6.3 s, save ack p95 265 ms, alert lag p95 9 ms, server CPU about 6 % of one core, all receipts valid.
 - **Static checks:** `pnpm typecheck` (strict TypeScript), `pnpm lint` (no `any` allowed), `pnpm format:check` (Prettier).

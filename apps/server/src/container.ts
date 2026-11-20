@@ -28,6 +28,7 @@ import { HostingManager, type HostingManagerDeps } from './services/hosting/host
 import { GradingService, type GradingServiceDeps } from './services/grading/grading-service.js';
 import { geminiSource } from './services/grading/provider-source.js';
 import { ReviewService } from './services/grading/review-service.js';
+import { StudentAnswersService } from './services/answers/student-answers.js';
 import { ResultsService } from './services/results/results-service.js';
 import { ResultsRepo } from './db/repositories/results.repo.js';
 import { SettingsRepo } from './db/repositories/settings.repo.js';
@@ -116,6 +117,8 @@ export interface Container {
   grading: GradingService;
   /** Review, accept and edit (M39, M40). */
   review: ReviewService;
+  /** One student's answers for the teacher, final or newest autosave (M65). */
+  studentAnswers: StudentAnswersService;
   /** Finalize and the CSV export (M42). */
   results: ResultsService;
   /** The teacher's settings, backup and certificate (M43). */
@@ -186,6 +189,13 @@ export function createContainer({
     evaluations,
     ...(now ? { now } : {}),
   });
+  const studentAnswers = new StudentAnswersService({
+    students,
+    questions,
+    answers,
+    finals,
+    grades,
+  });
   const results = new ResultsService({
     db,
     exams,
@@ -215,6 +225,7 @@ export function createContainer({
     ...(screenshots ? { screenshots } : {}),
     grading,
     review,
+    studentAnswers,
     results,
     settings,
     ...(retention ? { retention } : {}),

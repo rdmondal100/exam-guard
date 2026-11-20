@@ -18,6 +18,7 @@ import { EventsPanel } from './EventsPanel';
 import { RosterTable } from './RosterTable';
 import { StudentDetail } from './StudentDetail';
 import { TerminalLogDialog } from './TerminalLogDialog';
+import { StudentAnswersDialog } from './StudentAnswersDialog';
 import { ThumbnailGrid } from './ThumbnailGrid';
 
 type View = 'table' | 'grid';
@@ -39,6 +40,7 @@ interface Props {
 export function MonitoringBoard({ examId, api, roster, examState }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [logOf, setLogOf] = useState<RosterEntry | null>(null);
+  const [answersOf, setAnswersOf] = useState<RosterEntry | null>(null);
   const [view, setView] = useState<View>('table');
   const students = sortedStudents(roster);
   const selected = selectedId ? roster.students.get(selectedId) : undefined;
@@ -104,7 +106,17 @@ export function MonitoringBoard({ examId, api, roster, examState }: Props) {
           roster={roster}
           examState={examState}
           onTerminalLog={setLogOf}
+          onAnswers={setAnswersOf}
           onClose={() => setSelectedId(null)}
+        />
+      )}
+      {answersOf && (
+        <StudentAnswersDialog
+          examId={examId}
+          student={answersOf}
+          api={api}
+          examRunning={examState === 'running'}
+          onClose={() => setAnswersOf(null)}
         />
       )}
       {logOf && (

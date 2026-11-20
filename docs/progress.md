@@ -51,7 +51,7 @@ Moved to `docs/limitations.md` (read it when you touch that area).
 - **After M43:** no password recovery; a regenerated cert is only covered by `tls-pin` unit tests.
 - **Installer:** a real install has not run (DevTools off and `InstallType` in a packaged build, gcc/pacman/pip under `C:\Program Files`, `AppPath` link, uninstall components page).
 - **Cleanup (from M44):** no move progress bar; run folders and student workspace not wiped at exam end; no retention for answer versions; no `server.log` rotation; no automatic backup at exam end; backups and exports never pruned.
-- **Grading:** record real fixtures; no teacher view of answer versions.
+- **Grading:** record real fixtures; the teacher sees each answer's newest version (M65) but not the older versions (no replay).
 - **Small follow-ups:** end of `docs/limitations.md`.
 
 ## Manual recovery checklist (M48, laptop + sim; not run yet)

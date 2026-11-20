@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ActivityIcon, MonitorPlayIcon, SquareTerminalIcon } from 'lucide-react';
+import { ActivityIcon, FileTextIcon, MonitorPlayIcon, SquareTerminalIcon } from 'lucide-react';
 import type { EventRow, ExamState, RosterEntry } from '@examguard/shared';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -31,6 +31,8 @@ interface Props {
   /** Which actions fit (M35). */
   examState: ExamState;
   onTerminalLog: (student: RosterEntry) => void;
+  /** Opens the student's answer sheet (M65). */
+  onAnswers: (student: RosterEntry) => void;
   onClose: () => void;
 }
 
@@ -47,6 +49,7 @@ export function StudentDetail({
   roster,
   examState,
   onTerminalLog,
+  onAnswers,
   onClose,
 }: Props) {
   const [shown, setShown] = useState<EventRow | null>(null);
@@ -76,6 +79,10 @@ export function StudentDetail({
                 Live screen
               </Button>
             )}
+            <Button size="sm" variant="outline" onClick={() => onAnswers(s)}>
+              <FileTextIcon />
+              Answers
+            </Button>
             <Button size="sm" variant="outline" onClick={() => onTerminalLog(s)}>
               <SquareTerminalIcon />
               Terminal log

@@ -203,6 +203,33 @@ describe('createExamApi', () => {
       );
     });
 
+    it('reads a student answer sheet (M65)', async () => {
+      const sheet = {
+        source: 'latest',
+        submittedAt: null,
+        receiptHash: null,
+        answers: [
+          {
+            questionId: 'q1',
+            position: 1,
+            type: 'code',
+            body: 'Sum',
+            maxMarks: 5,
+            language: 'c',
+            content: 'int main(){}',
+            answered: true,
+            savedAt: 10,
+            grade: null,
+          },
+        ],
+      };
+      const fetchFn = reply(200, sheet);
+      expect(await createExamApi(CONNECTION, fetchFn).studentAnswers('e1', 's1')).toEqual(sheet);
+      expect(vi.mocked(fetchFn).mock.calls[0]?.[0]).toBe(
+        'http://127.0.0.1:47821/api/v1/exams/e1/students/s1/answers',
+      );
+    });
+
     it('returns null when the exam is not hosted, and rethrows other errors', async () => {
       const none = reply(404, { error: { code: 'not_hosting', message: 'Not hosting' } });
       expect(await createExamApi(CONNECTION, none).hosting('e1')).toBeNull();

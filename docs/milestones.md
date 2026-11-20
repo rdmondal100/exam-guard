@@ -472,6 +472,9 @@ Manual tests use the dev PC (teacher + student profiles, see CLAUDE.md "Dev safe
 ### M64 Submit status and clock UX (audit, 2026-11-19)
 - **Built:** the server clock is anchored on the monotonic clock, seeded from the welcome, re-sampled each minute; `useTick` re-renders the exam screen only when "time is up" or the paste notice flips; the Submit state (sending, waiting for the connection, refused + Try again) stays in the toolbar and Submit is disabled while one is pending; the pause overlay shows how long it has lasted, the time left and the link state.
 
+### M65 Per-student answer sheet and live answers (user's request, 2026-11-20)
+- **Built:** `GET /exams/:id/students/:sid/answers` (final answers with receipt and grade once submitted, else the newest autosave per question); Monitoring tab → student → **Answers** opens `StudentAnswersDialog` (every question, code in a read-only Monaco, refreshed every 10 s while the student is still writing). Works during and after the exam and for practice exams.
+
 ---
 
 ## Stage 2 (not broken down)
